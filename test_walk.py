@@ -21,9 +21,11 @@ import errno
 import fnmatch
 import re
 import stat
+import sys
+import time
 
 parser = argparse.ArgumentParser(description="Test os.walk().")
-parser.add_argument("dir_path", metavar="dir", type=str, nargs="?", help="the path of the directory to be walked")
+parser.add_argument("dir_path", metavar="dir", type=str, nargs="?", default=".", help="the path of the directory to be walked")
 parser.add_argument("--xfile", action="append", required=False, help="exclude files matching this pattern")
 parser.add_argument("--xdir", action="append", required=False, help="exclude directories matching this pattern")
 
@@ -50,18 +52,18 @@ FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
 
 file_data = {}
 
+content_count = 0
+
+start = time.clock()
+
 for dir_path, subdir_paths, file_names in os.walk(args.dir_path, followlinks=False):
-    print "DIR:", dir_path
     if is_excluded_dir(dir_path):
-        print "SKIP:", dir_path
         continue
     for file_name in file_names:
         if is_excluded_file(file_name):
-            print "SKIP:", file_name
             continue
         file_path = os.path.join(dir_path, file_name)
         if is_excluded_file(file_path):
-            print "SKIP:", file_path
             continue
         try:
             file_stats = os.lstat(file_path)
@@ -70,22 +72,40 @@ for dir_path, subdir_paths, file_names in os.walk(args.dir_path, followlinks=Fal
             if edata.errno in FORGIVEABLE_ERRNOS:
                 continue # it's gone away so we skip it
             raise edata # something we can't handle so throw the towel in
-        # for the moment we'll skip symbolic links
-        if not stat.S_ISREG(file_stats.st_mode):
+        if stat.S_ISREG(file_stats.st_mode):
+            try:
+                content = open(file_path, "r").read()
+                #content = ""
+            except OSError as edata:
+                # race condition
+                if edata.errno in FORGIVEABLE_ERRNOS:
+                    continue  # it's gone away so we skip it
+                raise edata # something we can't handle so throw the towel in
+            hex_digest = hashlib.sha1(content).hexdigest()
+            content_count += file_stats.st_size
+            file_data[file_path] = (False, file_stats, hex_digest)
+        elif stat.S_ISLNK(file_stats.st_mode):
+            try:
+                target_file_path = os.readlink(file_path)
+            except OSError as edata:
+                # race condition
+                if edata.errno in FORGIVEABLE_ERRNOS:
+                    continue  # it's gone away so we skip it
+                raise edata # something we can't handle so throw the towel in
+            if not os.path.exists(target_file_path):
+                # no sense storing broken links as they will cause problems at restore
+                sys.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
+                continue
+            file_data[file_path] = (True, file_stats, target_file_path)
+        else:
             continue
-        try:
-            content = open(file_path, "r").read()
-        except OSError as edata:
-            # race condition
-            if edata.errno in FORGIVEABLE_ERRNOS:
-                continue  # it's gone away so we skip it
-            raise edata # something we can't handle so throw the towel in
-        hex_digest = hashlib.sha1(content).hexdigest()
-        file_data[file_path] = (file_stats.st_uid, file_stats.st_gid, file_stats.st_mode, hex_digest)
     excluded_subdir_paths = [subdir_path for subdir_path in subdir_paths if is_excluded_dir(subdir_path)]
     # NB: this is an in place reduction in the list of subdirectories
     for esdp in excluded_subdir_paths:
-        print "SKIP SUBDIR:", esdp
         subdir_paths.remove(esdp)
 
-print "DONE"
+stop = time.clock()
+
+etime = stop - start
+
+print "DONE", len(file_data), content_count, etime, content_count / etime / 1000000, len(file_data) / etime
