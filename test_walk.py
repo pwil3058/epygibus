@@ -84,6 +84,12 @@ class Directory(object):
         if not dirpath:
             return self
         return self._find_dir(dirpath.strip(os.sep).split(os.sep))
+    def iterate(self, pre_path=""):
+        for file_name in self.files:
+            yield os.path.join(pre_path, file_name)
+        for dir_name in self.subdirs:
+            for y in self.subdirs[dir_name].iterate(os.path.join(pre_path, dir_name)):
+                yield y
 
 base_dir = Directory()
 
@@ -182,3 +188,6 @@ if args.snapshot:
         fobj.close()
 stop_dump = time.clock()
 print "DUMP:", stop_dump - start_dump
+
+for f in base_dir.iterate():
+    print f
