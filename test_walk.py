@@ -1,5 +1,5 @@
 #!/usr/bin/env python2
-### Copyright (C) 2013 Peter Williams <pwil3058@gmail.com>
+### Copyright (C) 2015 Peter Williams <pwil3058@gmail.com>
 ###
 ### This program is free software; you can redistribute it and/or modify
 ### it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@ import re
 import stat
 import sys
 import time
+
+from epygibus_pkg import snapshot
 
 parser = argparse.ArgumentParser(description="Test os.walk().")
 parser.add_argument("dir_path", metavar="dir", type=str, nargs="?", default=".", help="the path of the directory to be walked")
@@ -52,62 +54,10 @@ def is_excluded_dir(dir_path):
 # The file has gone away
 FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
 
-class Directory(object):
-    def __init__(self, dir_stats=None):
-        self.dir_stats = dir_stats
-        self.subdirs = {}
-        self.files = {}
-    def __str__(self):
-        string = "\n".join([str(self.dir_stats), str(self.files)])
-        for name, subdir in self.subdirs.items():
-            string += "\n{0}:{1}\n".format(name, str(subdir))
-        return string
-    def _add_subdir(self, path_parts, dir_stats=None):
-        name = path_parts[0]
-        if len(path_parts) == 1:
-            self.subdirs[name] = Directory(dir_stats)
-            return self.subdirs[name]
-        else:
-            if name not in self.subdirs:
-                self.subdirs[name] = Directory()
-            return self.subdirs[name]._add_subdir(path_parts[1:], dir_stats)
-    def add_subdir(self, dir_path, dir_stats=None):
-        return self._add_subdir(dir_path.strip(os.sep).split(os.sep), dir_stats)
-    def _find_dir(self, dirpath_parts):
-        if not dirpath_parts:
-            return self
-        elif dirpath_parts[0] in self.subdirs:
-            return self.subdirs[dirpath_parts[0]]._find_dir(dirpath_parts[1:])
-        else:
-            return None
-    def find_dir(self, dirpath):
-        if not dirpath:
-            return self
-        return self._find_dir(dirpath.strip(os.sep).split(os.sep))
-    def iterate(self, pre_path=""):
-        for file_name in self.files:
-            yield os.path.join(pre_path, file_name)
-        for dir_name in self.subdirs:
-            for y in self.subdirs[dir_name].iterate(os.path.join(pre_path, dir_name)):
-                yield y
-
-base_dir = Directory()
+new_snapshot = snapshot.Snapshot()
 
 start_load = time.clock()
-if args.prior:
-    import cPickle
-    import gzip
-    fobj = gzip.open(args.prior, 'rb')
-    try:
-        prior_snapshot = cPickle.load(fobj)
-    except Exception:
-        # Just in case higher level code catches and handles
-        prior_snapshot = None
-        raise
-    finally:
-        fobj.close()
-else:
-    prior_snapshot = Directory()
+prior_snapshot = snapshot.read_snapshot(args.prior) if args.prior else snapshot.Snapshot()
 stop_load = time.clock()
 print "LOAD:", stop_load - start_load
 
@@ -119,7 +69,7 @@ start = time.clock()
 for dir_path, subdir_paths, file_names in os.walk(args.dir_path, followlinks=False):
     if is_excluded_dir(dir_path):
         continue
-    file_data = base_dir.add_subdir(dir_path, os.lstat(dir_path)).files
+    file_data = new_snapshot.add_subdir(dir_path, os.lstat(dir_path)).files
     prior_dir = prior_snapshot.find_dir(dir_path)
     prior_file_data = {} if prior_dir is None else prior_dir.files
     for file_name in file_names:
@@ -178,16 +128,12 @@ etime = stop - start
 print "DONE", files_count, content_count, etime, content_count / etime / 1000000, files_count / etime
 
 start_dump = time.clock()
-if args.snapshot:
-    import cPickle
-    import gzip
-    fobj = gzip.open(args.snapshot, 'wb')#, stat.S_IRUSR|stat.S_IRGRP)
-    try:
-        cPickle.dump(base_dir, fobj)
-    finally:
-        fobj.close()
+snapshot.write_snapshot(args.snapshot, new_snapshot)
 stop_dump = time.clock()
 print "DUMP:", stop_dump - start_dump
 
-for f in base_dir.iterate():
+for d in new_snapshot.find_dir(args.dir_path).iterate_subdirs():
+    print d
+
+for f in new_snapshot.find_dir(args.dir_path).iterate_files():
     print f
