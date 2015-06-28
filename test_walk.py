@@ -87,9 +87,11 @@ class Directory(object):
 
 base_dir = Directory()
 
+start_load = time.clock()
 if args.prior:
     import cPickle
-    fobj = open(args.prior, 'rb')
+    import gzip
+    fobj = gzip.open(args.prior, 'rb')
     try:
         prior_snapshot = cPickle.load(fobj)
     except Exception:
@@ -100,8 +102,11 @@ if args.prior:
         fobj.close()
 else:
     prior_snapshot = Directory()
+stop_load = time.clock()
+print "LOAD:", stop_load - start_load
 
 content_count = 0
+files_count = 0
 
 start = time.clock()
 
@@ -154,6 +159,7 @@ for dir_path, subdir_paths, file_names in os.walk(args.dir_path, followlinks=Fal
             file_data[file_name] = (file_stats, target_file_path)
         else:
             continue
+        files_count += 1
     excluded_subdir_paths = [subdir_path for subdir_path in subdir_paths if is_excluded_dir(subdir_path)]
     # NB: this is an in place reduction in the list of subdirectories
     for esdp in excluded_subdir_paths:
@@ -163,12 +169,16 @@ stop = time.clock()
 
 etime = stop - start
 
-print "DONE", len(file_data), content_count, etime, content_count / etime / 1000000, len(file_data) / etime
+print "DONE", files_count, content_count, etime, content_count / etime / 1000000, files_count / etime
 
+start_dump = time.clock()
 if args.snapshot:
     import cPickle
-    fobj = open(args.snapshot, 'wb', stat.S_IRUSR|stat.S_IRGRP)
+    import gzip
+    fobj = gzip.open(args.snapshot, 'wb')#, stat.S_IRUSR|stat.S_IRGRP)
     try:
         cPickle.dump(base_dir, fobj)
     finally:
         fobj.close()
+stop_dump = time.clock()
+print "DUMP:", stop_dump - start_dump
