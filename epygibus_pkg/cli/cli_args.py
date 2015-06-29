@@ -13,6 +13,23 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-APP_NAME = "epygibus"
+"""
+Provide command line parsing mechanism including provision of a
+mechanism for sub commands to add their components.
+"""
 
-VERSION = "0.0.0"
+import argparse
+import collections
+
+from .. import i18n
+from .. import VERSION
+
+PARSER = argparse.ArgumentParser(description=_("Manage file back ups"))
+
+PARSER.add_argument(
+    "--version",
+    action="version",
+    version=VERSION
+)
+
+SUB_CMD_PARSER = PARSER.add_subparsers(title=_("commands"))
