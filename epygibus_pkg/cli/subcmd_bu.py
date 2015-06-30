@@ -13,23 +13,23 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from . import cli_args
+from . import cmd
 
-PARSER = cli_args.SUB_CMD_PARSER.add_parser(
+PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
     description=_("Take a back up snapshot for the nominated profiles."),
 )
 
 PARSER.add_argument(
     'profiles',
-    help=_("the name(s) of the profile(s) for which the back up snapshots are to be taken."),
+    help=_("the name(s) of the profile(s) for which the back up snapshot(s) is/are to be taken."),
     nargs='+',
     metavar=_('profile'),
 )
 
 def run_cmd(args):
-    for profile in args.profiles:
-        print "Processing:", profile
+    for profile_name in args.profiles:
+        print "Processing:", profile_name
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

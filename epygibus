@@ -20,9 +20,8 @@ import sys
 
 from epygibus_pkg import i18n
 
-from epygibus_pkg.cli import cli_args
-import epygibus_pkg.cli
+import epygibus_pkg.cli as cli
 
-ARGS = cli_args.PARSER.parse_args()
+ARGS = cli.cmd.PARSER.parse_args()
 
 sys.exit(ARGS.run_cmd(ARGS))
