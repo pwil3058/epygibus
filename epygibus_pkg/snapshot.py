@@ -18,6 +18,7 @@ import collections
 import stat
 import errno
 import sys
+import re
 
 class FStatsMixin:
     @property
@@ -115,8 +116,15 @@ def read_snapshot(snapshot_file_path):
         fobj = open(snapshot_file_path, "rb")
     return cPickle.load(fobj)
 
-def write_snapshot(snapshot_file_path, snapshot, permissions=stat.S_IRUSR|stat.S_IRGRP):
+# NB: make sure that these two are in concert
+_SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
+_SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\.gz)?")
+
+def write_snapshot(snapshot_dir_path, snapshot, permissions=stat.S_IRUSR|stat.S_IRGRP):
     import cPickle
+    import time
+    snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
+    snapshot_file_path = os.path.join(snapshot_dir_path, snapshot_file_name)
     if snapshot_file_path.endswith(".gz"):
         import gzip
         fobj = gzip.open(snapshot_file_path, "wb")
@@ -125,26 +133,26 @@ def write_snapshot(snapshot_file_path, snapshot, permissions=stat.S_IRUSR|stat.S
     cPickle.dump(snapshot, fobj)
     os.chmod(snapshot_file_path, permissions)
 
-class DummyBlobMgr(object):
-    @staticmethod
-    def store_contents(file_path):
-        import hashlib
-        return hashlib.sha1(open(file_path, "r").read()).hexdigest()
+def read_most_recent_snapshot(snapshot_dir_path):
+    candidates = [f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)]
+    if candidates:
+        return read_snapshot(os.path.join(snapshot_dir_path, sorted(candidates, reverse=True)[0]))
+    return Snapshot()
 
-class SnapshotGenerator(object):
+class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, prior_snapshot=None):
+    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False):
         self._snapshot = Snapshot()
-        self.skip_broken_links=False
+        self.skip_broken_links=skip_broken_links
         self.blob_mgr = blob_mgr
         self.prior_snapshot = prior_snapshot if prior_snapshot else Snapshot()
         self.content_count = 0
         self.adj_content_count = 0
         self.file_count = 0
         self.soft_link_count = 0
-        self._exclude_dir_cres = list()
-        self._exclude_file_cres = list()
+        self._exclude_dir_cres = exclude_dir_cres
+        self._exclude_file_cres = exclude_file_cres
     @property
     def snapshot(self):
         return self._snapshot
@@ -200,7 +208,7 @@ class SnapshotGenerator(object):
         prior_dir = self.prior_snapshot.find_dir(abs_dir_path)
         prior_files = {} if prior_dir is None else prior_dir.files
         try:
-            self._include_file(files, file_name, file_path, prior_files)
+            self._include_file(files, file_name, abs_file_path, prior_files)
         except OSError as edata:
             # race condition
             if edata.errno not in self.FORGIVEABLE_ERRNOS:
@@ -215,3 +223,23 @@ class SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
+
+def generate_snapshot(profile, stderr=sys.stderr):
+    from . import blobs
+    previous_snapshot = read_most_recent_snapshot(profile.snapshot_dir_path)
+    blob_mgr = blobs.open_repo(profile.repo_name, locked=True)
+    snapshot_generator = _SnapshotGenerator(blob_mgr, profile.exclude_dir_cres, profile.exclude_file_cres, previous_snapshot, profile.skip_broken_soft_links)
+    try:
+        for item in profile.includes:
+            abs_item = os.path.abspath(os.path.expanduser(item))
+            if os.path.isdir(abs_item):
+                snapshot_generator.include_dir(abs_item)
+            elif os.path.isfile(abs_item):
+                snapshot_generator.include_file(abs_item)
+            elif os.path.exists(abs_item):
+                stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
+            else:
+                stderr.write(_("{0}: not found. Skipped.").format(item))
+        write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
+    finally:
+        blob_mgr.release_lock()

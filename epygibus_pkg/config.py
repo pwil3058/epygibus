@@ -13,28 +13,13 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-from . import cmd
+class Profile(object):
+    repo_name = None
+    snapshot_dir_path = "test"
+    includes = ["~/Downloads", "~/Dropbox/bedienung_infinity_2009.pdf"]
+    exclude_dir_cres = list()
+    exclude_file_cres = list()
+    skip_broken_soft_links = False
 
-from .. import config
-from .. import snapshot
-
-PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "bu",
-    description=_("Take a back up snapshot for the nominated profiles."),
-)
-
-PARSER.add_argument(
-    "profiles",
-    help=_("the name(s) of the profile(s) for which the back up snapshot(s) is/are to be taken."),
-    nargs="+",
-    metavar=_("profile"),
-)
-
-def run_cmd(args):
-    # read all profiles in one go so that if any fails checks we do nothing
-    profiles = [config.read_profile_spec(profile_name) for profile_name in args.profiles]
-    for profile in profiles:
-        snapshot.generate_snapshot(profile)
-    return 0
-
-PARSER.set_defaults(run_cmd=run_cmd)
+def read_profile_spec(profile_name):
+    return Profile()
