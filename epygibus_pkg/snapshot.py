@@ -139,6 +139,8 @@ def read_most_recent_snapshot(snapshot_dir_path):
         return read_snapshot(os.path.join(snapshot_dir_path, sorted(candidates, reverse=True)[0]))
     return Snapshot()
 
+SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes"])
+
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
@@ -156,6 +158,9 @@ class _SnapshotGenerator(object):
     @property
     def snapshot(self):
         return self._snapshot
+    @property
+    def statistics(self):
+        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count)
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -172,9 +177,10 @@ class _SnapshotGenerator(object):
             files[file_name] = (file_stats, hex_digest)
         elif stat.S_ISLNK(file_stats.st_mode):
             target_file_path = os.readlink(file_path)
-            if skip_broken_links and not os.path.exists(target_file_path):
+            if self.skip_broken_links and not os.path.exists(target_file_path):
                 sys.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
                 return
+            self.soft_link_count += 1
             files[file_name] = (file_stats, target_file_path)
     def include_dir(self, abs_dir_path):
         for dir_path, subdir_paths, file_names in os.walk(abs_dir_path, followlinks=False):
@@ -225,7 +231,9 @@ class _SnapshotGenerator(object):
         return False
 
 def generate_snapshot(profile, stderr=sys.stderr):
+    import time
     from . import blobs
+    start_time = time.clock()
     previous_snapshot = read_most_recent_snapshot(profile.snapshot_dir_path)
     blob_mgr = blobs.open_repo(profile.repo_name, locked=True)
     snapshot_generator = _SnapshotGenerator(blob_mgr, profile.exclude_dir_cres, profile.exclude_file_cres, previous_snapshot, profile.skip_broken_soft_links)
@@ -243,3 +251,5 @@ def generate_snapshot(profile, stderr=sys.stderr):
         write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
     finally:
         blob_mgr.release_lock()
+        elapsed_time = time.clock() - start_time
+    return (snapshot_generator.statistics, elapsed_time)
