@@ -42,3 +42,14 @@ def read_profile_spec(profile_name, stderr=sys.stderr):
     dir_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_dir_lines(profile_name)]
     file_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_file_lines(profile_name)]
     return Profile(repo, p_dir_path, includes, dir_excludes, file_excludes, eval(skip))
+
+Repo = collections.namedtuple("Repo", ["base_dir_path"])
+
+def read_repo_spec(repo_name):
+    base_dir_path = open(os.path.join(_REPOS_DIR_PATH, repo_name)).read().rstrip()
+    return Repo(base_dir_path)
+
+def write_repo_spec(repo_name, in_dir_path):
+    base_dir_path = os.path.join(os.path.abspath(in_dir_path), "epygibus", "blobs", repo_name)
+    open(os.path.join(_REPOS_DIR_PATH, repo_name), "w").write(base_dir_path)
+    return base_dir_path

@@ -235,7 +235,7 @@ def generate_snapshot(profile, stderr=sys.stderr):
     from . import blobs
     start_time = time.clock()
     previous_snapshot = read_most_recent_snapshot(profile.snapshot_dir_path)
-    blob_mgr = blobs.open_repo(profile.repo_name, locked=True)
+    blob_mgr = blobs.open_repo(profile.repo_name)
     snapshot_generator = _SnapshotGenerator(blob_mgr, profile.exclude_dir_cres, profile.exclude_file_cres, previous_snapshot, profile.skip_broken_soft_links)
     try:
         for item in profile.includes:
@@ -250,6 +250,5 @@ def generate_snapshot(profile, stderr=sys.stderr):
                 stderr.write(_("{0}: not found. Skipped.").format(item))
         write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
     finally:
-        blob_mgr.release_lock()
         elapsed_time = time.clock() - start_time
     return (snapshot_generator.statistics, elapsed_time)
