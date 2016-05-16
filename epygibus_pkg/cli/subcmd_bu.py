@@ -30,11 +30,20 @@ PARSER.add_argument(
     metavar=_("profile"),
 )
 
+PARSER.add_argument(
+    "--stats",
+    help=_("print the statistics for reach profile."),
+    action="store_true"
+)
+
 def run_cmd(args):
     # read all profiles in one go so that if any fails checks we do nothing
-    profiles = [config.read_profile_spec(profile_name) for profile_name in args.profiles]
-    for profile in profiles:
-        snapshot.generate_snapshot(profile)
+    profiles = [(profile_name, config.read_profile_spec(profile_name)) for profile_name in args.profiles]
+    for profile_name, profile in profiles:
+        if args.stats:
+            print "{0} STATS:".format(profile_name), snapshot.generate_snapshot(profile)
+        else:
+            snapshot.generate_snapshot(profile)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
