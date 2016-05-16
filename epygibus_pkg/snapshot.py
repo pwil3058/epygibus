@@ -52,16 +52,17 @@ class FStatsMixin:
 class SDir(collections.namedtuple("SDir", ["path", "fstats", "subdirs", "files"]), FStatsMixin):
     pass
 
-class SFile(collections.namedtuple("SFile", ["path", "fstats", "content"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "fstats", "payload"]), FStatsMixin):
     @property
     def link_tgt(self):
-        return seld.content if stat.S_ISLNK(self.fstats.st_mode) else None
+        return seld.payload if stat.S_ISLNK(self.fstats.st_mode) else None
     @property
     def hex_digest(self):
-        return seld.content if stat.S_ISREG(self.fstats.st_mode) else None
+        return seld.payload if stat.S_ISREG(self.fstats.st_mode) else None
 
 class Snapshot(object):
-    def __init__(self, dir_stats=None):
+    def __init__(self, parent=None, dir_stats=None):
+        self.parent = parent
         self.dir_stats = dir_stats
         self.subdirs = {}
         self.files = {}
@@ -70,14 +71,14 @@ class Snapshot(object):
         if len(path_parts) == 1:
             # neeed to be careful that we don't clobber existing data
             if name not in self.subdirs:
-                self.subdirs[name] = Snapshot(dir_stats)
+                self.subdirs[name] = Snapshot(self, dir_stats)
             elif self.subdirs[name].dir_stats is None:
                 # cover the case where it was previously created an way to a leaf dir
                 self.subdirs[name].dir_stats = dir_stats
             return self.subdirs[name]
         else:
             if name not in self.subdirs:
-                self.subdirs[name] = Snapshot()
+                self.subdirs[name] = Snapshot(self)
             return self.subdirs[name]._add_subdir(path_parts[1:], dir_stats)
     def add_subdir(self, dir_path, dir_stats=None):
         return self._add_subdir(dir_path.strip(os.sep).split(os.sep), dir_stats)
@@ -92,6 +93,10 @@ class Snapshot(object):
         if not dir_path:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
+    def get_file(self, file_path):
+        dir_path, file_name = os.path.split(file_path)
+        data = self.find_dir(dir_path).files[file_name]
+        return SFile(file_path, data[0], data[1])
     def iterate_files(self, pre_path="", recurse=False):
         for file_name, data in self.files.items():
             yield SFile(os.path.join(pre_path, file_name), data[0], data[1])
@@ -132,6 +137,7 @@ def write_snapshot(snapshot_dir_path, snapshot, permissions=stat.S_IRUSR|stat.S_
         fobj = open(snapshot_file_path, "wb")
     cPickle.dump(snapshot, fobj)
     os.chmod(snapshot_file_path, permissions)
+    return os.path.getsize(snapshot_file_path)
 
 def read_most_recent_snapshot(snapshot_dir_path):
     candidates = [f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)]
@@ -248,7 +254,16 @@ def generate_snapshot(profile, stderr=sys.stderr):
                 stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
             else:
                 stderr.write(_("{0}: not found. Skipped.").format(item))
-        write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
+        snapshot_size = write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
     finally:
         elapsed_time = time.clock() - start_time
-    return (snapshot_generator.statistics, elapsed_time)
+    return (snapshot_generator.statistics, snapshot_size, elapsed_time)
+
+class SnapshotFS(object):
+    def __init__(self, snapshot, blob_mgr):
+        self._snapshot = snapshot
+        self._blob_mgr = blob_mgr
+    def cat_file(self, file_path):
+        file_data = self._snapshot.get_file(file_path)
+        if file_data.is_link:
+            print file_data.link_tgt

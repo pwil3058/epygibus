@@ -17,3 +17,4 @@
 # as this is sufficient to activate them.
 from . import subcmd_bu
 from . import subcmd_new
+from . import subcmd_cat
