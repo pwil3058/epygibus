@@ -21,7 +21,7 @@ from .. import config
 from .. import blobs
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "new",
+    "new_repo",
     description=_("Create a new content repository."),
 )
 
