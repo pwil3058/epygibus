@@ -56,7 +56,7 @@ class BlobManager(object):
         dir_name, file_name = hex_digest[:2], hex_digest[2:]
         with self.blobs_locked(exclusive=True):
             ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            ref_counter[dir_name][file_name] += 1
+            ref_counter[dir_name][file_name] -= 1
             cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
     def fetch_contents(self, hex_digest):
         file_path = os.path.join(self._base_dir_path, hex_digest[:2], hex_digest[2:])
