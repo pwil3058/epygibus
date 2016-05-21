@@ -21,7 +21,6 @@ mechanism for sub commands to add their components.
 import argparse
 import collections
 
-from .. import i18n
 from .. import VERSION
 
 PARSER = argparse.ArgumentParser(description=_("Manage file back ups"))
