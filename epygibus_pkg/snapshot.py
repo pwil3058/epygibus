@@ -20,6 +20,8 @@ import errno
 import sys
 import re
 
+from . import excpns
+
 class FStatsMixin:
     @property
     def is_dir(self):
@@ -145,6 +147,9 @@ def read_most_recent_snapshot(snapshot_dir_path):
         return read_snapshot(os.path.join(snapshot_dir_path, sorted(candidates, reverse=True)[0]))
     return Snapshot()
 
+def get_snapshot_list(snapshot_dir_path, reverse=False):
+    return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
+
 SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes"])
 
 class _SnapshotGenerator(object):
@@ -260,10 +265,29 @@ def generate_snapshot(profile, stderr=sys.stderr):
     return (snapshot_generator.statistics, snapshot_size, elapsed_time)
 
 class SnapshotFS(object):
-    def __init__(self, snapshot, blob_mgr):
-        self._snapshot = snapshot
-        self._blob_mgr = blob_mgr
-    def cat_file(self, file_path):
-        file_data = self._snapshot.get_file(file_path)
+    def __init__(self, archive_name, seln_fn=lambda l: l[-1]):
+        from . import config
+        from . import blobs
+        self.archive_name = archive_name
+        try:
+            self._archive = config.read_profile_spec(archive_name)
+        except IOError:
+            raise excpns.UnknownSnapshotArchive(archive_name)
+        snapshot_names = get_snapshot_list(self._archive.snapshot_dir_path)
+        if not snapshot_names:
+            raise excpns.EmptyArchive(archive_name)
+        self.snapshot_name = seln_fn(snapshot_names)
+        self._snapshot = read_snapshot(os.path.join(self._archive.snapshot_dir_path, self.snapshot_name))
+        self._blob_mgr = blobs.open_repo(self._archive.repo_name)
+    def cat_file(self, file_path, stdout=sys.stdout):
+        abs_file_path = os.path.abspath(file_path)
+        try:
+            file_data = self._snapshot.get_file(abs_file_path)
+        except (KeyError, AttributeError):
+            raise excpns.NotFoundInSnapshot(file_path, self.archive_name, self.snapshot_name)
         if file_data.is_link:
-            print file_data.link_tgt
+            stdout.write("LINK: {0} -> {1}\n".format(file_path, file_data.link_tgt))
+        else:
+            contents = self._blob_mgr.fetch_contents(file_data.payload)
+            for line in contents.splitlines(True):
+                stdout.write(line)

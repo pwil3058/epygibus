@@ -20,6 +20,7 @@ from . import cmd
 from .. import config
 from .. import snapshot
 from .. import blobs
+from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "cat",
@@ -38,20 +39,15 @@ PARSER.add_argument("file_path")
 
 def run_cmd(args):
     try:
-        profile = config.read_profile_spec(args.profile_name)
-    except IOError as edata:
-        sys.stderr.write("Unknown profile: {}.\n".format(args.profile_name))
+        snapshot_fs = snapshot.SnapshotFS(args.profile_name)
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata))
         sys.exit(-1)
-    latest_snapshot = snapshot.read_most_recent_snapshot(profile.snapshot_dir_path)
     try:
-        file_data = latest_snapshot.get_file(args.file_path)
-    except KeyError:
-        sys.stderr.write("Unknown file: {}.\n".format(args.file_path))
+        snapshot_fs.cat_file(args.file_path, sys.stdout)
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata))
         sys.exit(-2)
-    repo = blobs.open_repo(profile.repo_name)
-    contents = repo.fetch_contents(file_data.payload)
-    for line in contents.splitlines(True):
-        sys.stdout.write(line)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
