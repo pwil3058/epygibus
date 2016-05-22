@@ -22,6 +22,11 @@ import re
 
 from . import excpns
 
+HOME_DIR = os.path.expanduser("~")
+absolute_path = lambda path: os.path.abspath(os.path.expanduser(path))
+relative_path = lambda path: os.path.relpath(absolute_path(path))
+path_rel_home = lambda path: os.path.relpath(absolute_path(path), HOME_DIR)
+
 class FStatsMixin:
     @property
     def is_dir(self):
@@ -250,7 +255,7 @@ def generate_snapshot(profile, stderr=sys.stderr):
     snapshot_generator = _SnapshotGenerator(blob_mgr, profile.exclude_dir_cres, profile.exclude_file_cres, previous_snapshot, profile.skip_broken_soft_links)
     try:
         for item in profile.includes:
-            abs_item = os.path.abspath(os.path.expanduser(item))
+            abs_item = absolute_path(item)
             if os.path.isdir(abs_item):
                 snapshot_generator.include_dir(abs_item)
             elif os.path.isfile(abs_item):
@@ -280,7 +285,7 @@ class SnapshotFS(object):
         self._snapshot = read_snapshot(os.path.join(self._archive.snapshot_dir_path, self.snapshot_name))
         self._blob_mgr = blobs.open_repo(self._archive.repo_name)
     def cat_file(self, file_path, stdout=sys.stdout):
-        abs_file_path = os.path.abspath(file_path)
+        abs_file_path = absolute_path(file_path)
         try:
             file_data = self._snapshot.get_file(abs_file_path)
         except (KeyError, AttributeError):
