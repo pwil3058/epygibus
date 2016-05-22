@@ -13,6 +13,8 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import sys
+
 from . import cmd
 
 from .. import config
@@ -36,14 +38,19 @@ PARSER.add_argument(
     action="store_true"
 )
 
+PARSER.add_argument(
+    "--paranoid",
+    help=_("don't use data (size, m_time) from previous snapshot to speed up content processing."),
+    action="store_true"
+)
+
 def run_cmd(args):
     # read all archives in one go so that if any fails checks we do nothing
     archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
     for archive_name, archive in archives:
+        stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr)
         if args.stats:
-            print "{0} STATS:".format(archive_name), snapshot.generate_snapshot(archive)
-        else:
-            snapshot.generate_snapshot(archive)
+            print "{0} STATS: {1}".format(archive_name, stats)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

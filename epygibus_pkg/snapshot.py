@@ -160,7 +160,7 @@ SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_lin
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False):
+    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
         self.blob_mgr = blob_mgr
@@ -194,7 +194,7 @@ class _SnapshotGenerator(object):
         elif stat.S_ISLNK(file_stats.st_mode):
             target_file_path = os.readlink(file_path)
             if self.skip_broken_links and not os.path.exists(target_file_path):
-                sys.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
+                stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
                 return
             self.soft_link_count += 1
             files[file_name] = (file_stats, target_file_path)
@@ -246,13 +246,13 @@ class _SnapshotGenerator(object):
                 return True
         return False
 
-def generate_snapshot(archive, stderr=sys.stderr):
+def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     import time
     from . import blobs
     start_time = time.clock()
-    previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path)
+    previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_mgr = blobs.open_repo(archive.repo_name)
-    snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links)
+    snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
     try:
         for item in archive.includes:
             abs_item = absolute_path(item)
