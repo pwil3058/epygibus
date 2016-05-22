@@ -24,14 +24,14 @@ from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "cat",
-    description=_("Print the contents of the nominated file in the nominated profile's most recent snapshot."),
+    description=_("Print the contents of the nominated file in the nominated archive's most recent snapshot."),
 )
 
 PARSER.add_argument(
-    "--profile",
-    help=_("the name of the profile to extract the file content from."),
+    "--archive",
+    help=_("the name of the archive to extract the file content from."),
     required=True,
-    dest="profile_name",
+    dest="archive_name",
     metavar=_("name"),
 )
 
@@ -39,7 +39,7 @@ PARSER.add_argument("file_path")
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.SnapshotFS(args.profile_name)
+        snapshot_fs = snapshot.SnapshotFS(args.archive_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata))
         sys.exit(-1)

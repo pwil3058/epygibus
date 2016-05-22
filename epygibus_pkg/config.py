@@ -32,50 +32,50 @@ class ErrorRepoSpecExists(Error):
 
 _CONFIG_DIR_PATH = os.path.expanduser(os.path.join("~", ".config", APP_NAME_D))
 _REPOS_DIR_PATH = os.path.join(_CONFIG_DIR_PATH, "repos")
-_PROFILES_DIR_PATH = os.path.join(_CONFIG_DIR_PATH, "profiles")
+_ARCHIVES_DIR_PATH = os.path.join(_CONFIG_DIR_PATH, "archives")
 
 if not os.path.exists(_CONFIG_DIR_PATH):
     os.makedirs(_CONFIG_DIR_PATH)
     os.mkdir(_REPOS_DIR_PATH)
-    os.mkdir(_PROFILES_DIR_PATH)
+    os.mkdir(_ARCHIVES_DIR_PATH)
 
 _repo_file_path = lambda rname: os.path.join(_REPOS_DIR_PATH, rname)
 
-_profile_dir_path = lambda pname: os.path.join(_PROFILES_DIR_PATH, pname)
-_profile_config_path = lambda pname: os.path.join(_profile_dir_path(pname), "config")
-_profile_includes_path = lambda pname: os.path.join(_profile_dir_path(pname), "includes")
-_profile_exclude_dirs_path = lambda pname: os.path.join(_profile_dir_path(pname), "exclude_dirs")
-_profile_exclude_files_path = lambda pname: os.path.join(_profile_dir_path(pname), "exclude_files")
+_archive_dir_path = lambda pname: os.path.join(_ARCHIVES_DIR_PATH, pname)
+_archive_config_path = lambda pname: os.path.join(_archive_dir_path(pname), "config")
+_archive_includes_path = lambda pname: os.path.join(_archive_dir_path(pname), "includes")
+_archive_exclude_dirs_path = lambda pname: os.path.join(_archive_dir_path(pname), "exclude_dirs")
+_archive_exclude_files_path = lambda pname: os.path.join(_archive_dir_path(pname), "exclude_files")
 
-_profile_config_lines = lambda pname: open(_profile_config_path(pname), "r").readlines()
-_includes_file_lines = lambda pname: open(_profile_includes_path(pname), "r").readlines()
-_exclude_dir_lines = lambda pname: open(_profile_exclude_dirs_path(pname), "r").readlines()
-_exclude_file_lines = lambda pname: open(_profile_exclude_files_path(pname), "r").readlines()
+_archive_config_lines = lambda pname: open(_archive_config_path(pname), "r").readlines()
+_includes_file_lines = lambda pname: open(_archive_includes_path(pname), "r").readlines()
+_exclude_dir_lines = lambda pname: open(_archive_exclude_dirs_path(pname), "r").readlines()
+_exclude_file_lines = lambda pname: open(_archive_exclude_files_path(pname), "r").readlines()
 
 Profile = collections.namedtuple("Profile", ["repo_name", "snapshot_dir_path", "includes", "exclude_dir_cres", "exclude_file_cres", "skip_broken_soft_links"])
 
-def read_profile_spec(profile_name, stderr=sys.stderr):
-    repo, p_dir_path, skip = [l.rstrip() for l in _profile_config_lines(profile_name)]
-    includes = [os.path.abspath(os.path.expanduser(f.rstrip())) for f in _includes_file_lines(profile_name)]
-    dir_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_dir_lines(profile_name)]
-    file_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_file_lines(profile_name)]
+def read_archive_spec(archive_name, stderr=sys.stderr):
+    repo, p_dir_path, skip = [l.rstrip() for l in _archive_config_lines(archive_name)]
+    includes = [os.path.abspath(os.path.expanduser(f.rstrip())) for f in _includes_file_lines(archive_name)]
+    dir_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_dir_lines(archive_name)]
+    file_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_file_lines(archive_name)]
     return Profile(repo, p_dir_path, includes, dir_excludes, file_excludes, eval(skip))
 
-def write_profile_spec(profile_name, in_dir_path, repo_name, includes, exclude_dirs, exclude_files, skip_broken_sl=True):
-    base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], profile_name)
-    os.mkdir(_profile_dir_path(profile_name))
-    open(_profile_config_path(profile_name), "w").writelines([p + os.linesep for p in[repo_name, base_dir_path, str(skip_broken_sl)]])
-    open(_profile_includes_path(profile_name), "w").writelines(includes)
-    open(_profile_exclude_dirs_path(profile_name), "w").writelines(exclude_dirs)
-    open(_profile_exclude_files_path(profile_name), "w").writelines(exclude_files)
+def write_archive_spec(archive_name, in_dir_path, repo_name, includes, exclude_dirs, exclude_files, skip_broken_sl=True):
+    base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], archive_name)
+    os.mkdir(_archive_dir_path(archive_name))
+    open(_archive_config_path(archive_name), "w").writelines([p + os.linesep for p in[repo_name, base_dir_path, str(skip_broken_sl)]])
+    open(_archive_includes_path(archive_name), "w").writelines(includes)
+    open(_archive_exclude_dirs_path(archive_name), "w").writelines(exclude_dirs)
+    open(_archive_exclude_files_path(archive_name), "w").writelines(exclude_files)
     return base_dir_path
 
-def delete_profile_spec(profile_name):
-    os.remove(_profile_config_path(profile_name))
-    os.remove(_profile_includes_path(profile_name))
-    os.remove(_profile_exclude_dirs_path(profile_name))
-    os.remove(_profile_exclude_files_path(profile_name))
-    os.rmdir(_profile_dir_path(profile_name))
+def delete_archive_spec(archive_name):
+    os.remove(_archive_config_path(archive_name))
+    os.remove(_archive_includes_path(archive_name))
+    os.remove(_archive_exclude_dirs_path(archive_name))
+    os.remove(_archive_exclude_files_path(archive_name))
+    os.rmdir(_archive_dir_path(archive_name))
 
 Repo = collections.namedtuple("Repo", ["base_dir_path"])
 

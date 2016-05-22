@@ -94,8 +94,8 @@ def run_cmd(args):
         else:
             raise edata
     try:
-        base_dir_path = config.write_profile_spec(
-            profile_name=args.archive_name,
+        base_dir_path = config.write_archive_spec(
+            archive_name=args.archive_name,
             in_dir_path=args.location_dir_path,
             repo_name=args.repo_name,
             includes=args.includes,

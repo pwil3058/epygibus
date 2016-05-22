@@ -20,30 +20,30 @@ from .. import snapshot
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
-    description=_("Take a back up snapshot for the nominated profiles."),
+    description=_("Take a back up snapshot for the nominated archives."),
 )
 
 PARSER.add_argument(
-    "profiles",
-    help=_("the name(s) of the profile(s) for which the back up snapshot(s) is/are to be taken."),
+    "archives",
+    help=_("the name(s) of the archive(s) for which the back up snapshot(s) is/are to be taken."),
     nargs="+",
-    metavar=_("profile"),
+    metavar=_("archive"),
 )
 
 PARSER.add_argument(
     "--stats",
-    help=_("print the statistics for reach profile."),
+    help=_("print the statistics for reach archive."),
     action="store_true"
 )
 
 def run_cmd(args):
-    # read all profiles in one go so that if any fails checks we do nothing
-    profiles = [(profile_name, config.read_profile_spec(profile_name)) for profile_name in args.profiles]
-    for profile_name, profile in profiles:
+    # read all archives in one go so that if any fails checks we do nothing
+    archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
+    for archive_name, archive in archives:
         if args.stats:
-            print "{0} STATS:".format(profile_name), snapshot.generate_snapshot(profile)
+            print "{0} STATS:".format(archive_name), snapshot.generate_snapshot(archive)
         else:
-            snapshot.generate_snapshot(profile)
+            snapshot.generate_snapshot(archive)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

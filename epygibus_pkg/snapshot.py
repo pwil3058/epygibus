@@ -246,15 +246,15 @@ class _SnapshotGenerator(object):
                 return True
         return False
 
-def generate_snapshot(profile, stderr=sys.stderr):
+def generate_snapshot(archive, stderr=sys.stderr):
     import time
     from . import blobs
     start_time = time.clock()
-    previous_snapshot = read_most_recent_snapshot(profile.snapshot_dir_path)
-    blob_mgr = blobs.open_repo(profile.repo_name)
-    snapshot_generator = _SnapshotGenerator(blob_mgr, profile.exclude_dir_cres, profile.exclude_file_cres, previous_snapshot, profile.skip_broken_soft_links)
+    previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path)
+    blob_mgr = blobs.open_repo(archive.repo_name)
+    snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links)
     try:
-        for item in profile.includes:
+        for item in archive.includes:
             abs_item = absolute_path(item)
             if os.path.isdir(abs_item):
                 snapshot_generator.include_dir(abs_item)
@@ -264,7 +264,7 @@ def generate_snapshot(profile, stderr=sys.stderr):
                 stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
             else:
                 stderr.write(_("{0}: not found. Skipped.").format(item))
-        snapshot_size = write_snapshot(profile.snapshot_dir_path, snapshot_generator.snapshot)
+        snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
     finally:
         elapsed_time = time.clock() - start_time
     return (snapshot_generator.statistics, snapshot_size, elapsed_time)
@@ -275,7 +275,7 @@ class SnapshotFS(object):
         from . import blobs
         self.archive_name = archive_name
         try:
-            self._archive = config.read_profile_spec(archive_name)
+            self._archive = config.read_archive_spec(archive_name)
         except IOError:
             raise excpns.UnknownSnapshotArchive(archive_name)
         snapshot_names = get_snapshot_list(self._archive.snapshot_dir_path)
