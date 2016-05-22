@@ -16,7 +16,6 @@
 class Error(Exception):
     STR_TEMPLATE = "Error:"
     def __str__(self):
-        print "STR", self.__dict__
         return self.STR_TEMPLATE.format(**self.__dict__)
 
 class NotFoundInSnapshot(Error):
@@ -35,3 +34,8 @@ class EmptyArchive(Error):
     STR_TEMPLATE = _("Error: snapshot archive \"{archive_name}\" is empty.")
     def __init__(self, archive_name):
         self.archive_name = archive_name
+
+class NoMatchingSnapshot(Error):
+    STR_TEMPLATE = _("Error: snapshot matching selection criteria not found in {available_snapshots}.")
+    def __init__(self, available_snapshots):
+        self.available_snapshots = available_snapshots

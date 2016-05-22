@@ -131,6 +131,7 @@ def read_snapshot(snapshot_file_path):
 # NB: make sure that these two are in concert
 _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
 _SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\.gz)?")
+ss_root = lambda fname: fname.split(".")[0]
 
 def write_snapshot(snapshot_dir_path, snapshot, permissions=stat.S_IRUSR|stat.S_IRGRP):
     import cPickle
@@ -152,7 +153,7 @@ def read_most_recent_snapshot(snapshot_dir_path):
         return read_snapshot(os.path.join(snapshot_dir_path, sorted(candidates, reverse=True)[0]))
     return Snapshot()
 
-def get_snapshot_list(snapshot_dir_path, reverse=False):
+def get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
 
 SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes"])
@@ -278,10 +279,13 @@ class SnapshotFS(object):
             self._archive = config.read_archive_spec(archive_name)
         except IOError:
             raise excpns.UnknownSnapshotArchive(archive_name)
-        snapshot_names = get_snapshot_list(self._archive.snapshot_dir_path)
+        snapshot_names = get_snapshot_file_list(self._archive.snapshot_dir_path)
         if not snapshot_names:
             raise excpns.EmptyArchive(archive_name)
-        self.snapshot_name = seln_fn(snapshot_names)
+        try:
+            self.snapshot_name = seln_fn(snapshot_names)
+        except:
+            raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
         self._snapshot = read_snapshot(os.path.join(self._archive.snapshot_dir_path, self.snapshot_name))
         self._blob_mgr = blobs.open_repo(self._archive.repo_name)
     def cat_file(self, file_path, stdout=sys.stdout):
@@ -289,10 +293,18 @@ class SnapshotFS(object):
         try:
             file_data = self._snapshot.get_file(abs_file_path)
         except (KeyError, AttributeError):
-            raise excpns.NotFoundInSnapshot(file_path, self.archive_name, self.snapshot_name)
+            raise excpns.NotFoundInSnapshot(file_path, self.archive_name, ss_root(self.snapshot_name))
         if file_data.is_link:
             stdout.write("LINK: {0} -> {1}\n".format(file_path, file_data.link_tgt))
         else:
             contents = self._blob_mgr.fetch_contents(file_data.payload)
             for line in contents.splitlines(True):
                 stdout.write(line)
+
+def get_snapshot_list(archive_name, reverse=False):
+    from . import config
+    try:
+        archive = config.read_archive_spec(archive_name)
+    except IOError:
+        raise excpns.UnknownSnapshotArchive(archive_name)
+    return [ss_root(ss_name) for ss_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]

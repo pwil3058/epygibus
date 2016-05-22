@@ -23,39 +23,27 @@ from .. import blobs
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "cat",
-    description=_("Print the contents of the nominated file in the nominated archive's most recent (or specified) snapshot."),
+    "la",
+    description=_("List the available snapshots in the nominated archive."),
+    epilog=_("Snapshots will be listed in newest to oldest order unless specified otherwise."),
 )
 
 PARSER.add_argument(
-    "--archive",
-    help=_("the name of the archive to extract the file content from."),
-    required=True,
-    dest="archive_name",
-    metavar=_("name"),
+    "--oldest_first",
+    help=_("list snapshots in oldest to newest order."),
+    action="store_false"
 )
 
-PARSER.add_argument(
-    "--minus",
-    help=_("select the snapshot \"N\" places before the most recent."),
-    default=0,
-    type=int,
-    metavar=_("N"),
-)
-
-PARSER.add_argument("file_path")
+PARSER.add_argument("archive_name")
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.SnapshotFS(args.archive_name, seln_fn=lambda l: l[-1-args.minus])
+        snapshot_names = snapshot.get_snapshot_list(args.archive_name, reverse=args.oldest_first)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    try:
-        snapshot_fs.cat_file(args.file_path, sys.stdout)
-    except excpns.Error as edata:
-        sys.stderr.write(str(edata) + "\n")
-        sys.exit(-2)
+    for snapshot_name in snapshot_names:
+        sys.stdout.write(snapshot_name + "\n")
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

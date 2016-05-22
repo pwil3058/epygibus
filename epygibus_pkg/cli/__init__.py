@@ -19,3 +19,4 @@ from . import subcmd_bu
 from . import subcmd_new_repo
 from . import subcmd_cat
 from . import subcmd_new
+from . import subcmd_la
