@@ -14,6 +14,7 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import sys
+import os
 
 from . import cmd
 
@@ -23,13 +24,13 @@ from .. import blobs
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "cat",
-    description=_("Print the contents of the nominated file in the nominated archive's most recent (or specified) snapshot."),
+    "ldc",
+    description=_("List list the contents of the named directory in the nominated archive's most recent (or specified) snapshot."),
 )
 
 PARSER.add_argument(
     "--archive",
-    help=_("the name of the archive to extract the file content from."),
+    help=_("the name of the archive whose files are to be listed."),
     required=True,
     dest="archive_name",
     metavar=_("name"),
@@ -37,7 +38,7 @@ PARSER.add_argument(
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG)
 
-PARSER.add_argument("file_path")
+PARSER.add_argument("in_dir_path")
 
 def run_cmd(args):
     try:
@@ -46,10 +47,13 @@ def run_cmd(args):
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     try:
-        snapshot_fs.cat_file(args.file_path, sys.stdout)
+        for dir_data in sorted(snapshot_fs.iterate_subdirs(in_dir_path=args.in_dir_path)):
+            sys.stdout.write(dir_data.path + os.sep + "\n")
+        for file_data in sorted(snapshot_fs.iterate_files(in_dir_path=args.in_dir_path)):
+            sys.stdout.write(file_data.path + "\n")
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
-        sys.exit(-2)
+        sys.exit(-1)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

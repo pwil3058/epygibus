@@ -300,6 +300,16 @@ class SnapshotFS(object):
             contents = self._blob_mgr.fetch_contents(file_data.payload)
             for line in contents.splitlines(True):
                 stdout.write(line)
+    def iterate_files(self, in_dir_path=None):
+        snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
+        if not snapshot:
+            raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
+        return snapshot.iterate_files(pre_path=os.sep if not in_dir_path else "", recurse=False)
+    def iterate_subdirs(self, in_dir_path=None):
+        snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
+        if not snapshot:
+            raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
+        return snapshot.iterate_subdirs(pre_path=os.sep if not in_dir_path else "", recurse=False)
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config
