@@ -30,78 +30,78 @@ path_rel_home = lambda path: os.path.relpath(absolute_path(path), HOME_DIR)
 class FStatsMixin:
     @property
     def is_dir(self):
-        return stat.S_ISDIR(self.fstats.st_mode)
+        return stat.S_ISDIR(self.attributes.st_mode)
     @property
     def is_hard_linked(self):
-        return self.fstats.st_nlink > 1
+        return self.attributes.st_nlink > 1
     @property
     def is_soft_link(self):
-        return stat.S_ISLNK(self.fstats.st_mode)
+        return stat.S_ISLNK(self.attributes.st_mode)
     @property
     def is_reg_file(self):
-        return stat.S_ISREG(self.fstats.st_mode)
+        return stat.S_ISREG(self.attributes.st_mode)
     @property
     def mode(self):
-        return self.fstats.st_mode
+        return self.attributes.st_mode
     @property
     def mtime(self):
-        return self.fstats.st_mtime
+        return self.attributes.st_mtime
     @property
     def nlink(self):
-        return self.fstats.st_nlink
+        return self.attributes.st_nlink
     @property
     def size(self):
-        return self.fstats.st_size
+        return self.attributes.st_size
     @property
     def uid(self):
-        return self.fstats.st_uid
+        return self.attributes.st_uid
     @property
     def gid(self):
-        return self.fstats.st_gid
+        return self.attributes.st_gid
     @property
     def inode(self):
-        return self.fstats.st_ino
+        return self.attributes.st_ino
     @property
     def device(self):
-        return self.fstats.st_dev
+        return self.attributes.st_dev
 
-class SDir(collections.namedtuple("SDir", ["path", "fstats", "subdirs", "files", "blob_mgr"]), FStatsMixin):
+class SDir(collections.namedtuple("SDir", ["path", "attributes", "subdirs", "files", "blob_mgr"]), FStatsMixin):
     pass
 
-class SFile(collections.namedtuple("SFile", ["path", "fstats", "payload", "blob_mgr"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "blob_mgr"]), FStatsMixin):
     @property
     def link_tgt(self):
-        return self.payload if stat.S_ISLNK(self.fstats.st_mode) else None
+        return self.payload if stat.S_ISLNK(self.attributes.st_mode) else None
     @property
     def hex_digest(self):
-        return self.payload if stat.S_ISREG(self.fstats.st_mode) else None
+        return self.payload if stat.S_ISREG(self.attributes.st_mode) else None
     def open_read_only(self):
-        if not stat.S_ISREG(self.fstats.st_mode):
+        if not stat.S_ISREG(self.attributes.st_mode):
             raise excpns.NotRegularFile(self.path)
         return self.blob_mgr.open_read_only(self.payload)
 
 class Snapshot(object):
-    def __init__(self, parent=None, dir_stats=None):
+    def __init__(self, parent=None, attributes=None):
         self.parent = parent
-        self.dir_stats = dir_stats
+        self.attributes = attributes
         self.subdirs = {}
         self.files = {}
-    def _add_subdir(self, path_parts, dir_stats=None):
+    def _add_subdir(self, path_parts, attributes=None):
         name = path_parts[0]
         if len(path_parts) == 1:
             # neeed to be careful that we don't clobber existing data
             if name not in self.subdirs:
-                self.subdirs[name] = Snapshot(self, dir_stats)
-            elif self.subdirs[name].dir_stats is None:
+                self.subdirs[name] = Snapshot(self, attributes)
+            elif self.subdirs[name].attributes is None:
                 # cover the case where it was previously created an way to a leaf dir
-                self.subdirs[name].dir_stats = dir_stats
+                self.subdirs[name].attributes = attributes
             return self.subdirs[name]
         else:
             if name not in self.subdirs:
                 self.subdirs[name] = Snapshot(self)
-            return self.subdirs[name]._add_subdir(path_parts[1:], dir_stats)
-    def add_subdir(self, dir_path, dir_stats=None):
-        return self._add_subdir(dir_path.strip(os.sep).split(os.sep), dir_stats)
+            return self.subdirs[name]._add_subdir(path_parts[1:], attributes)
+    def add_subdir(self, dir_path, attributes=None):
+        return self._add_subdir(dir_path.strip(os.sep).split(os.sep), attributes)
     def _find_dir(self, dirpath_parts):
         if not dirpath_parts:
             return self
@@ -126,7 +126,7 @@ class Snapshot(object):
                     yield sfile
     def iterate_subdirs(self, blob_mgr, pre_path="", recurse=False):
         for subdir_name, data in self.subdirs.items():
-            yield SDir(os.path.join(pre_path, subdir_name), data.dir_stats, data.subdirs, data.files, blob_mgr)
+            yield SDir(os.path.join(pre_path, subdir_name), data.attributes, data.subdirs, data.files, blob_mgr)
         if recurse:
             for dir_name in self.subdirs:
                 for sfile in self.subdirs[dir_name].iterate_subdirs(os.path.join(pre_path, dir_name), recurse=recurse):
@@ -285,8 +285,8 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
 
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_mgr"]), FStatsMixin):
     @property
-    def fstats(self):
-        return self.snapshot.dir_stats
+    def attributes(self):
+        return self.snapshot.attributes
     @property
     def name(self):
         return os.path.basename(self.path)
