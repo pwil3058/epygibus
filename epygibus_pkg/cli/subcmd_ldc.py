@@ -42,7 +42,7 @@ PARSER.add_argument("in_dir_path")
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.SnapshotFS(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+        snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back])
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

@@ -283,41 +283,48 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
         elapsed_time = time.clock() - start_time
     return (snapshot_generator.statistics, snapshot_size, elapsed_time)
 
-class SnapshotFS(object):
-    def __init__(self, archive_name, seln_fn=lambda l: l[-1]):
-        from . import config
-        from . import blobs
-        self.archive_name = archive_name
-        try:
-            self._archive = config.read_archive_spec(archive_name)
-        except IOError:
-            raise excpns.UnknownSnapshotArchive(archive_name)
-        snapshot_names = get_snapshot_file_list(self._archive.snapshot_dir_path)
-        if not snapshot_names:
-            raise excpns.EmptyArchive(archive_name)
-        try:
-            self.snapshot_name = seln_fn(snapshot_names)
-        except:
-            raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
-        self._snapshot = read_snapshot(os.path.join(self._archive.snapshot_dir_path, self.snapshot_name))
-        self._blob_mgr = blobs.open_repo(self._archive.repo_name)
+class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_mgr"]), FStatsMixin):
+    @property
+    def fstats(self):
+        return self.snapshot.dir_stats
+    @property
+    def name(self):
+        return os.path.basename(self.path)
     def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
-            file_data = self._snapshot.get_file(abs_file_path, self._blob_mgr)
+            file_data = self.snapshot.get_file(abs_file_path, self.blob_mgr)
         except (KeyError, AttributeError):
             raise excpns.NotFoundInSnapshot(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
     def iterate_files(self, in_dir_path=None):
-        snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
+        snapshot = self.snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
         if not snapshot:
             raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_files(self._blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
+        return snapshot.iterate_files(self.blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
     def iterate_subdirs(self, in_dir_path=None):
-        snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
+        snapshot = self.snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
         if not snapshot:
             raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_subdirs(self._blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
+        return snapshot.iterate_subdirs(self.blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
+
+def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
+    from . import config
+    from . import blobs
+    try:
+        archive = config.read_archive_spec(archive_name)
+    except IOError:
+        raise excpns.UnknownSnapshotArchive(archive_name)
+    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    if not snapshot_names:
+        raise excpns.EmptyArchive(archive_name)
+    try:
+        snapshot_name = seln_fn(snapshot_names)
+    except:
+        raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
+    snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
+    blob_mgr = blobs.open_repo(archive.repo_name)
+    return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_mgr)
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config
