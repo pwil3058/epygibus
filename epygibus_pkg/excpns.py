@@ -25,6 +25,11 @@ class NotFoundInSnapshot(Error):
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
 
+class NotRegularFile(Error):
+    STR_TEMPLATE = _("Error: \"{file_name}\" is not a regular file.")
+    def __init__(self, file_name):
+        self.file_name = file_name
+
 class UnknownSnapshotArchive(Error):
     STR_TEMPLATE = _("Error: snapshot archive \"{archive_name}\" is not defined.")
     def __init__(self, archive_name):

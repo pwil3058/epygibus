@@ -68,6 +68,16 @@ class BlobManager(object):
                     raise edata
                 contents = gzip.open(file_path + ".gz", "r").read()
         return contents
+    def open_read_only(self, hex_digest):
+        file_path = os.path.join(self._base_dir_path, hex_digest[:2], hex_digest[2:])
+        with self.blobs_locked(exclusive=False):
+            try:
+                ofile = open(file_path, "r")
+            except OSError as edata:
+                if edata.errno != errno.ENOENT:
+                    raise edata
+                ofile = gzip.open(file_path + ".gz", "r")
+        return ofile
     @contextmanager
     def blobs_locked(self, exclusive=False):
         import fcntl

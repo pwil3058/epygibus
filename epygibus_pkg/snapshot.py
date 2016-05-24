@@ -32,7 +32,10 @@ class FStatsMixin:
     def is_dir(self):
         return stat.S_ISDIR(self.fstats.st_mode)
     @property
-    def is_link(self):
+    def is_hard_linked(self):
+        return self.fstats.st_nlink > 1
+    @property
+    def is_soft_link(self):
         return stat.S_ISLNK(self.fstats.st_mode)
     @property
     def is_reg_file(self):
@@ -55,17 +58,27 @@ class FStatsMixin:
     @property
     def gid(self):
         return self.fstats.st_gid
+    @property
+    def inode(self):
+        return self.fstats.st_ino
+    @property
+    def device(self):
+        return self.fstats.st_dev
 
-class SDir(collections.namedtuple("SDir", ["path", "fstats", "subdirs", "files"]), FStatsMixin):
+class SDir(collections.namedtuple("SDir", ["path", "fstats", "subdirs", "files", "blob_mgr"]), FStatsMixin):
     pass
 
-class SFile(collections.namedtuple("SFile", ["path", "fstats", "payload"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "fstats", "payload", "blob_mgr"]), FStatsMixin):
     @property
     def link_tgt(self):
-        return seld.payload if stat.S_ISLNK(self.fstats.st_mode) else None
+        return self.payload if stat.S_ISLNK(self.fstats.st_mode) else None
     @property
     def hex_digest(self):
-        return seld.payload if stat.S_ISREG(self.fstats.st_mode) else None
+        return self.payload if stat.S_ISREG(self.fstats.st_mode) else None
+    def open_read_only(self):
+        if not stat.S_ISREG(self.fstats.st_mode):
+            raise excpns.NotRegularFile(self.path)
+        return self.blob_mgr.open_read_only(self.payload)
 
 class Snapshot(object):
     def __init__(self, parent=None, dir_stats=None):
@@ -100,20 +113,20 @@ class Snapshot(object):
         if not dir_path:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
-    def get_file(self, file_path):
+    def get_file(self, file_path, blob_mgr):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
-        return SFile(file_path, data[0], data[1])
-    def iterate_files(self, pre_path="", recurse=False):
+        return SFile(file_path, data[0], data[1], blob_mgr)
+    def iterate_files(self, blob_mgr, pre_path="", recurse=False):
         for file_name, data in self.files.items():
-            yield SFile(os.path.join(pre_path, file_name), data[0], data[1])
+            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], blob_mgr)
         if recurse:
             for dir_name in self.subdirs:
                 for sfile in self.subdirs[dir_name].iterate_files(os.path.join(pre_path, dir_name), recurse=recurse):
                     yield sfile
-    def iterate_subdirs(self, pre_path="", recurse=False):
+    def iterate_subdirs(self, blob_mgr, pre_path="", recurse=False):
         for subdir_name, data in self.subdirs.items():
-            yield SDir(os.path.join(pre_path, subdir_name), data.dir_stats, data.subdirs, data.files)
+            yield SDir(os.path.join(pre_path, subdir_name), data.dir_stats, data.subdirs, data.files, blob_mgr)
         if recurse:
             for dir_name in self.subdirs:
                 for sfile in self.subdirs[dir_name].iterate_subdirs(os.path.join(pre_path, dir_name), recurse=recurse):
@@ -288,28 +301,23 @@ class SnapshotFS(object):
             raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
         self._snapshot = read_snapshot(os.path.join(self._archive.snapshot_dir_path, self.snapshot_name))
         self._blob_mgr = blobs.open_repo(self._archive.repo_name)
-    def cat_file(self, file_path, stdout=sys.stdout):
+    def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
-            file_data = self._snapshot.get_file(abs_file_path)
+            file_data = self._snapshot.get_file(abs_file_path, self._blob_mgr)
         except (KeyError, AttributeError):
             raise excpns.NotFoundInSnapshot(file_path, self.archive_name, ss_root(self.snapshot_name))
-        if file_data.is_link:
-            stdout.write("LINK: {0} -> {1}\n".format(file_path, file_data.link_tgt))
-        else:
-            contents = self._blob_mgr.fetch_contents(file_data.payload)
-            for line in contents.splitlines(True):
-                stdout.write(line)
+        return file_data
     def iterate_files(self, in_dir_path=None):
         snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
         if not snapshot:
             raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_files(pre_path=os.sep if not in_dir_path else "", recurse=False)
+        return snapshot.iterate_files(self._blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
     def iterate_subdirs(self, in_dir_path=None):
         snapshot = self._snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
         if not snapshot:
             raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_subdirs(pre_path=os.sep if not in_dir_path else "", recurse=False)
+        return snapshot.iterate_subdirs(self._blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config

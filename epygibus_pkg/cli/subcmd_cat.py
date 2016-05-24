@@ -46,10 +46,16 @@ def run_cmd(args):
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     try:
-        snapshot_fs.cat_file(args.file_path, sys.stdout)
+        file_data = snapshot_fs.get_file(args.file_path)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-2)
+    if file_data.is_soft_link:
+        sys.stdout.write("LINK: {0} -> {1}\n".format(file_path, file_data.link_tgt))
+    else:
+        contents = file_data.open_read_only().read()
+        for line in contents.splitlines(True):
+            sys.stdout.write(line)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
