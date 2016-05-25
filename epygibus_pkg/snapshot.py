@@ -65,9 +65,6 @@ class FStatsMixin:
     def device(self):
         return self.attributes.st_dev
 
-class SDir(collections.namedtuple("SDir", ["path", "attributes", "subdirs", "files", "blob_mgr"]), FStatsMixin):
-    pass
-
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "blob_mgr"]), FStatsMixin):
     @property
     def link_tgt(self):
@@ -281,13 +278,15 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         try:
             file_data = self.snapshot.get_file(abs_file_path, self.blob_mgr)
         except (KeyError, AttributeError):
-            raise excpns.NotFoundInSnapshot(file_path, self.archive_name, ss_root(self.snapshot_name))
+            raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
     def get_subdir(self, subdir_path):
+        if subdir_path == os.sep:
+            return self
         abs_subdir_path = absolute_path(subdir_path)
         subdir_ss = self.snapshot.find_dir(abs_subdir_path)
         if not subdir_ss:
-            raise excpns.NotFoundInSnapshot(subdir_path, self.archive_name, ss_root(self.snapshot_name))
+            raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
         return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_mgr)
     def iterate_subdirs(self, pre_path=False, recurse=False):
         if not isinstance(pre_path, str):

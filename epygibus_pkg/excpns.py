@@ -18,10 +18,17 @@ class Error(Exception):
     def __str__(self):
         return self.STR_TEMPLATE.format(**self.__dict__)
 
-class NotFoundInSnapshot(Error):
-    STR_TEMPLATE = _("Error: file/directory \"{path}\" not found in \"{archive_name}::{snapshot_name}\" snapshot.")
-    def __init__(self, path, archive_name, snapshot_name):
-        self.path = path
+class DirNotFound(Error):
+    STR_TEMPLATE = _("Error: directory \"{dir_path}\" not found in \"{archive_name}::{snapshot_name}\" snapshot.")
+    def __init__(self, dir_path, archive_name, snapshot_name):
+        self.dir_path = dir_path
+        self.archive_name = archive_name
+        self.snapshot_name = snapshot_name
+
+class FileNotFound(Error):
+    STR_TEMPLATE = _("Error: file \"{file_path}\" not found in \"{archive_name}::{snapshot_name}\" snapshot.")
+    def __init__(self, file_path, archive_name, snapshot_name):
+        self.file_path = file_path
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
 
