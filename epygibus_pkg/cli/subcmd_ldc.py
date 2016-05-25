@@ -42,14 +42,14 @@ PARSER.add_argument("in_dir_path")
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+        snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back]).get_subdir(args.in_dir_path)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     try:
-        for dir_data in sorted(snapshot_fs.iterate_subdirs(in_dir_path=args.in_dir_path)):
+        for dir_data in sorted(snapshot_fs.iterate_subdirs()):
             sys.stdout.write(dir_data.path + os.sep + "\n")
-        for file_data in sorted(snapshot_fs.iterate_files(in_dir_path=args.in_dir_path)):
+        for file_data in sorted(snapshot_fs.iterate_files()):
             sys.stdout.write(file_data.path + "\n")
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")

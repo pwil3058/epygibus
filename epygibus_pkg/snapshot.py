@@ -117,20 +117,6 @@ class Snapshot(object):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
         return SFile(file_path, data[0], data[1], blob_mgr)
-    def iterate_files(self, blob_mgr, pre_path="", recurse=False):
-        for file_name, data in self.files.items():
-            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], blob_mgr)
-        if recurse:
-            for dir_name in self.subdirs:
-                for sfile in self.subdirs[dir_name].iterate_files(os.path.join(pre_path, dir_name), recurse=recurse):
-                    yield sfile
-    def iterate_subdirs(self, blob_mgr, pre_path="", recurse=False):
-        for subdir_name, data in self.subdirs.items():
-            yield SDir(os.path.join(pre_path, subdir_name), data.attributes, data.subdirs, data.files, blob_mgr)
-        if recurse:
-            for dir_name in self.subdirs:
-                for sfile in self.subdirs[dir_name].iterate_subdirs(os.path.join(pre_path, dir_name), recurse=recurse):
-                    yield sfile
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -297,16 +283,30 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         except (KeyError, AttributeError):
             raise excpns.NotFoundInSnapshot(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
-    def iterate_files(self, in_dir_path=None):
-        snapshot = self.snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
-        if not snapshot:
-            raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_files(self.blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
-    def iterate_subdirs(self, in_dir_path=None):
-        snapshot = self.snapshot.find_dir(absolute_path(in_dir_path) if in_dir_path else in_dir_path)
-        if not snapshot:
-            raise excpns.NotFoundInSnapshot(in_dir_path, self.archive_name, ss_root(self.snapshot_name))
-        return snapshot.iterate_subdirs(self.blob_mgr, pre_path=os.sep if not in_dir_path else "", recurse=False)
+    def get_subdir(self, subdir_path):
+        abs_subdir_path = absolute_path(subdir_path)
+        subdir_ss = self.snapshot.find_dir(abs_subdir_path)
+        if not subdir_ss:
+            raise excpns.NotFoundInSnapshot(subdir_path, self.archive_name, ss_root(self.snapshot_name))
+        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_mgr)
+    def iterate_subdirs(self, pre_path=False, recurse=False):
+        if not isinstance(pre_path, str):
+            pre_path = self.path if pre_path is True else ""
+        for subdir_name, ss_snapshot in self.snapshot.subdirs.items():
+            snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.blob_mgr)
+            yield snapshot_fs
+            if recurse:
+                for r_snapshot_fs in snapshot_fs.iterate_subdirs(pre_path=True, recurse=True):
+                    yield r_snapshot_fs
+    def iterate_files(self, pre_path=False, recurse=False):
+        if not isinstance(pre_path, str):
+            pre_path = self.path if pre_path is True else ""
+        for file_name, data in self.snapshot.files.items():
+            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.blob_mgr)
+        if recurse:
+            for subdir in self.iterate_subdirs():
+                for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
+                    yield sfile
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
