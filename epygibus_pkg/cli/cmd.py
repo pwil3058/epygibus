@@ -35,10 +35,10 @@ PARSER.add_argument(
     version=VERSION
 )
 
-BACK_ISSUE_ARG = _ARG_SPEC(
+BACK_ISSUE_ARG = lambda default=0 : _ARG_SPEC(
     ["--back",],
-    {   "help": _("select the snapshot \"N\" places before the most recent."),
-        "default": 0,
+    {   "help": _("select the snapshot \"N\" places before the most recent. Use -1 to select oldest. Defaults to {}.").format(default),
+        "default": default,
         "type": int,
         "metavar": _("N"),
     }

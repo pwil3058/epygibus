@@ -47,6 +47,12 @@ class EmptyArchive(Error):
     def __init__(self, archive_name):
         self.archive_name = archive_name
 
+class LastSnapshot(Error):
+    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" is the last one remaining \"{archive_name}\" archive.")
+    def __init__(self, archive_name, snapshot_name):
+        self.archive_name = archive_name
+        self.snapshot_name = snapshot_name
+
 class NoMatchingSnapshot(Error):
     STR_TEMPLATE = _("Error: snapshot matching selection criteria not found in {available_snapshots}.")
     def __init__(self, available_snapshots):

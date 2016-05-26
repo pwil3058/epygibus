@@ -35,7 +35,7 @@ PARSER.add_argument(
     metavar=_("name"),
 )
 
-cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG)
+cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
 PARSER.add_argument("file_path")
 

@@ -84,7 +84,6 @@ PARSER.add_argument(
 )
 
 def run_cmd(args):
-    print args
     try:
         config.read_repo_spec(args.repo_name)
     except IOError as edata:

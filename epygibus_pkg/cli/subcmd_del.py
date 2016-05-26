@@ -24,8 +24,8 @@ from .. import blobs
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "ldc",
-    description=_("List list the contents of the named directory in the nominated archive's most recent (or specified) snapshot."),
+    "del",
+    description=_("Delete the nominated archive's oldest (or specified) snapshot."),
 )
 
 PARSER.add_argument(
@@ -36,21 +36,17 @@ PARSER.add_argument(
     metavar=_("name"),
 )
 
-cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
+cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG(-1))
 
-PARSER.add_argument("in_dir_path")
+PARSER.add_argument(
+    "--remove_last_ok",
+    help=_("aurhorise deletion of the last snapshot in the archive."),
+    action="store_true",
+)
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back]).get_subdir(args.in_dir_path)
-    except excpns.Error as edata:
-        sys.stderr.write(str(edata) + "\n")
-        sys.exit(-1)
-    try:
-        for dir_data in sorted(snapshot_fs.iterate_subdirs()):
-            sys.stdout.write(dir_data.path + os.sep + "\n")
-        for file_data in sorted(snapshot_fs.iterate_files()):
-            sys.stdout.write(file_data.path + "\n")
+        snapshot.delete_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back], clear_fell= args.remove_last_ok)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

@@ -110,10 +110,17 @@ class Snapshot(object):
         if not dir_path:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
-    def get_file(self, file_path, blob_mgr):
+    def find_file(self, file_path, blob_mgr):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
         return SFile(file_path, data[0], data[1], blob_mgr)
+    def iterate_hex_digests(self):
+        for data in self.files.values():
+            if stat.S_ISREG(data[0].st_mode):
+                yield data[1]
+        for subdir in self.subdirs.values():
+            for hex_digest in subdir.iterate_hex_digests():
+                yield hex_digest
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -168,6 +175,7 @@ class _SnapshotGenerator(object):
         self.soft_link_count = 0
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
+        self._extant_hex_digests = list()
     @property
     def snapshot(self):
         return self._snapshot
@@ -182,6 +190,7 @@ class _SnapshotGenerator(object):
             prior_file = prior_files.get(file_name, None)
             if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
                 hex_digest = prior_file[1]
+                self._extant_hex_digests.append(hex_digest)
             else:
                 hex_digest = self.blob_mgr.store_contents(file_path)
             self.content_count += file_stats.st_size
@@ -242,6 +251,8 @@ class _SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
+    def update_ref_counts(self):
+        self.blob_mgr.incr_ref_counts(self._extant_hex_digests)
 
 def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     import time
@@ -261,6 +272,7 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
                 stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
             else:
                 stderr.write(_("{0}: not found. Skipped.").format(item))
+        snapshot_generator.update_ref_counts()
         snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
     finally:
         elapsed_time = time.clock() - start_time
@@ -276,7 +288,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
-            file_data = self.snapshot.get_file(abs_file_path, self.blob_mgr)
+            file_data = self.snapshot.find_file(abs_file_path, self.blob_mgr)
         except (KeyError, AttributeError):
             raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
@@ -324,6 +336,29 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
     blob_mgr = blobs.open_repo(archive.repo_name)
     return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_mgr)
+
+def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
+    from . import config
+    from . import blobs
+    try:
+        archive = config.read_archive_spec(archive_name)
+    except IOError:
+        raise excpns.UnknownSnapshotArchive(archive_name)
+    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    if not snapshot_names:
+        raise excpns.EmptyArchive(archive_name)
+    try:
+        snapshot_name = seln_fn(snapshot_names)
+    except:
+        raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
+    if not clear_fell and len(snapshot_names) == 1:
+        raise excpns.LastSnapshot(archive_name, ss_root(snapshot_name))
+    snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
+    snapshot = read_snapshot(snapshot_file_path)
+    blob_mgr = blobs.open_repo(archive.repo_name)
+    # possible race condition here
+    os.remove(snapshot_file_path)
+    blob_mgr.release_contents(snapshot.iterate_hex_digests())
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config

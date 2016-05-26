@@ -13,13 +13,30 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-# This should be the only place that subcmd_* modules should be imported
-# as this is sufficient to activate them.
-from . import subcmd_bu
-from . import subcmd_new_repo
-from . import subcmd_cat
-from . import subcmd_new
-from . import subcmd_la
-from . import subcmd_ldc
-from . import subcmd_del
-from . import subcmd_list_blobs
+import os
+import sys
+
+from . import cmd
+
+from .. import config
+from .. import blobs
+
+PARSER = cmd.SUB_CMD_PARSER.add_parser(
+    "list_blobs",
+    description=_("List the blobs and reference counts for named repository."),
+)
+
+PARSER.add_argument(
+    "repo_name",
+    help=_("the name to be allocated to the content repository."),
+    metavar=_("name"),
+    action = "store"
+)
+
+def run_cmd(args):
+    blob_mgr = blobs.open_repo(args.repo_name)
+    for data in blob_mgr.iterate_hex_digests():
+        sys.stdout.write(_("{}: {}\n").format(*data))
+    return 0
+
+PARSER.set_defaults(run_cmd=run_cmd)

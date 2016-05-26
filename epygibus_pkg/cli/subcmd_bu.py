@@ -50,7 +50,7 @@ def run_cmd(args):
     for archive_name, archive in archives:
         stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr)
         if args.stats:
-            print "{0} STATS: {1}".format(archive_name, stats)
+            sys.stderr.write(_("{0} STATS: {1}\n").format(archive_name, stats))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

@@ -41,7 +41,6 @@ PARSER.add_argument(
 )
 
 def run_cmd(args):
-    print args
     base_dir_path = config.write_repo_spec(args.repo_name, args.location_dir_path)
     os.makedirs(base_dir_path)
     blobs.initialize_repo(base_dir_path)

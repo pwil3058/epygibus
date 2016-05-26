@@ -27,6 +27,12 @@ class BlobManager(object):
         self._base_dir_path = base_dir_path
         self._ref_counter_path = os.path.join(self._base_dir_path, self.REF_COUNTER_FILE_NAME)
         self._lock_file_path = os.path.join(self._base_dir_path, self.LOCK_FILE_NAME)
+    def iterate_hex_digests(self):
+        with self.blobs_locked(exclusive=True):
+            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
+            for key0, data in ref_counter.items():
+                for key1, count in data.items():
+                    yield (key0 + key1, count, os.path.isfile(os.path.join(self._base_dir_path, key0, key1)))
     def store_contents(self, file_path):
         contents = open(file_path, "r").read()
         hex_digest = hashlib.sha1(contents).hexdigest()
@@ -51,12 +57,18 @@ class BlobManager(object):
                 open(file_path, "w").write(contents)
                 os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
         return hex_digest
-    def release_contents(self, hex_digest):
-        # NB: we leave the removal of unreferenced blobs to others
-        dir_name, file_name = hex_digest[:2], hex_digest[2:]
+    def incr_ref_counts(self, hex_digests):
         with self.blobs_locked(exclusive=True):
             ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            ref_counter[dir_name][file_name] -= 1
+            for hex_digest in hex_digests:
+                ref_counter[hex_digest[:2]][hex_digest[2:]] += 1
+            cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
+    def release_contents(self, hex_digests):
+        # NB: we leave the removal of unreferenced blobs to others
+        with self.blobs_locked(exclusive=True):
+            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
+            for hex_digest in hex_digests:
+                ref_counter[hex_digest[:2]][hex_digest[2:]] -= 1
             cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
     def fetch_contents(self, hex_digest):
         file_path = os.path.join(self._base_dir_path, hex_digest[:2], hex_digest[2:])
