@@ -175,7 +175,7 @@ class _SnapshotGenerator(object):
         self.soft_link_count = 0
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
-        self._extant_hex_digests = list()
+        #self._extant_hex_digests = list()
     @property
     def snapshot(self):
         return self._snapshot
@@ -190,7 +190,8 @@ class _SnapshotGenerator(object):
             prior_file = prior_files.get(file_name, None)
             if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
                 hex_digest = prior_file[1]
-                self._extant_hex_digests.append(hex_digest)
+                #self._extant_hex_digests.append(hex_digest)
+                self.blob_mgr.incr_ref_count(hex_digest)
             else:
                 hex_digest = self.blob_mgr.store_contents(file_path)
             self.content_count += file_stats.st_size
@@ -252,31 +253,33 @@ class _SnapshotGenerator(object):
                 return True
         return False
     def update_ref_counts(self):
-        self.blob_mgr.incr_ref_counts(self._extant_hex_digests)
+        pass
+        #self.blob_mgr.incr_ref_counts(self._extant_hex_digests)
 
 def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     import time
     from . import blobs
     start_time = time.clock()
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
-    blob_mgr = blobs.open_repo(archive.repo_name)
-    snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
-    try:
-        for item in archive.includes:
-            abs_item = absolute_path(item)
-            if os.path.isdir(abs_item):
-                snapshot_generator.include_dir(abs_item)
-            elif os.path.isfile(abs_item):
-                snapshot_generator.include_file(abs_item)
-            elif os.path.exists(abs_item):
-                stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
-            else:
-                stderr.write(_("{0}: not found. Skipped.").format(item))
-        snapshot_generator.update_ref_counts()
-        snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
-    finally:
-        elapsed_time = time.clock() - start_time
-    return (snapshot_generator.statistics, snapshot_size, elapsed_time)
+    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
+    with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
+        try:
+            for item in archive.includes:
+                abs_item = absolute_path(item)
+                if os.path.isdir(abs_item):
+                    snapshot_generator.include_dir(abs_item)
+                elif os.path.isfile(abs_item):
+                    snapshot_generator.include_file(abs_item)
+                elif os.path.exists(abs_item):
+                    stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
+                else:
+                    stderr.write(_("{0}: not found. Skipped.").format(item))
+            snapshot_generator.update_ref_counts()
+            snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
+        finally:
+            elapsed_time = time.clock() - start_time
+        return (snapshot_generator.statistics, snapshot_size, elapsed_time)
 
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_mgr"]), FStatsMixin):
     @property
@@ -355,10 +358,10 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
         raise excpns.LastSnapshot(archive_name, ss_root(snapshot_name))
     snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
     snapshot = read_snapshot(snapshot_file_path)
-    blob_mgr = blobs.open_repo(archive.repo_name)
-    # possible race condition here
-    os.remove(snapshot_file_path)
-    blob_mgr.release_contents(snapshot.iterate_hex_digests())
+    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
+    with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+        os.remove(snapshot_file_path)
+        blob_mgr.release_contents(snapshot.iterate_hex_digests())
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config
