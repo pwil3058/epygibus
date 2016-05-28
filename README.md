@@ -31,6 +31,6 @@ sufficient to recreate the backed up files when required.
 By making the assumption that if the modification time and size of a
 file being backed up is the same as that in the previous snapshot then
 the content is unchanged considerable reductions in the time to take
-a snapshot are achieved (approximately 2 orders of magnitude).  There
+a snapshot are achieved (approximately 1 order of magnitude).  There
 is a __--paranoid__ option on the __bu__ subcommand to turn off this
 feature.

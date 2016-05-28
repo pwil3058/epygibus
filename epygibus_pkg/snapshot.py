@@ -65,7 +65,7 @@ class FStatsMixin:
     def device(self):
         return self.attributes.st_dev
 
-class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "blob_mgr"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "blob_repo_data"]), FStatsMixin):
     @property
     def link_tgt(self):
         return self.payload if stat.S_ISLNK(self.attributes.st_mode) else None
@@ -73,9 +73,10 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
     def hex_digest(self):
         return self.payload if stat.S_ISREG(self.attributes.st_mode) else None
     def open_read_only(self):
+        from . import blobs
         if not stat.S_ISREG(self.attributes.st_mode):
             raise excpns.NotRegularFile(self.path)
-        return self.blob_mgr.open_read_only(self.payload)
+        return blobs.open_blob_read_only(self.blob_repo_data, self.payload)
 
 class Snapshot(object):
     def __init__(self, parent=None, attributes=None):
@@ -110,10 +111,10 @@ class Snapshot(object):
         if not dir_path:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
-    def find_file(self, file_path, blob_mgr):
+    def find_file(self, file_path, blob_repo_data):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
-        return SFile(file_path, data[0], data[1], blob_mgr)
+        return SFile(file_path, data[0], data[1], blob_repo_data)
     def iterate_hex_digests(self):
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
@@ -281,7 +282,7 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
             elapsed_time = time.clock() - start_time
         return (snapshot_generator.statistics, snapshot_size, elapsed_time)
 
-class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_mgr"]), FStatsMixin):
+class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_repo_data"]), FStatsMixin):
     @property
     def attributes(self):
         return self.snapshot.attributes
@@ -291,7 +292,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
-            file_data = self.snapshot.find_file(abs_file_path, self.blob_mgr)
+            file_data = self.snapshot.find_file(abs_file_path, self.blob_repo_data)
         except (KeyError, AttributeError):
             raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
@@ -302,12 +303,12 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         subdir_ss = self.snapshot.find_dir(abs_subdir_path)
         if not subdir_ss:
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
-        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_mgr)
+        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_repo_data)
     def iterate_subdirs(self, pre_path=False, recurse=False):
         if not isinstance(pre_path, str):
             pre_path = self.path if pre_path is True else ""
         for subdir_name, ss_snapshot in self.snapshot.subdirs.items():
-            snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.blob_mgr)
+            snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.blob_repo_data)
             yield snapshot_fs
             if recurse:
                 for r_snapshot_fs in snapshot_fs.iterate_subdirs(pre_path=True, recurse=True):
@@ -316,7 +317,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         if not isinstance(pre_path, str):
             pre_path = self.path if pre_path is True else ""
         for file_name, data in self.snapshot.files.items():
-            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.blob_mgr)
+            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.blob_repo_data)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -337,8 +338,8 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     except:
         raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
-    blob_mgr = blobs.open_repo(archive.repo_name)
-    return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_mgr)
+    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
+    return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_repo_data)
 
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     from . import config

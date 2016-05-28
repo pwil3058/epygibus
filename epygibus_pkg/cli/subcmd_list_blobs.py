@@ -20,6 +20,7 @@ from . import cmd
 
 from .. import config
 from .. import blobs
+from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "list_blobs",
@@ -34,9 +35,14 @@ PARSER.add_argument(
 )
 
 def run_cmd(args):
-    blob_mgr = blobs.open_repo(args.repo_name)
-    for data in blob_mgr.iterate_hex_digests():
-        sys.stdout.write(_("{}: {}\n").format(*data))
+    try:
+        blob_repo_data = blobs.get_blob_repo_data(args.repo_name)
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
+    with blobs.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
+        for data in blob_mgr.iterate_hex_digests():
+            sys.stdout.write(_("{}: {}\n").format(*data))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

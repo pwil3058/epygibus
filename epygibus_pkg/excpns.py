@@ -42,6 +42,11 @@ class UnknownSnapshotArchive(Error):
     def __init__(self, archive_name):
         self.archive_name = archive_name
 
+class UnknownBlobRepository(Error):
+    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" is not defined.")
+    def __init__(self, repo_name):
+        self.repo_name = repo_name
+
 class EmptyArchive(Error):
     STR_TEMPLATE = _("Error: snapshot archive \"{archive_name}\" is empty.")
     def __init__(self, archive_name):

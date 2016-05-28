@@ -31,7 +31,14 @@ BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_cou
 
 def get_blob_repo_data(repo_name):
     from . import config
-    base_dir_path = config.read_repo_spec(repo_name).base_dir_path
+    from . import excpns
+    try:
+        base_dir_path = config.read_repo_spec(repo_name).base_dir_path
+    except EnvironmentError as edata:
+        if edata.errno == errno.ENOENT:
+            raise excpns.UnknownBlobRepository(repo_name)
+        else:
+            raise edata
     return BlobRepoData(base_dir_path, _ref_counter_path(base_dir_path), _lock_file_path(base_dir_path))
 
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable"])):
@@ -88,93 +95,18 @@ def open_blob_repo(blob_repo_data, writeable=False):
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
 
-class BlobManager(object):
-    REF_COUNTER_FILE_NAME = "ref_counter"
-    LOCK_FILE_NAME = "lock"
-    def __init__(self, base_dir_path):
-        self._base_dir_path = base_dir_path
-        self._ref_counter_path = os.path.join(self._base_dir_path, self.REF_COUNTER_FILE_NAME)
-        self._lock_file_path = os.path.join(self._base_dir_path, self.LOCK_FILE_NAME)
-    def iterate_hex_digests(self):
-        with self.blobs_locked(exclusive=True):
-            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            for key0, data in ref_counter.items():
-                for key1, count in data.items():
-                    yield (key0 + key1, count, os.path.isfile(os.path.join(self._base_dir_path, key0, key1)))
-    def store_contents(self, file_path):
-        contents = open(file_path, "r").read()
-        hex_digest = hashlib.sha1(contents).hexdigest()
-        dir_name, file_name = hex_digest[:2], hex_digest[2:]
-        dir_path = os.path.join(self._base_dir_path, dir_name)
-        needs_write = True
-        with self.blobs_locked(exclusive=True):
-            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            if dir_name not in ref_counter:
-                ref_counter[dir_name] = { file_name : 1 }
-                os.mkdir(dir_path)
-            elif file_name not in ref_counter[dir_name]:
-                ref_counter[dir_name][file_name] = 1
-            else:
-                ref_counter[dir_name][file_name] += 1
-                needs_write = False
-            cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
-            # TODO: think about moving content writing out of lock context
-            if needs_write:
-                import stat
-                file_path = os.path.join(dir_path, file_name)
-                open(file_path, "w").write(contents)
-                os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
-        return hex_digest
-    def incr_ref_counts(self, hex_digests):
-        with self.blobs_locked(exclusive=True):
-            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            for hex_digest in hex_digests:
-                ref_counter[hex_digest[:2]][hex_digest[2:]] += 1
-            cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
-    def release_contents(self, hex_digests):
-        # NB: we leave the removal of unreferenced blobs to others
-        with self.blobs_locked(exclusive=True):
-            ref_counter = cPickle.load(open(self._ref_counter_path, "rb"))
-            for hex_digest in hex_digests:
-                ref_counter[hex_digest[:2]][hex_digest[2:]] -= 1
-            cPickle.dump(ref_counter, open(self._ref_counter_path, "wb"))
-    def fetch_contents(self, hex_digest):
-        file_path = os.path.join(self._base_dir_path, hex_digest[:2], hex_digest[2:])
-        with self.blobs_locked(exclusive=False):
-            try:
-                contents = open(file_path, "r").read()
-            except OSError as edata:
-                if edata.errno != errno.ENOENT:
-                    raise edata
-                contents = gzip.open(file_path + ".gz", "r").read()
-        return contents
-    def open_read_only(self, hex_digest):
-        file_path = os.path.join(self._base_dir_path, hex_digest[:2], hex_digest[2:])
-        with self.blobs_locked(exclusive=False):
-            try:
-                ofile = open(file_path, "r")
-            except OSError as edata:
-                if edata.errno != errno.ENOENT:
-                    raise edata
-                ofile = gzip.open(file_path + ".gz", "r")
-        return ofile
-    @contextmanager
-    def blobs_locked(self, exclusive=False):
-        import fcntl
-        fobj = os.open(self._lock_file_path, os.O_RDWR if exclusive else os.O_RDONLY)
-        fcntl.lockf(fobj, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
-        try:
-            yield
-        finally:
-            fcntl.lockf(fobj, fcntl.LOCK_UN)
-            os.close(fobj)
-
-def open_repo(repo_name):
-    from . import config
-    return BlobManager(config.read_repo_spec(repo_name).base_dir_path)
+def open_blob_read_only(blob_repo_data, hex_digest):
+    # NB since this doen't use ref count data it doesn't need locking
+    file_path = os.path.join(blob_repo_data.base_dir_path, *_split_hex_digest(hex_digest))
+    try:
+        return open(file_path, "r")
+    except OSError as edata:
+        if edata.errno != errno.ENOENT:
+            raise edata
+        return gzip.open(file_path + ".gz", "r")
 
 def initialize_repo(base_dir_path):
-    ref_counter_path = os.path.join(base_dir_path, BlobManager.REF_COUNTER_FILE_NAME)
+    ref_counter_path = _ref_counter_path(base_dir_path)
     cPickle.dump(dict(), open(ref_counter_path, "wb"))
-    lock_file_path = os.path.join(base_dir_path, BlobManager.LOCK_FILE_NAME)
+    lock_file_path = _lock_file_path(base_dir_path)
     open(lock_file_path, "wb").write("blob_lock")
