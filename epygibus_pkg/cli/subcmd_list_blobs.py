@@ -21,6 +21,7 @@ from . import cmd
 from .. import config
 from .. import blobs
 from .. import excpns
+from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "list_blobs",
@@ -40,9 +41,16 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
+    total_blobs = 0
+    total_ref_count = 0
+    total_size = 0
     with blobs.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
-        for data in blob_mgr.iterate_hex_digests():
-            sys.stdout.write(_("{}: {}\n").format(*data))
+        for hex_digest, ref_count, size in blob_mgr.iterate_hex_digests():
+            total_blobs += 1
+            total_ref_count += ref_count
+            total_size += size
+            sys.stdout.write(_("{}: {:>4,}: {}\n").format(hex_digest, ref_count, utils.format_bytes(size)))
+    sys.stdout.write(_("{:,} blobs: {:>4,} references: {} total\n").format(total_blobs, total_ref_count, utils.format_bytes(total_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

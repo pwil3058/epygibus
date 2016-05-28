@@ -79,7 +79,11 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
     def iterate_hex_digests(self):
         for dir_name, dir_data in self.ref_counter.items():
             for file_name, count in dir_data.items():
-                yield (dir_name + file_name, count, os.path.isfile(os.path.join(self.base_dir_path, dir_name, file_name)))
+                try:
+                    size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, file_name))
+                except EnvironmentError:
+                    size = None
+                yield (dir_name + file_name, count, size)
 
 @contextmanager
 def open_blob_repo(blob_repo_data, writeable=False):
