@@ -24,8 +24,8 @@ from .. import excpns
 from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "list_blobs",
-    description=_("List the blobs and reference counts for named repository."),
+    "repo_stats",
+    description=_("Show vital statistics for named repository."),
 )
 
 PARSER.add_argument(
@@ -41,16 +41,22 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    total_blobs = 0
+    total_referenced_blobs = 0
     total_ref_count = 0
-    total_size = 0
+    total_referenced_size = 0
+    total_unreferenced_blobs = 0
+    total_unreferenced_size = 0
     with blobs.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
         for hex_digest, ref_count, size in blob_mgr.iterate_hex_digests():
-            total_blobs += 1
-            total_ref_count += ref_count
-            total_size += size
-            sys.stdout.write(_("{}: {:>4,}: {}\n").format(hex_digest, ref_count, utils.format_bytes(size)))
-    sys.stdout.write(_("{:,} blobs: {:>4,} references: {} total\n").format(total_blobs, total_ref_count, utils.format_bytes(total_size)))
+            if ref_count:
+                total_referenced_blobs += 1
+                total_ref_count += ref_count
+                total_referenced_size += size
+            else:
+                total_unreferenced_blobs += 1
+                total_unfererenced_size += size
+    sys.stdout.write(_("  Referenced {:,} blobs: {:>4,} references: {} total\n").format(total_referenced_blobs, total_ref_count, utils.format_bytes(total_referenced_size)))
+    sys.stdout.write(_("Unreferenced {:,} blobs: {:>4,} references: {} total\n").format(total_unreferenced_blobs, 0, utils.format_bytes(total_unreferenced_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

@@ -23,3 +23,4 @@ from . import subcmd_la
 from . import subcmd_ldc
 from . import subcmd_del
 from . import subcmd_list_blobs
+from . import subcmd_repo_stats
