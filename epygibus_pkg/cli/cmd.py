@@ -45,6 +45,16 @@ REPO_NAME_ARG = lambda help_msg=("The name of the repository."), required=True :
     }
 )
 
+ARCHIVE_NAME_ARG = lambda help_msg=("The name of the archive."), required=True : _ARG_SPEC(
+    ["--archive", "-A",],
+    {
+        "help": help_msg,
+        "dest": "archive_name",
+        "required": required,
+        "metavar": _("name"),
+    }
+)
+
 BACK_ISSUE_ARG = lambda default=0 : _ARG_SPEC(
     ["--back",],
     {   "help": _("select the snapshot \"N\" places before the most recent. Use -1 to select oldest. Defaults to {}.").format(default),

@@ -34,7 +34,7 @@ PARSER.add_argument(
     action="store_false"
 )
 
-PARSER.add_argument("archive_name")
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshots ar to be listed.")))
 
 def run_cmd(args):
     try:

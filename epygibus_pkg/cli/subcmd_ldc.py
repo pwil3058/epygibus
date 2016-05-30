@@ -28,13 +28,7 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("List list the contents of the named directory in the nominated archive's most recent (or specified) snapshot."),
 )
 
-PARSER.add_argument(
-    "--archive",
-    help=_("the name of the archive whose files are to be listed."),
-    required=True,
-    dest="archive_name",
-    metavar=_("name"),
-)
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose files are to be listed.")))
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 

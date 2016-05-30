@@ -70,12 +70,7 @@ PARSER.add_argument(
     action="store_false"
 )
 
-PARSER.add_argument(
-    "archive_name",
-    help=_("the name to be allocated to the snapshot archive."),
-    metavar=_("name"),
-    action = "store"
-)
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name to be allocated to this snapshot archive.")))
 
 def run_cmd(args):
     try:

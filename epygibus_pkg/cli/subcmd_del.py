@@ -28,13 +28,7 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("Delete the nominated archive's oldest (or specified) snapshot."),
 )
 
-PARSER.add_argument(
-    "--archive",
-    help=_("the name of the archive whose files are to be listed."),
-    required=True,
-    dest="archive_name",
-    metavar=_("name"),
-)
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be deleted.")))
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG(-1))
 
