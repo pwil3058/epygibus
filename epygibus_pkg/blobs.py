@@ -84,6 +84,28 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 except EnvironmentError:
                     size = None
                 yield (dir_name + file_name, count, size)
+    def prune_unreferenced_blobs(self):
+        assert self.writeable
+        blob_count = 0
+        total_bytes = 0
+        for dir_name, dir_data in self.ref_counter.items():
+            for file_name, count in dir_data.items():
+                if count: continue
+                blob_count += 1
+                file_path = os.path.join(self.base_dir_path, dir_name, file_name)
+                total_bytes += os.path.getsize(file_path)
+                os.remove(file_path)
+                del dir_data[file_name]
+        return (blob_count, total_bytes) #if blob_count else None
+    def open_blob_read_only(self, hex_digest):
+        # NB since this doen't use ref count data it doesn't need locking
+        file_path = os.path.join(self.base_dir_path, *_split_hex_digest(hex_digest))
+        try:
+            return open(file_path, "r")
+        except OSError as edata:
+            if edata.errno != errno.ENOENT:
+                raise edata
+            return gzip.open(file_path + ".gz", "r")
 
 @contextmanager
 def open_blob_repo(blob_repo_data, writeable=False):
@@ -98,16 +120,6 @@ def open_blob_repo(blob_repo_data, writeable=False):
             cPickle.dump(ref_counter, open(blob_repo_data.ref_counter_path, "wb"))
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
-
-def open_blob_read_only(blob_repo_data, hex_digest):
-    # NB since this doen't use ref count data it doesn't need locking
-    file_path = os.path.join(blob_repo_data.base_dir_path, *_split_hex_digest(hex_digest))
-    try:
-        return open(file_path, "r")
-    except OSError as edata:
-        if edata.errno != errno.ENOENT:
-            raise edata
-        return gzip.open(file_path + ".gz", "r")
 
 def initialize_repo(base_dir_path):
     ref_counter_path = _ref_counter_path(base_dir_path)

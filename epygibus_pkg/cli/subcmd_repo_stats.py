@@ -28,12 +28,7 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("Show vital statistics for named repository."),
 )
 
-PARSER.add_argument(
-    "repo_name",
-    help=_("the name of the repository."),
-    metavar=_("name"),
-    action = "store"
-)
+cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:

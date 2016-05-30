@@ -76,7 +76,8 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
         from . import blobs
         if not stat.S_ISREG(self.attributes.st_mode):
             raise excpns.NotRegularFile(self.path)
-        return blobs.open_blob_read_only(self.blob_repo_data, self.payload)
+        with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+            return blob_mgr.open_blob_read_only(self.payload)
 
 class Snapshot(object):
     def __init__(self, parent=None, attributes=None):

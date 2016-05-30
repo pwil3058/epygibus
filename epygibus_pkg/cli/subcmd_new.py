@@ -36,13 +36,7 @@ PARSER.add_argument(
     metavar=_("directory"),
 )
 
-PARSER.add_argument(
-    "--repo", "-R",
-    help=_("The name of the content repository to be used with this archive."),
-    dest="repo_name",
-    required=True,
-    metavar=_("name"),
-)
+cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG(_("The name of the content repository to be used with this archive.")))
 
 PARSER.add_argument(
     "--include", "-I",

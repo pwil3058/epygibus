@@ -53,7 +53,7 @@ class EmptyArchive(Error):
         self.archive_name = archive_name
 
 class LastSnapshot(Error):
-    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" is the last one remaining \"{archive_name}\" archive.")
+    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" is the last one remaining in \"{archive_name}\" archive.")
     def __init__(self, archive_name, snapshot_name):
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
