@@ -42,8 +42,38 @@ class UnknownSnapshotArchive(Error):
     def __init__(self, archive_name):
         self.archive_name = archive_name
 
+class SnapshotArchiveExists(Error):
+    STR_TEMPLATE = _("Error: snapshot archive \"{archive_name}\" is already defined.")
+    def __init__(self, archive_name):
+        self.archive_name = archive_name
+
+class SnapshotArchiveLocationExists(Error):
+    STR_TEMPLATE = _("Error: location for snapshot archive \"{archive_name}\" already exists.")
+    def __init__(self, archive_name):
+        self.archive_name = archive_name
+
+class SnapshotArchiveLocationNoPerm(Error):
+    STR_TEMPLATE = _("Error: permission denied creating location for snapshot archive \"{archive_name}\".")
+    def __init__(self, archive_name):
+        self.archive_name = archive_name
+
 class UnknownBlobRepository(Error):
     STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" is not defined.")
+    def __init__(self, repo_name):
+        self.repo_name = repo_name
+
+class BlobRepositoryExists(Error):
+    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" is already defined.")
+    def __init__(self, repo_name):
+        self.repo_name = repo_name
+
+class BlobRepositoryLocationExists(Error):
+    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" location already exists.")
+    def __init__(self, repo_name):
+        self.repo_name = repo_name
+
+class BlobRepositoryLocationNoPerm(Error):
+    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" location permission denied.")
     def __init__(self, repo_name):
         self.repo_name = repo_name
 

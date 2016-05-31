@@ -13,12 +13,12 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-import os
+import sys
 
 from . import cmd
 
-from .. import config
 from .. import blobs
+from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "new_repo",
@@ -41,9 +41,10 @@ PARSER.add_argument(
 )
 
 def run_cmd(args):
-    base_dir_path = config.write_repo_spec(args.repo_name, args.location_dir_path)
-    os.makedirs(base_dir_path)
-    blobs.initialize_repo(base_dir_path)
+    try:
+        blobs.create_new_repo(args.repo_name, args.location_dir_path)
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

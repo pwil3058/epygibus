@@ -32,13 +32,7 @@ BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_cou
 def get_blob_repo_data(repo_name):
     from . import config
     from . import excpns
-    try:
-        base_dir_path = config.read_repo_spec(repo_name).base_dir_path
-    except EnvironmentError as edata:
-        if edata.errno == errno.ENOENT:
-            raise excpns.UnknownBlobRepository(repo_name)
-        else:
-            raise edata
+    base_dir_path = config.read_repo_spec(repo_name).base_dir_path
     return BlobRepoData(base_dir_path, _ref_counter_path(base_dir_path), _lock_file_path(base_dir_path))
 
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable"])):
@@ -121,8 +115,27 @@ def open_blob_repo(blob_repo_data, writeable=False):
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
 
-def initialize_repo(base_dir_path):
-    ref_counter_path = _ref_counter_path(base_dir_path)
+def initialize_repo(repo_spec):
+    try:
+        os.makedirs(repo_spec.base_dir_path)
+    except EnvironmentError as edata:
+        if edata.errno == errno.EEXIST:
+            raise excpns.BlobRepositoryLocationExists(repo_spec.name)
+        elif edata.errno == errno.EPERM:
+            raise excpns.BlobRepositoryLocationNoPerm(repo_spec.name)
+        else:
+            raise edata
+    ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
     cPickle.dump(dict(), open(ref_counter_path, "wb"))
-    lock_file_path = _lock_file_path(base_dir_path)
+    lock_file_path = _lock_file_path(repo_spec.base_dir_path)
     open(lock_file_path, "wb").write("blob_lock")
+
+def create_new_repo(repo_name, location_dir_path):
+    from . import config
+    from . import excpns
+    repo_spec = config.write_repo_spec(repo_name, location_dir_path)
+    try:
+        initialize_repo(repo_spec)
+    except (EnvironmentError, excpns.Error) as edata:
+        config.delete_repo_spec(repo_spec.name)
+        raise edata

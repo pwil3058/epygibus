@@ -20,7 +20,8 @@ import sys
 from . import cmd
 
 from .. import config
-from .. import blobs
+from .. import snapshot
+from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "new",
@@ -32,7 +33,7 @@ PARSER.add_argument(
     "--location",
     help=_("The directory path of the location in which the archive is to be created."),
     dest="location_dir_path",
-    default=".",
+    required=True,
     metavar=_("directory"),
 )
 
@@ -74,40 +75,23 @@ cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name to be allocated to
 
 def run_cmd(args):
     try:
-        config.read_repo_spec(args.repo_name)
-    except IOError as edata:
-        if edata.errno == errno.ENOENT:
-            sys.stderr.write(_("Error: unknown content repository: {}\n").format(args.repo_name))
-            sys.exit(-1)
-        else:
-            raise edata
+        repo_spec = config.read_repo_spec(args.repo_name)
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
     try:
-        base_dir_path = config.write_archive_spec(
+        snapshot.create_new_archive(
             archive_name=args.archive_name,
-            in_dir_path=args.location_dir_path,
-            repo_name=args.repo_name,
+            location_dir_path=args.location_dir_path,
+            repo_spec=repo_spec,
             includes=args.includes,
-            exclude_dirs=args.exclude_dir_res if args.exclude_dir_res else [],
-            exclude_files=args.exclude_file_res if args.exclude_file_res else [],
+            exclude_dir_res=args.exclude_dir_res,
+            exclude_file_res=args.exclude_file_res,
             skip_broken_sl=args.skip_broken_sl
         )
-    except OSError as edata:
-        if edata.errno == errno.EEXIST:
-            sys.stderr.write(_("Error: snapshot archive \"{}\" already defined.\n").format(args.archive_name))
-            sys.exit(-1)
-        else:
-            raise edata
-    try:
-        os.makedirs(base_dir_path)
-    except OSError as edata:
-        if edata.errno == errno.EEXIST:
-            sys.stderr.write(_("Error: location for snapshot archive \"{}\" already exists.\n").format(args.archive_name))
-            sys.exit(-1)
-        elif edata.errno == errno.EPERM:
-            sys.stderr.write(_("Error: permission denied creating location for snapshot archive \"{}\".\n").format(args.archive_name))
-            sys.exit(-1)
-        else:
-            raise edata
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

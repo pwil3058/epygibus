@@ -166,7 +166,7 @@ SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_lin
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
+    def __init__(self, blob_mgr, exclude_dir_res, exclude_file_res, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
         self.blob_mgr = blob_mgr
@@ -175,8 +175,8 @@ class _SnapshotGenerator(object):
         self.adj_content_count = 0
         self.file_count = 0
         self.soft_link_count = 0
-        self._exclude_dir_cres = exclude_dir_cres
-        self._exclude_file_cres = exclude_file_cres
+        self._exclude_dir_cres = exclude_dir_res
+        self._exclude_file_cres = exclude_file_res
         #self._extant_hex_digests = list()
     @property
     def snapshot(self):
@@ -265,7 +265,7 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
     with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
+        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_res, archive.exclude_file_res, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
         try:
             for item in archive.includes:
                 abs_item = absolute_path(item)
@@ -327,10 +327,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
     from . import blobs
-    try:
-        archive = config.read_archive_spec(archive_name)
-    except IOError:
-        raise excpns.UnknownSnapshotArchive(archive_name)
+    archive = config.read_archive_spec(archive_name)
     snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
@@ -345,10 +342,7 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     from . import config
     from . import blobs
-    try:
-        archive = config.read_archive_spec(archive_name)
-    except IOError:
-        raise excpns.UnknownSnapshotArchive(archive_name)
+    archive = config.read_archive_spec(archive_name)
     snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
@@ -367,8 +361,27 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
 
 def get_snapshot_list(archive_name, reverse=False):
     from . import config
-    try:
-        archive = config.read_archive_spec(archive_name)
-    except IOError:
-        raise excpns.UnknownSnapshotArchive(archive_name)
+    archive = config.read_archive_spec(archive_name)
     return [ss_root(ss_name) for ss_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
+
+def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_res=None, exclude_file_res=None, skip_broken_sl=True):
+    from . import config
+    base_dir_path = config.write_archive_spec(
+        archive_name=archive_name,
+        location_dir_path=location_dir_path,
+        repo_name=repo_spec.name,
+        includes=includes,
+        exclude_dir_res=exclude_dir_res if exclude_dir_res else [],
+        exclude_file_res=exclude_file_res if exclude_file_res else [],
+        skip_broken_sl=skip_broken_sl
+    )
+    try:
+        os.makedirs(base_dir_path)
+    except EnvironmentError as edata:
+        config.delete_archive_spec(archive_name)
+        if edata.errno == errno.EEXIST:
+            raise excpns.SnapshotArchiveLocationExists(archive_name)
+        elif edata.errno == errno.EPERM:
+            raise excpns.SnapshotArchiveLocationNoPerm(archive_name)
+        else:
+            raise edata

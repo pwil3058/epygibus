@@ -19,6 +19,7 @@ from . import cmd
 
 from .. import config
 from .. import snapshot
+from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
@@ -46,11 +47,15 @@ PARSER.add_argument(
 
 def run_cmd(args):
     # read all archives in one go so that if any fails checks we do nothing
-    archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
+    try:
+        archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
     for archive_name, archive in archives:
         stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr)
         if args.stats:
-            sys.stderr.write(_("{0} STATS: {1}\n").format(archive_name, stats))
+            sys.stdout.write(_("{0} STATS: {1}\n").format(archive_name, stats))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

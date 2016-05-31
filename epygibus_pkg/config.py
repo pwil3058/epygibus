@@ -17,8 +17,10 @@ import os
 import sys
 import collections
 import fnmatch
+import errno
 
 from . import APP_NAME
+from . import excpns
 
 APP_NAME_D = APP_NAME + ".d"
 
@@ -52,44 +54,75 @@ _includes_file_lines = lambda pname: open(_archive_includes_path(pname), "r").re
 _exclude_dir_lines = lambda pname: open(_archive_exclude_dirs_path(pname), "r").readlines()
 _exclude_file_lines = lambda pname: open(_archive_exclude_files_path(pname), "r").readlines()
 
-Profile = collections.namedtuple("Profile", ["repo_name", "snapshot_dir_path", "includes", "exclude_dir_cres", "exclude_file_cres", "skip_broken_soft_links"])
+Archive = collections.namedtuple("Archive", ["name", "repo_name", "snapshot_dir_path", "includes", "exclude_dir_res", "exclude_file_res", "skip_broken_soft_links"])
 
 def read_archive_spec(archive_name, stderr=sys.stderr):
-    repo, p_dir_path, skip = [l.rstrip() for l in _archive_config_lines(archive_name)]
-    includes = [os.path.abspath(os.path.expanduser(f.rstrip())) for f in _includes_file_lines(archive_name)]
-    dir_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_dir_lines(archive_name)]
-    file_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_file_lines(archive_name)]
-    return Profile(repo, p_dir_path, includes, dir_excludes, file_excludes, eval(skip))
+    try:
+        repo, p_dir_path, skip = [l.rstrip() for l in _archive_config_lines(archive_name)]
+        includes = [os.path.abspath(os.path.expanduser(f.rstrip())) for f in _includes_file_lines(archive_name)]
+        dir_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_dir_lines(archive_name)]
+        file_excludes = [fnmatch.translate(os.path.expanduser(glob.rstrip())) for glob in _exclude_file_lines(archive_name)]
+    except IOError as edata:
+        if edata.errno == errno.ENOENT:
+            raise excpns.UnknownSnapshotArchive(archive_name)
+        else:
+            raise edata
+    return Archive(archive_name, repo, p_dir_path, includes, dir_excludes, file_excludes, eval(skip))
 
-def write_archive_spec(archive_name, in_dir_path, repo_name, includes, exclude_dirs, exclude_files, skip_broken_sl=True):
-    base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], archive_name)
-    os.mkdir(_archive_dir_path(archive_name))
-    open(_archive_config_path(archive_name), "w").writelines([p + os.linesep for p in[repo_name, base_dir_path, str(skip_broken_sl)]])
-    open(_archive_includes_path(archive_name), "w").writelines(includes)
-    open(_archive_exclude_dirs_path(archive_name), "w").writelines(exclude_dirs)
-    open(_archive_exclude_files_path(archive_name), "w").writelines(exclude_files)
+def write_archive_spec(archive_name, location_dir_path, repo_name, includes, exclude_dir_res, exclude_file_res, skip_broken_sl=True):
+    base_dir_path = os.path.join(os.path.abspath(location_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], archive_name)
+    try:
+        os.mkdir(_archive_dir_path(archive_name))
+        open(_archive_config_path(archive_name), "w").writelines([p + os.linesep for p in[repo_name, base_dir_path, str(skip_broken_sl)]])
+        open(_archive_includes_path(archive_name), "w").writelines(includes)
+        open(_archive_exclude_dirs_path(archive_name), "w").writelines(exclude_dir_res)
+        open(_archive_exclude_files_path(archive_name), "w").writelines(exclude_file_res)
+    except OSError as edata:
+        if edata.errno == errno.EEXIST:
+            raise excpns.SnapshotArchiveExists(archive_name)
+        else:
+            raise edata
     return base_dir_path
 
 def delete_archive_spec(archive_name):
-    os.remove(_archive_config_path(archive_name))
-    os.remove(_archive_includes_path(archive_name))
-    os.remove(_archive_exclude_dirs_path(archive_name))
-    os.remove(_archive_exclude_files_path(archive_name))
-    os.rmdir(_archive_dir_path(archive_name))
+    try:
+        os.remove(_archive_config_path(archive_name))
+        os.remove(_archive_includes_path(archive_name))
+        os.remove(_archive_exclude_dirs_path(archive_name))
+        os.remove(_archive_exclude_files_path(archive_name))
+        os.rmdir(_archive_dir_path(archive_name))
+    except IOError as edata:
+        if edata.errno == errno.ENOENT:
+            raise excpns.UnknownSnapshotArchive(archive_name)
+        else:
+            raise edata
 
-Repo = collections.namedtuple("Repo", ["base_dir_path"])
+Repo = collections.namedtuple("Repo", ["name", "base_dir_path"])
 
 def read_repo_spec(repo_name):
-    base_dir_path = open(_repo_file_path(repo_name)).read().rstrip()
-    return Repo(base_dir_path)
+    from . import excpns
+    try:
+        base_dir_path = open(_repo_file_path(repo_name)).read().rstrip()
+    except EnvironmentError as edata:
+        if edata.errno == errno.ENOENT:
+            raise excpns.UnknownBlobRepository(repo_name)
+        else:
+            raise edata
+    return Repo(repo_name, base_dir_path)
 
 def write_repo_spec(repo_name, in_dir_path):
     base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "blobs", repo_name)
     cf_path = _repo_file_path(repo_name)
     if os.path.exists(cf_path):
-        raise ErrorRepoSpecExists(name=repo_name)
+        raise excpns.BlobRepositoryExists(repo_name)
     open(cf_path, "w").write(base_dir_path)
-    return base_dir_path
+    return Repo(repo_name, base_dir_path)
 
 def delete_repo_spec(repo_name):
-    os.remove(_repo_file_path(repo_name))
+    try:
+        os.remove(_repo_file_path(repo_name))
+    except EnvironmentError as edata:
+        if edata.errno == errno.ENOENT:
+            raise excpns.UnknownBlobRepository(repo_name)
+        else:
+            raise edata
