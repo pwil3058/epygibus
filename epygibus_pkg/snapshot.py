@@ -79,6 +79,10 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
         with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.open_blob_read_only(self.payload)
 
+class SsStats(collections.namedtuple("SsStats", ["nfiles", "nlinks", "content_size"])):
+    def __add__(self, other):
+        return SsStats(self.nfiles + other.nfiles, self.nlinks + other.nlinks, self.content_size + other.content_size)
+
 class Snapshot(object):
     def __init__(self, parent=None, attributes=None):
         self.parent = parent
@@ -123,6 +127,16 @@ class Snapshot(object):
         for subdir in self.subdirs.values():
             for hex_digest in subdir.iterate_hex_digests():
                 yield hex_digest
+    def get_statistics(self):
+        statistics = SsStats(0, 0, 0)
+        for data in self.files.values():
+            if stat.S_ISREG(data[0].st_mode):
+                statistics += SsStats(1, 0, data[0].st_size)
+            else:
+                statistics += SsStats(0, 1, 0)
+        for subdir in self.subdirs.values():
+            statistics += subdir.get_statistics()
+        return statistics
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -362,7 +376,14 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
 def get_snapshot_list(archive_name, reverse=False):
     from . import config
     archive = config.read_archive_spec(archive_name)
-    return [ss_root(ss_name) for ss_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
+    ss_list = []
+    for snapshot_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse):
+        snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
+        snapshot_size = os.path.getsize(snapshot_file_path)
+        snapshot_stats = read_snapshot(snapshot_file_path).get_statistics()
+        ss_list.append((ss_root(snapshot_name), snapshot_size, snapshot_stats))
+    return ss_list
+    #return [ss_root(ss_name) for ss_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
 
 def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_res=None, exclude_file_res=None, skip_broken_sl=True):
     from . import config

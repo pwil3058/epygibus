@@ -38,12 +38,12 @@ cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive who
 
 def run_cmd(args):
     try:
-        snapshot_names = snapshot.get_snapshot_list(args.archive_name, reverse=args.oldest_first)
+        snapshot_data_list = snapshot.get_snapshot_list(args.archive_name, reverse=args.oldest_first)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    for snapshot_name in snapshot_names:
-        sys.stdout.write(snapshot_name + "\n")
+    for snapshot_data in snapshot_data_list:
+        sys.stdout.write("{}\n".format(snapshot_data[0]))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
