@@ -18,6 +18,11 @@ class Error(Exception):
     def __str__(self):
         return self.STR_TEMPLATE.format(**self.__dict__)
 
+class InvalidArgument(Error):
+    STR_TEMPLATE = _("Error: invalid argument: \"{argument}\".")
+    def __init__(self, argument):
+        self.argument = argument
+
 class DirNotFound(Error):
     STR_TEMPLATE = _("Error: directory \"{dir_path}\" not found in \"{archive_name}::{snapshot_name}\" snapshot.")
     def __init__(self, dir_path, archive_name, snapshot_name):
@@ -31,6 +36,11 @@ class FileNotFound(Error):
         self.file_path = file_path
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
+
+class FileOverwriteError(Error):
+    STR_TEMPLATE = _("Error: file \"{target_file_path}\" already exists. Use --overwrite to overwrite it.")
+    def __init__(self, target_file_path):
+        self.target_file_path = target_file_path
 
 class NotRegularFile(Error):
     STR_TEMPLATE = _("Error: \"{file_name}\" is not a regular file.")

@@ -96,10 +96,19 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         file_path = os.path.join(self.base_dir_path, *_split_hex_digest(hex_digest))
         try:
             return open(file_path, "r")
-        except OSError as edata:
+        except EnvironmentError as edata:
             if edata.errno != errno.ENOENT:
                 raise edata
             return gzip.open(file_path + ".gz", "r")
+    def copy_contents_to(self, hex_digest, target_file_path):
+        import shutil
+        file_path = os.path.join(self.base_dir_path, *_split_hex_digest(hex_digest))
+        try:
+            shutil.copy(file_path, target_file_path)
+        except EnvironmentError as edata:
+            if edata.errno != errno.ENOENT:
+                raise edata
+            open(target_file_path, "w").write(gzip.open(file_path + ".gz", "r").read())
 
 @contextmanager
 def open_blob_repo(blob_repo_data, writeable=False):

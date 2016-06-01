@@ -44,6 +44,9 @@ class FStatsMixin:
     def mode(self):
         return self.attributes.st_mode
     @property
+    def atime(self):
+        return self.attributes.st_atime
+    @property
     def mtime(self):
         return self.attributes.st_mtime
     @property
@@ -78,6 +81,20 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
             raise excpns.NotRegularFile(self.path)
         with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.open_blob_read_only(self.payload)
+    def copy_contents_to(self, target_file_path, overwrite=False):
+        from . import blobs
+        if not overwrite and os.path.isfile(target_file_path):
+            raise excpns.FileOverwriteError(target_file_path)
+        if self.is_reg_file:
+            with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+                blob_mgr.copy_contents_to(self.payload, target_file_path)
+            os.chmod(target_file_path, self.mode)
+            os.utime(target_file_path, (self.atime, self.mtime))
+            os.chown(target_file_path, self.uid, self.gid)
+        else:
+            os.symlink(absolute_path(self.payload), target_file_path)
+            os.lchmod(target_file_path, self.mode)
+            os.lchown(target_file_path, self.uid, self.gid)
 
 class SsStats(collections.namedtuple("SsStats", ["nfiles", "nlinks", "content_size"])):
     def __add__(self, other):
@@ -383,7 +400,6 @@ def get_snapshot_list(archive_name, reverse=False):
         snapshot_stats = read_snapshot(snapshot_file_path).get_statistics()
         ss_list.append((ss_root(snapshot_name), snapshot_size, snapshot_stats))
     return ss_list
-    #return [ss_root(ss_name) for ss_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
 
 def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_res=None, exclude_file_res=None, skip_broken_sl=True):
     from . import config
@@ -406,3 +422,14 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
             raise excpns.SnapshotArchiveLocationNoPerm(archive_name)
         else:
             raise edata
+
+def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False):
+    snapshot_fs = get_snapshot_fs(archive_name, seln_fn)
+    file_data = snapshot_fs.get_file(absolute_path(file_path))
+    if as_name:
+        if os.path.dirname(as_name):
+            raise excpns.InvalidArgument(as_name)
+        target_path = os.path.join(absolute_path(into_dir_path), as_name)
+    else:
+        target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
+    file_data.copy_contents_to(target_path, overwrite=overwrite)
