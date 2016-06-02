@@ -354,6 +354,43 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for subdir in self.iterate_subdirs():
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield sfile
+    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr):
+        # Create the target directory if necessary
+        create_dir = True
+        if os.path.exists(target_dir_path):
+            if os.path.isdir(target_dir_path):
+                create_dir = False
+                if not overwrite:
+                    owfiles = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f)]
+                    if owfiles:
+                        raise excpns.SubdirOverwriteError(target_dir_path, len(owfiles))
+            elif overwrite:
+                # remove the file to make way for the directory
+                os.remove(target_dir_path)
+            else:
+                raise excpns.FileOverwriteError(target_dir_path)
+        if create_dir:
+            os.mkdir(target_dir_path, self.mode)
+            os.lchown(target_dir_path, self.uid, self.gid)
+        # Now create the subdirs
+        for subdir in self.iterate_subdirs(target_dir_path, True):
+            try:
+                if os.path.isdir(subdir.path):
+                    continue
+                elif os.path.exists(subdir.path):
+                    os.remove(subdir.path)
+                os.mkdir(subdir.path, subdir.mode)
+                os.lchown(subdir.path, subdir.uid, subdir.gid)
+            except EnvironmentError as edata:
+                # report the error and move on (we have permission to wreak havoc)
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        # Now copy the files
+        for file_data in self.iterate_files(target_dir_path, True):
+            try:
+                file_data.copy_contents_to(file_data.path, overwrite=overwrite)
+            except EnvironmentError as edata:
+                # report the error and move on (we have permission to wreak havoc)
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
@@ -433,3 +470,14 @@ def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1]
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
     file_data.copy_contents_to(target_path, overwrite=overwrite)
+
+
+def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
+    snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(absolute_path(subdir_path))
+    if as_name:
+        if os.path.dirname(as_name):
+            raise excpns.InvalidArgument(as_name)
+        target_path = os.path.join(absolute_path(into_dir_path), as_name)
+    else:
+        target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path))
+    snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)

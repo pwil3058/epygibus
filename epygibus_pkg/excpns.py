@@ -42,6 +42,12 @@ class FileOverwriteError(Error):
     def __init__(self, target_file_path):
         self.target_file_path = target_file_path
 
+class SubdirOverwriteError(Error):
+    STR_TEMPLATE = _("Error: directory \"{target_dir_path}\" contains {nfiles} that will be overwritten. Use --overwrite to overwrite them.")
+    def __init__(self, target_dir_path, nfiles):
+        self.target_dir_path = target_dir_path
+        self.nfiles = nfiles
+
 class NotRegularFile(Error):
     STR_TEMPLATE = _("Error: \"{file_name}\" is not a regular file.")
     def __init__(self, file_name):
