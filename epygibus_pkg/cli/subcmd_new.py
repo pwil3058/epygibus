@@ -50,16 +50,16 @@ PARSER.add_argument(
 
 PARSER.add_argument(
     "--exclude_dirs_matching", "-Xd",
-    help=_("Exclude directories matching this regular expression this archive's snapshots."),
-    dest="exclude_dir_res",
+    help=_("Exclude directories matching this glob expression from this archive's snapshots."),
+    dest="exclude_dir_globs",
     action="append",
     metavar=_("regexp"),
 )
 
 PARSER.add_argument(
     "--exclude_files_matching", "-Xf",
-    help=_("Exclude files matching this regular expression this archive's snapshots."),
-    dest="exclude_file_res",
+    help=_("Exclude files matching this glob expression from this archive's snapshots."),
+    dest="exclude_file_globs",
     action="append",
     metavar=_("regexp"),
 )
@@ -85,8 +85,8 @@ def run_cmd(args):
             location_dir_path=args.location_dir_path,
             repo_spec=repo_spec,
             includes=args.includes,
-            exclude_dir_res=args.exclude_dir_res,
-            exclude_file_res=args.exclude_file_res,
+            exclude_dir_globs=args.exclude_dir_globs,
+            exclude_file_globs=args.exclude_file_globs,
             skip_broken_sl=args.skip_broken_sl
         )
     except excpns.Error as edata:

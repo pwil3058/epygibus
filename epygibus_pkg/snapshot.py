@@ -197,7 +197,7 @@ SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_lin
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_res, exclude_file_res, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
+    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
         self.blob_mgr = blob_mgr
@@ -206,9 +206,9 @@ class _SnapshotGenerator(object):
         self.adj_content_count = 0
         self.file_count = 0
         self.soft_link_count = 0
-        self._exclude_dir_cres = exclude_dir_res
-        self._exclude_file_cres = exclude_file_res
-        #self._extant_hex_digests = list()
+        self._exclude_dir_cres = exclude_dir_cres
+        self._exclude_file_cres = exclude_file_cres
+        self.stderr = stderr
     @property
     def snapshot(self):
         return self._snapshot
@@ -234,7 +234,7 @@ class _SnapshotGenerator(object):
         elif stat.S_ISLNK(file_stats.st_mode):
             target_file_path = os.readlink(file_path)
             if self.skip_broken_links and not os.path.exists(target_file_path):
-                stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
+                self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
                 return
             self.soft_link_count += 1
             files[file_name] = (file_stats, target_file_path)
@@ -285,9 +285,6 @@ class _SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
-    def update_ref_counts(self):
-        pass
-        #self.blob_mgr.incr_ref_counts(self._extant_hex_digests)
 
 def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     import time
@@ -296,7 +293,7 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
     with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_res, archive.exclude_file_res, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
+        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
         try:
             for item in archive.includes:
                 abs_item = absolute_path(item)
@@ -308,7 +305,6 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
                     stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
                 else:
                     stderr.write(_("{0}: not found. Skipped.").format(item))
-            snapshot_generator.update_ref_counts()
             snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
         finally:
             elapsed_time = time.clock() - start_time
@@ -457,15 +453,15 @@ def get_snapshot_list(archive_name, reverse=False):
         ss_list.append((ss_root(snapshot_name), snapshot_size, snapshot_stats))
     return ss_list
 
-def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_res=None, exclude_file_res=None, skip_broken_sl=True):
+def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_globs=None, exclude_file_globs=None, skip_broken_sl=True):
     from . import config
     base_dir_path = config.write_archive_spec(
         archive_name=archive_name,
         location_dir_path=location_dir_path,
         repo_name=repo_spec.name,
         includes=includes,
-        exclude_dir_res=exclude_dir_res if exclude_dir_res else [],
-        exclude_file_res=exclude_file_res if exclude_file_res else [],
+        exclude_dir_globs=exclude_dir_globs if exclude_dir_globs else [],
+        exclude_file_globs=exclude_file_globs if exclude_file_globs else [],
         skip_broken_sl=skip_broken_sl
     )
     try:

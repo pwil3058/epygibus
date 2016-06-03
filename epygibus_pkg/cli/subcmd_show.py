@@ -48,13 +48,13 @@ def run_cmd(args):
     sys.stdout.write(_("Includes:\n"))
     for i in archive.includes:
         sys.stdout.write("\t{}\n".format(i))
-    if archive.exclude_dir_res:
+    if archive.exclude_dir_globs:
         sys.stdout.write(_("Excludes directories matching:\n"))
-        for e in archive.exclude_dir_res:
+        for e in archive.exclude_dir_globs:
             sys.stdout.write("\t{}\n".format(e))
-    if archive.exclude_file_res:
+    if archive.exclude_file_globs:
         sys.stdout.write(_("Excludes files matching:\n"))
-        for e in archive.exclude_file_res:
+        for e in archive.exclude_file_globs:
             sys.stdout.write("\t{}\n".format(e))
     if snapshot_data_list:
         sys.stdout.write(_("Snapshots:                       Occupies    #Files    #Links        Holds\n"))
