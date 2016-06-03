@@ -385,9 +385,28 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # Now copy the files
+        soft_links = list()
+        hard_links = dict()
         for file_data in self.iterate_files(target_dir_path, True):
             try:
+                if file_data.is_soft_link:
+                    soft_links.append(file_data)
+                    continue
+                elif file_data.is_hard_linked:
+                    if file_data.inode in hard_links:
+                        os.link(hard_links[file_data.inode].path, file_data.path)
+                        continue
+                    else:
+                        hard_links[file_data.inode] = file_data
                 file_data.copy_contents_to(file_data.path, overwrite=overwrite)
+            except EnvironmentError as edata:
+                # report the error and move on (we have permission to wreak havoc)
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        for file_data in soft_links:
+            try:
+                os.symlink(absolute_path(file_data.payload), file_data.path)
+                os.lchmod(file_data.path, file_data.mode)
+                os.lchown(file_data.path, file_data.uid, file_data.gid)
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
