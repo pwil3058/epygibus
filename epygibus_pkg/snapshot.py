@@ -197,9 +197,10 @@ SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_lin
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr):
+    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
+        self.report_skipped_links=report_skipped_links
         self.blob_mgr = blob_mgr
         self.prior_snapshot = prior_snapshot if prior_snapshot else Snapshot()
         self.content_count = 0
@@ -234,7 +235,8 @@ class _SnapshotGenerator(object):
         elif stat.S_ISLNK(file_stats.st_mode):
             target_file_path = os.readlink(file_path)
             if self.skip_broken_links and not os.path.exists(target_file_path):
-                self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
+                if self.report_skipped_links:
+                    self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
                 return
             self.soft_link_count += 1
             files[file_name] = (file_stats, target_file_path)
@@ -286,14 +288,14 @@ class _SnapshotGenerator(object):
                 return True
         return False
 
-def generate_snapshot(archive, use_previous=True, stderr=sys.stderr):
+def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
     import time
     from . import blobs
     start_time = time.clock()
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
     with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr)
+        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         try:
             for item in archive.includes:
                 abs_item = absolute_path(item)
