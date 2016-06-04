@@ -290,10 +290,12 @@ class _SnapshotGenerator(object):
                 return True
         return False
 
+GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
+
 def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
-    import time
+    import bmark
     from . import blobs
-    start_time = time.clock()
+    start_time = bmark.get_os_times()
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
     with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
@@ -315,10 +317,10 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skip
                     stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
                 else:
                     stderr.write(_("{0}: not found. Skipped.").format(item))
-            snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
+            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
         finally:
-            elapsed_time = time.clock() - start_time
-        return (snapshot_generator.statistics, snapshot_size, elapsed_time)
+            elapsed_time = bmark.get_os_times() - start_time
+        return GSS(snapshot_name, snapshot_size, snapshot_generator.statistics, elapsed_time.get_etd())
 
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_repo_data"]), FStatsMixin):
     @property
