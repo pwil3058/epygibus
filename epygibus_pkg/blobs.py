@@ -120,7 +120,7 @@ def open_blob_repo(blob_repo_data, writeable=False):
         yield _BlobRepo(ref_counter, blob_repo_data.base_dir_path, writeable)
     finally:
         if writeable:
-            cPickle.dump(ref_counter, open(blob_repo_data.ref_counter_path, "wb"))
+            cPickle.dump(ref_counter, open(blob_repo_data.ref_counter_path, "wb"), cPickle.HIGHEST_PROTOCOL)
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
 

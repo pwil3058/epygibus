@@ -179,9 +179,9 @@ def write_snapshot(snapshot_dir_path, snapshot, permissions=stat.S_IRUSR|stat.S_
         fobj = gzip.open(snapshot_file_path, "wb")
     else:
         fobj = open(snapshot_file_path, "wb")
-    cPickle.dump(snapshot, fobj)
+    cPickle.dump(snapshot, fobj, cPickle.HIGHEST_PROTOCOL)
     os.chmod(snapshot_file_path, permissions)
-    return os.path.getsize(snapshot_file_path)
+    return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 
 def read_most_recent_snapshot(snapshot_dir_path):
     candidates = [f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)]
