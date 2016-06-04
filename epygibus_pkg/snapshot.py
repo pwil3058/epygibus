@@ -192,7 +192,7 @@ def read_most_recent_snapshot(snapshot_dir_path):
 def get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
 
-SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes"])
+SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count"])
 
 class _SnapshotGenerator(object):
     # The file has gone away
@@ -207,6 +207,7 @@ class _SnapshotGenerator(object):
         self.adj_content_count = 0
         self.file_count = 0
         self.soft_link_count = 0
+        self.new_blob_count = 0
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
         self.stderr = stderr
@@ -215,7 +216,7 @@ class _SnapshotGenerator(object):
         return self._snapshot
     @property
     def statistics(self):
-        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count)
+        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count, self.new_blob_count)
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -224,10 +225,11 @@ class _SnapshotGenerator(object):
             prior_file = prior_files.get(file_name, None)
             if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
                 hex_digest = prior_file[1]
-                #self._extant_hex_digests.append(hex_digest)
                 self.blob_mgr.incr_ref_count(hex_digest)
             else:
-                hex_digest = self.blob_mgr.store_contents(file_path)
+                hex_digest, was_new_blob = self.blob_mgr.store_contents(file_path)
+                if was_new_blob:
+                    self.new_blob_count += 1
             self.content_count += file_stats.st_size
             self.adj_content_count += file_stats.st_size / file_stats.st_nlink
             self.file_count += 1
@@ -300,9 +302,15 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skip
             for item in archive.includes:
                 abs_item = absolute_path(item)
                 if os.path.isdir(abs_item):
-                    snapshot_generator.include_dir(abs_item)
+                    try:
+                        snapshot_generator.include_dir(abs_item)
+                    except EnvironmentError as edata:
+                        stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
                 elif os.path.isfile(abs_item):
-                    snapshot_generator.include_file(abs_item)
+                    try:
+                        snapshot_generator.include_file(abs_item)
+                    except EnvironmentError as edata:
+                        stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
                 elif os.path.exists(abs_item):
                     stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
                 else:

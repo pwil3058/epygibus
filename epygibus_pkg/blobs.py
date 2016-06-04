@@ -56,7 +56,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             file_path = os.path.join(dir_path, file_name)
             open(file_path, "w").write(contents)
             os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
-        return hex_digest
+        return (hex_digest, needs_write)
     def incr_ref_count(self, hex_digest):
         assert self.writeable
         dir_name, file_name = _split_hex_digest(hex_digest)
