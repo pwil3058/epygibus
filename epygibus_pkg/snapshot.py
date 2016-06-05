@@ -167,15 +167,16 @@ def read_snapshot(snapshot_file_path):
 # NB: make sure that these two are in concert
 _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
 _SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\.gz)?")
-ss_root = lambda fname: fname.split(".")[0]
+ss_root = lambda fname: os.path.basename(fname).split(".")[0]
 
-def write_snapshot(snapshot_dir_path, snapshot, permissions=stat.S_IRUSR|stat.S_IRGRP):
+def write_snapshot(snapshot_dir_path, snapshot, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
     import cPickle
     import time
     snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
     snapshot_file_path = os.path.join(snapshot_dir_path, snapshot_file_name)
-    if snapshot_file_path.endswith(".gz"):
+    if compress:
         import gzip
+        snapshot_file_path += ".gz"
         fobj = gzip.open(snapshot_file_path, "wb")
     else:
         fobj = open(snapshot_file_path, "wb")
@@ -292,7 +293,7 @@ class _SnapshotGenerator(object):
 
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
 
-def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
+def generate_snapshot(archive, compress=True, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
     import bmark
     from . import blobs
     start_time = bmark.get_os_times()
@@ -317,7 +318,7 @@ def generate_snapshot(archive, use_previous=True, stderr=sys.stderr, report_skip
                     stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
                 else:
                     stderr.write(_("{0}: not found. Skipped.").format(item))
-            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot)
+            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot, compress=compress)
         finally:
             elapsed_time = bmark.get_os_times() - start_time
         return GSS(snapshot_name, snapshot_size, snapshot_generator.statistics, elapsed_time.get_etd())
@@ -465,6 +466,11 @@ def get_snapshot_list(archive_name, reverse=False):
         ss_list.append((ss_root(snapshot_name), snapshot_size, snapshot_stats))
     return ss_list
 
+def get_snapshot_name_list(archive_name, reverse=False):
+    from . import config
+    archive = config.read_archive_spec(archive_name)
+    return [(ss_root(f), f.endswith(".gz")) for f in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
+
 def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_globs=None, exclude_file_globs=None, skip_broken_sl=True):
     from . import config
     base_dir_path = config.write_archive_spec(
@@ -508,3 +514,29 @@ def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path))
     snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+
+def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):
+    from . import config
+    archive = config.read_archive_spec(archive_name)
+    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    if not snapshot_names:
+        raise excpns.EmptyArchive(archive_name)
+    try:
+        snapshot_name = seln_fn(snapshot_names)
+    except:
+        raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
+    return os.path.join(archive.snapshot_dir_path, snapshot_name)
+
+def compress_snapshot(archive_name, seln_fn=lambda l: l[-1]):
+    from . import utils
+    snapshot_file_path = get_snapshot_file_path(archive_name, seln_fn)
+    if snapshot_file_path.endswith(".gz"):
+        raise excpns.SnapshotAlreadyCompressed(archive_name, ss_root(snapshot_file_path))
+    utils.compress_file(snapshot_file_path)
+
+def uncompress_snapshot(archive_name, seln_fn=lambda l: l[-1]):
+    from . import utils
+    snapshot_file_path = get_snapshot_file_path(archive_name, seln_fn)
+    if not snapshot_file_path.endswith(".gz"):
+        raise excpns.SnapshotNotCompressed(archive_name, ss_root(snapshot_file_path))
+    utils.uncompress_file(snapshot_file_path)

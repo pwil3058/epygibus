@@ -51,6 +51,12 @@ PARSER.add_argument(
     action="store_true"
 )
 
+PARSER.add_argument(
+    "--compress",
+    help=_("don't report broken soft links skipped during processing."),
+    action="store_true"
+)
+
 def run_cmd(args):
     # read all archives in one go so that if any fails checks we do nothing
     try:
@@ -59,7 +65,7 @@ def run_cmd(args):
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     for archive_name, archive in archives:
-        stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr, report_skipped_links=not args.quiet)
+        stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=args.compress)
         if args.stats:
             sys.stdout.write(_("{0} STATS: {1}\n").format(archive_name, stats))
     return 0

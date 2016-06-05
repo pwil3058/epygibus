@@ -108,3 +108,15 @@ class NoMatchingSnapshot(Error):
     STR_TEMPLATE = _("Error: snapshot matching selection criteria not found in {available_snapshots}.")
     def __init__(self, available_snapshots):
         self.available_snapshots = available_snapshots
+
+class SnapshotAlreadyCompressed(Error):
+    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" in \"{archive_name}\" already compressed.")
+    def __init__(self, archive_name, snapshot_name):
+        self.archive_name = archive_name
+        self.snapshot_name = snapshot_name
+
+class SnapshotNotCompressed(Error):
+    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" in \"{archive_name}\" is not compressed.")
+    def __init__(self, archive_name, snapshot_name):
+        self.archive_name = archive_name
+        self.snapshot_name = snapshot_name

@@ -14,6 +14,7 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import sys
+import os
 
 from . import cmd
 
@@ -23,30 +24,35 @@ from .. import blobs
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "la",
-    description=_("List the available snapshots in the nominated archive."),
-    epilog=_("Snapshots will be listed in newest to oldest order unless specified otherwise."),
+    "compress",
+    description=_("Compress/uncompress the nominated archive's latest (or specified) snapshot."),
 )
+
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be compressed/uncompressed.")))
+
+cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
 PARSER.add_argument(
-    "--oldest_first",
-    help=_("list snapshots in oldest to newest order."),
-    action="store_false"
+    "--uncompress", "-U",
+    help=_("do uncompression instead of (the default) compression."),
+    action="store_true"
 )
-
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshots are to be listed.")))
 
 def run_cmd(args):
     try:
-        snapshot_data_list = snapshot.get_snapshot_name_list(args.archive_name, reverse=args.oldest_first)
+        if args.uncompress:
+            try:
+                snapshot.uncompress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+            except excpns.SnapshotNotCompressed:
+                sys.stdout.write(_("Nothing to do.\n"))
+        else:
+            try:
+                snapshot.compress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+            except excpns.SnapshotAlreadyCompressed:
+                sys.stdout.write(_("Nothing to do.\n"))
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    for snapshot_data in snapshot_data_list:
-        if snapshot_data[1]:
-            sys.stdout.write("{}**\n".format(snapshot_data[0]))
-        else:
-            sys.stdout.write("{}\n".format(snapshot_data[0]))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
