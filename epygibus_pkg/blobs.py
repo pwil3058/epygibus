@@ -88,7 +88,12 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 blob_count += 1
                 file_path = os.path.join(self.base_dir_path, dir_name, file_name)
                 total_bytes += os.path.getsize(file_path)
-                os.remove(file_path)
+                try:
+                    os.remove(file_path)
+                except EnvironmentError as edata:
+                    if edata.errno != errno.ENOENT:
+                        raise edata
+                    os.remove(file_path + ".gz")
                 del dir_data[file_name]
         return (blob_count, total_bytes) #if blob_count else None
     def open_blob_read_only(self, hex_digest):
