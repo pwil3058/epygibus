@@ -24,6 +24,7 @@ from .. import excpns
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
     description=_("Take a back up snapshot for the nominated archives."),
+    epilog=_("In general, --trusting will only speed up the taking of a snapshot if the previous snapshot is not compressed due to the time taken to decompress the previous archive.")
 )
 
 PARSER.add_argument(
@@ -40,8 +41,8 @@ PARSER.add_argument(
 )
 
 PARSER.add_argument(
-    "--paranoid",
-    help=_("don't use data (size, m_time) from previous snapshot to speed up content processing."),
+    "--trusting",
+    help=_("use data (size, m_time) from previous snapshot to (possibly) speed up content processing."),
     action="store_true"
 )
 
@@ -65,7 +66,7 @@ def run_cmd(args):
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     for archive_name, archive in archives:
-        stats = snapshot.generate_snapshot(archive, use_previous=not args.paranoid, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=args.compress)
+        stats = snapshot.generate_snapshot(archive, use_previous=args.trusting, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=args.compress)
         if args.stats:
             sys.stdout.write(_("{0} STATS: {1}\n").format(archive_name, stats))
     return 0
