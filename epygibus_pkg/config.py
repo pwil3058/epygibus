@@ -43,6 +43,7 @@ if not os.path.exists(_CONFIG_DIR_PATH):
     os.mkdir(_ARCHIVES_DIR_PATH)
 
 _repo_file_path = lambda rname: os.path.join(_REPOS_DIR_PATH, rname)
+_repo_config_lines = lambda rname: [l.rstrip() for l in open(_repo_file_path(rname), "r").readlines()]
 
 _archive_dir_path = lambda pname: os.path.join(_ARCHIVES_DIR_PATH, pname)
 _archive_config_path = lambda pname: os.path.join(_archive_dir_path(pname), "config")
@@ -100,26 +101,26 @@ def delete_archive_spec(archive_name):
         else:
             raise edata
 
-Repo = collections.namedtuple("Repo", ["name", "base_dir_path"])
+Repo = collections.namedtuple("Repo", ["name", "base_dir_path", "compressed"])
 
 def read_repo_spec(repo_name):
     from . import excpns
     try:
-        base_dir_path = open(_repo_file_path(repo_name)).read().rstrip()
+        base_dir_path, compressed = _repo_config_lines(repo_name)
     except EnvironmentError as edata:
         if edata.errno == errno.ENOENT:
             raise excpns.UnknownBlobRepository(repo_name)
         else:
             raise edata
-    return Repo(repo_name, base_dir_path)
+    return Repo(repo_name, base_dir_path, eval(compressed))
 
-def write_repo_spec(repo_name, in_dir_path):
+def write_repo_spec(repo_name, in_dir_path, compressed=True):
     base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "blobs", repo_name)
     cf_path = _repo_file_path(repo_name)
     if os.path.exists(cf_path):
         raise excpns.BlobRepositoryExists(repo_name)
-    open(cf_path, "w").write(base_dir_path)
-    return Repo(repo_name, base_dir_path)
+    open(cf_path, "w").writelines([p + os.linesep for p in [base_dir_path, str(compressed)]])
+    return Repo(repo_name, base_dir_path, compressed)
 
 def delete_repo_spec(repo_name):
     try:

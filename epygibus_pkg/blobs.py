@@ -27,15 +27,15 @@ _ref_counter_path = lambda base_dir_path: os.path.join(base_dir_path, _REF_COUNT
 _lock_file_path = lambda base_dir_path: os.path.join(base_dir_path, _LOCK_FILE_NAME)
 _split_hex_digest = lambda hex_digest: (hex_digest[:2], hex_digest[2:])
 
-BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path"])
+BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
 def get_blob_repo_data(repo_name):
     from . import config
     from . import excpns
-    base_dir_path = config.read_repo_spec(repo_name).base_dir_path
-    return BlobRepoData(base_dir_path, _ref_counter_path(base_dir_path), _lock_file_path(base_dir_path))
+    repo_spec = config.read_repo_spec(repo_name)
+    return BlobRepoData(repo_spec.base_dir_path, _ref_counter_path(repo_spec.base_dir_path), _lock_file_path(repo_spec.base_dir_path), repo_spec.compressed)
 
-class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable"])):
+class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable", "compressed"])):
     def store_contents(self, file_path):
         assert self.writeable
         contents = open(file_path, "r").read()
@@ -54,7 +54,13 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         if needs_write:
             import stat
             file_path = os.path.join(dir_path, file_name)
-            open(file_path, "w").write(contents)
+            if self.compressed:
+                file_path += ".gz"
+                with gzip.open(file_path, "w") as fobj:
+                    fobj.write(contents)
+            else:
+                with open(file_path, "w") as fobj:
+                    fobj.write(contents)
             os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
         return (hex_digest, needs_write)
     def incr_ref_count(self, hex_digest):
@@ -122,7 +128,7 @@ def open_blob_repo(blob_repo_data, writeable=False):
     fcntl.lockf(fobj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
     ref_counter = cPickle.load(open(blob_repo_data.ref_counter_path, "rb"))
     try:
-        yield _BlobRepo(ref_counter, blob_repo_data.base_dir_path, writeable)
+        yield _BlobRepo(ref_counter, blob_repo_data.base_dir_path, writeable, compressed=blob_repo_data.compressed)
     finally:
         if writeable:
             cPickle.dump(ref_counter, open(blob_repo_data.ref_counter_path, "wb"), cPickle.HIGHEST_PROTOCOL)
@@ -144,10 +150,10 @@ def initialize_repo(repo_spec):
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
     open(lock_file_path, "wb").write("blob_lock")
 
-def create_new_repo(repo_name, location_dir_path):
+def create_new_repo(repo_name, location_dir_path, compressed):
     from . import config
     from . import excpns
-    repo_spec = config.write_repo_spec(repo_name, location_dir_path)
+    repo_spec = config.write_repo_spec(repo_name, location_dir_path, compressed)
     try:
         initialize_repo(repo_spec)
     except (EnvironmentError, excpns.Error) as edata:

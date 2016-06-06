@@ -40,9 +40,11 @@ PARSER.add_argument(
     action = "store"
 )
 
+cmd.add_cmd_argument(PARSER, cmd.UNCOMPRESSED_ARG())
+
 def run_cmd(args):
     try:
-        blobs.create_new_repo(args.repo_name, args.location_dir_path)
+        blobs.create_new_repo(args.repo_name, args.location_dir_path, compressed=not args.uncompressed)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
     return 0

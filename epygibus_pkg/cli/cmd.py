@@ -64,5 +64,11 @@ BACK_ISSUE_ARG = lambda default=0 : _ARG_SPEC(
     }
 )
 
+UNCOMPRESSED_ARG = lambda help_msg=_("store data uncompressed."): _ARG_SPEC(
+    ["--uncompressed", "-U"],
+    {   "help": help_msg,
+        "action": "store_true",
+    }
+)
 
 SUB_CMD_PARSER = PARSER.add_subparsers(title=_("commands"))
