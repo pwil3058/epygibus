@@ -21,6 +21,7 @@ import sys
 import re
 
 from . import excpns
+from . import bmark
 
 HOME_DIR = os.path.expanduser("~")
 absolute_path = lambda path: os.path.abspath(os.path.expanduser(path))
@@ -96,7 +97,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
             os.lchmod(target_file_path, self.mode)
             os.lchown(target_file_path, self.uid, self.gid)
 
-class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count"])):
+class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count", "etd"])):
     def __add__(self, other):
         return SnapshotStats(*[self[i] + other[i] for i in range(len(self))])
 
@@ -145,7 +146,7 @@ class Snapshot(object):
             for hex_digest in subdir.iterate_hex_digests():
                 yield hex_digest
     def get_statistics(self):
-        statistics = SnapshotStats(0, 0, 0, 0, 0)
+        statistics = SnapshotStats(0, 0, 0, 0, 0, bmark.ETD(0, 0, 0))
         hard_links = set()
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
@@ -157,12 +158,33 @@ class Snapshot(object):
                         hard_links.add(data[0].st_ino)
                 else:
                     adj_size = data[0].st_size
-                statistics += (1, 0, data[0].st_size, adj_size, 0)
+                statistics += (1, 0, data[0].st_size, adj_size, 0, bmark.ETD(0, 0, 0))
             else:
-                statistics += (0, 1, 0, 0, 0)
+                statistics += (0, 1, 0, 0, 0, bmark.ETD(0, 0, 0))
         for subdir in self.subdirs.values():
             statistics += subdir.get_statistics()
         return statistics
+
+class SnapshotPlus(object):
+    # limit the number of none basic python types to future proof
+    def __init__(self, snapshot, statistics):
+        self.snapshot = snapshot
+        self._statistics = tuple(statistics[0:-1])
+        self._time_statistics = tuple(statistics[-1][0:])
+    @property
+    def statistics(self):
+        return SnapshotStats(*(self._statistics + (self.time_statistics,)))
+    @property
+    def time_statistics(self):
+        return bmark.ETD(*self._time_statistics)
+    def find_dir(self, dir_path):
+        return self.snapshot.find_dir(dir_path)
+    def find_file(self, file_path, blob_repo_data):
+        return self.snapshot.find_file(file_path, blob_repo_data)
+    def iterate_hex_digests(self):
+        return self.snapshot.iterate_hex_digests()
+    def get_statistics(self):
+        return self.statistics
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -219,12 +241,14 @@ class _SnapshotGenerator(object):
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
         self.stderr = stderr
+    def finish(self, elapsed_time):
+        self.elapsed_time = elapsed_time
     @property
-    def snapshot(self):
-        return self._snapshot
+    def snapshot_plus(self):
+        return SnapshotPlus(self._snapshot, self.statistics)
     @property
     def statistics(self):
-        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count, self.new_blob_count)
+        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count, self.new_blob_count, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -308,24 +332,27 @@ def generate_snapshot(archive, compress=True, use_previous=True, stderr=sys.stde
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
     with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
         snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
+        for item in archive.includes:
+            abs_item = absolute_path(item)
+            if os.path.isdir(abs_item):
+                try:
+                    snapshot_generator.include_dir(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.isfile(abs_item):
+                try:
+                    snapshot_generator.include_file(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.exists(abs_item):
+                stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
+            else:
+                stderr.write(_("{0}: not found. Skipped.").format(item))
+        snapshot_generator.finish(bmark.get_os_times() - start_time)
         try:
-            for item in archive.includes:
-                abs_item = absolute_path(item)
-                if os.path.isdir(abs_item):
-                    try:
-                        snapshot_generator.include_dir(abs_item)
-                    except EnvironmentError as edata:
-                        stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-                elif os.path.isfile(abs_item):
-                    try:
-                        snapshot_generator.include_file(abs_item)
-                    except EnvironmentError as edata:
-                        stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-                elif os.path.exists(abs_item):
-                    stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
-                else:
-                    stderr.write(_("{0}: not found. Skipped.").format(item))
-            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot, compress=compress)
+            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
+        except EnvironmentError as edata:
+            stderr.write("{}\n".format(edata))
         finally:
             elapsed_time = bmark.get_os_times() - start_time
         return GSS(snapshot_name, snapshot_size, snapshot_generator.statistics, elapsed_time.get_etd())

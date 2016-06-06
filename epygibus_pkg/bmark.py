@@ -16,11 +16,17 @@
 import os
 import collections
 
-ETD = collections.namedtuple("ETD", ["cpu_time", "real_time", "io_time"])
+class ETD(collections.namedtuple("ETD", ["cpu_time", "real_time", "io_time"])):
+    def __add__(self, other):
+        return ETD(*(self[i] + other[i] for i in range(len(self))))
+    def __sub__(self, other):
+        return ETD(*(self[i] - other[i] for i in range(len(self))))
 
 class OsTimes(collections.namedtuple("OsTimes", ["utime", "stime", "cutime", "cstime", "rtime"])):
     def __sub__(self, other):
         return OsTimes(*(self[i] - other[i] for i in range(len(self))))
+    def __add__(self, other):
+        return OsTimes(*(self[i] + other[i] for i in range(len(self))))
     def get_etd(self):
         cpu_time = self.utime + self.stime
         return ETD(cpu_time, self.rtime, self.rtime - cpu_time)

@@ -57,7 +57,7 @@ def run_cmd(args):
             if first:
                 first = False
                 sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds     Adjusted New Blobs\n"))
-            nfiles, nlinks, csize, acsize, new_blobs = statistics
+            nfiles, nlinks, csize, acsize, new_blobs, _etd = statistics
             sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs))
         if first:
             sys.stdout.write(_("Snapshots: None\n"))
