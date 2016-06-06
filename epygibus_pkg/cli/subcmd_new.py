@@ -71,6 +71,9 @@ PARSER.add_argument(
     action="store_false"
 )
 
+
+cmd.add_cmd_argument(PARSER, cmd.UNCOMPRESSED_ARG(_("set default snapshot compression option to \"compress\" insteatd of\"uncompress\".")))
+
 cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name to be allocated to this snapshot archive.")))
 
 def run_cmd(args):
@@ -87,7 +90,8 @@ def run_cmd(args):
             includes=args.includes,
             exclude_dir_globs=args.exclude_dir_globs,
             exclude_file_globs=args.exclude_file_globs,
-            skip_broken_sl=args.skip_broken_sl
+            skip_broken_sl=args.skip_broken_sl,
+            compress_default=not args.uncompressed
         )
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")

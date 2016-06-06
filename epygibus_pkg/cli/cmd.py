@@ -64,6 +64,13 @@ BACK_ISSUE_ARG = lambda default=0 : _ARG_SPEC(
     }
 )
 
+COMPRESSED_ARG = lambda help_msg=_("store data compressed."): _ARG_SPEC(
+    ["--compressed", "-C"],
+    {   "help": help_msg,
+        "action": "store_true",
+    }
+)
+
 UNCOMPRESSED_ARG = lambda help_msg=_("store data uncompressed."): _ARG_SPEC(
     ["--uncompressed", "-U"],
     {   "help": help_msg,

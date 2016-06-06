@@ -52,21 +52,20 @@ PARSER.add_argument(
     action="store_true"
 )
 
-PARSER.add_argument(
-    "--compress",
-    help=_("don't report broken soft links skipped during processing."),
-    action="store_true"
-)
+MXGROUP = PARSER.add_mutually_exclusive_group()
+cmd.add_cmd_argument(MXGROUP, cmd.COMPRESSED_ARG(_("override the default and create a compressed snapshot file.")))
+cmd.add_cmd_argument(MXGROUP, cmd.UNCOMPRESSED_ARG(_("override the default and create an uncompressed snapshot file.")))
 
 def run_cmd(args):
     # read all archives in one go so that if any fails checks we do nothing
+    compress = True if args.compressed else False if args.uncompressed else None
     try:
         archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     for archive_name, archive in archives:
-        stats = snapshot.generate_snapshot(archive, use_previous=args.trusting, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=args.compress)
+        stats = snapshot.generate_snapshot(archive, use_previous=args.trusting, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=compress)
         if args.stats:
             sys.stdout.write(_("{0} STATS: {1}\n").format(archive_name, stats))
     return 0

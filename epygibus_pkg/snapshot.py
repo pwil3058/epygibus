@@ -324,9 +324,11 @@ class _SnapshotGenerator(object):
 
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
 
-def generate_snapshot(archive, compress=True, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
+def generate_snapshot(archive, compress=None, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
     import bmark
     from . import blobs
+    if compress is None:
+        compress = archive.compress_default
     start_time = bmark.get_os_times()
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
@@ -345,9 +347,9 @@ def generate_snapshot(archive, compress=True, use_previous=True, stderr=sys.stde
                 except EnvironmentError as edata:
                     stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
             elif os.path.exists(abs_item):
-                stderr.write(_("{0}: is not a file or directory. Skipped.").format(item))
+                stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
             else:
-                stderr.write(_("{0}: not found. Skipped.").format(item))
+                stderr.write(_("{0}: not found. Skipped.\n").format(item))
         snapshot_generator.finish(bmark.get_os_times() - start_time)
         try:
             snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
@@ -504,7 +506,7 @@ def get_snapshot_name_list(archive_name, reverse=False):
     archive = config.read_archive_spec(archive_name)
     return [(ss_root(f), f.endswith(".gz")) for f in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
 
-def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_globs=None, exclude_file_globs=None, skip_broken_sl=True):
+def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_globs=None, exclude_file_globs=None, skip_broken_sl=True, compress_default=True):
     from . import config
     base_dir_path = config.write_archive_spec(
         archive_name=archive_name,
@@ -513,7 +515,8 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
         includes=includes,
         exclude_dir_globs=exclude_dir_globs if exclude_dir_globs else [],
         exclude_file_globs=exclude_file_globs if exclude_file_globs else [],
-        skip_broken_sl=skip_broken_sl
+        skip_broken_sl=skip_broken_sl,
+        compress_default=compress_default
     )
     try:
         os.makedirs(base_dir_path)
