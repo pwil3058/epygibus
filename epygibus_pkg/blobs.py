@@ -153,3 +153,25 @@ def create_new_repo(repo_name, location_dir_path):
     except (EnvironmentError, excpns.Error) as edata:
         config.delete_repo_spec(repo_spec.name)
         raise edata
+
+def compress_repository(repo_name):
+    from . import utils
+    brd = get_blob_repo_data(repo_name)
+    for entry_name in os.listdir(brd.base_dir_path):
+        entry_path = os.path.join(brd.base_dir_path, entry_name)
+        if os.path.isdir(entry_path):
+            with open_blob_repo(brd, True): # don't hog the lock
+                for file_name in os.listdir(entry_path):
+                    if not file_name.endswith(".gz"):
+                        utils.compress_file(os.path.join(entry_path, file_name))
+
+def uncompress_repository(repo_name):
+    from . import utils
+    brd = get_blob_repo_data(repo_name)
+    for entry_name in os.listdir(brd.base_dir_path):
+        entry_path = os.path.join(brd.base_dir_path, entry_name)
+        if os.path.isdir(entry_path):
+            with open_blob_repo(brd, True): # don't hog the lock
+                for file_name in os.listdir(entry_path):
+                    if file_name.endswith(".gz"):
+                        utils.uncompress_file(os.path.join(entry_path, file_name))

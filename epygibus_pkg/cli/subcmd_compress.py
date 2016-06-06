@@ -28,8 +28,9 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("Compress/uncompress the nominated archive's latest (or specified) snapshot."),
 )
 
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be compressed/uncompressed.")))
-
+MXGROUP = PARSER.add_mutually_exclusive_group()
+cmd.add_cmd_argument(MXGROUP, cmd.REPO_NAME_ARG(_("the name of the repository whose blobs to be compressed/uncompressed."), False))
+cmd.add_cmd_argument(MXGROUP, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be compressed/uncompressed."), False))
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
 PARSER.add_argument(
@@ -40,16 +41,22 @@ PARSER.add_argument(
 
 def run_cmd(args):
     try:
-        if args.uncompress:
-            try:
-                snapshot.uncompress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
-            except excpns.SnapshotNotCompressed:
-                sys.stdout.write(_("Nothing to do.\n"))
+        if args.archive_name:
+            if args.uncompress:
+                try:
+                    snapshot.uncompress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+                except excpns.SnapshotNotCompressed:
+                    sys.stdout.write(_("Nothing to do.\n"))
+            else:
+                try:
+                    snapshot.compress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
+                except excpns.SnapshotAlreadyCompressed:
+                    sys.stdout.write(_("Nothing to do.\n"))
         else:
-            try:
-                snapshot.compress_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back])
-            except excpns.SnapshotAlreadyCompressed:
-                sys.stdout.write(_("Nothing to do.\n"))
+            if args.uncompress:
+                blobs.uncompress_repository(args.repo_name)
+            else:
+                blobs.compress_repository(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
