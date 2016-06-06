@@ -36,33 +36,34 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    try:
-        snapshot_data_list = snapshot.get_snapshot_list(archive.name, reverse=False)
-    except excpns.Error as edata:
-        sys.stderr.write(str(edata) + "\n")
-        sys.exit(-1)
     sys.stdout.write(_("Archive: {}\n").format(archive.name))
-    sys.stdout.write(_("\tRepository: {}\n").format(archive.repo_name))
-    sys.stdout.write(_("\tSnapshot Dir: {}\n").format(archive.snapshot_dir_path))
-    sys.stdout.write(_("\tSkip Broken Soft Links: {}\n").format(archive.skip_broken_soft_links))
+    sys.stdout.write(_("  Repository: {}\n").format(archive.repo_name))
+    sys.stdout.write(_("  Snapshot Dir: {}\n").format(archive.snapshot_dir_path))
+    sys.stdout.write(_("  Skip Broken Soft Links: {}\n").format(archive.skip_broken_soft_links))
     sys.stdout.write(_("Includes:\n"))
     for i in archive.includes:
-        sys.stdout.write("\t{}\n".format(i))
+        sys.stdout.write("  {}\n".format(i))
     if archive.exclude_dir_globs:
         sys.stdout.write(_("Excludes directories matching:\n"))
         for e in archive.exclude_dir_globs:
-            sys.stdout.write("\t{}\n".format(e))
+            sys.stdout.write("  {}\n".format(e))
     if archive.exclude_file_globs:
         sys.stdout.write(_("Excludes files matching:\n"))
         for e in archive.exclude_file_globs:
-            sys.stdout.write("\t{}\n".format(e))
-    if snapshot_data_list:
-        sys.stdout.write(_("Snapshots:                       Occupies    #Files    #Links        Holds\n"))
-        for name, size, statistics in snapshot_data_list:
-            nfiles, nlinks, csize = statistics
-            sys.stdout.write("\t{}: {:>12} {:>9,} {:>9,} {:>12}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize)))
-    else:
-        sys.stdout.write(_("Snapshots: None\n"))
+            sys.stdout.write("  {}\n".format(e))
+    try:
+        first = True
+        for name, size, statistics in snapshot.iter_snapshot_list(archive.name, reverse=False):
+            if first:
+                first = False
+                sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds     Adjusted New Blobs\n"))
+            nfiles, nlinks, csize, acsize, new_blobs = statistics
+            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs))
+        if first:
+            sys.stdout.write(_("Snapshots: None\n"))
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

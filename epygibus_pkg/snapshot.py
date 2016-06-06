@@ -96,9 +96,9 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
             os.lchmod(target_file_path, self.mode)
             os.lchown(target_file_path, self.uid, self.gid)
 
-class SsStats(collections.namedtuple("SsStats", ["nfiles", "nlinks", "content_size"])):
+class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count"])):
     def __add__(self, other):
-        return SsStats(self.nfiles + other.nfiles, self.nlinks + other.nlinks, self.content_size + other.content_size)
+        return SnapshotStats(*[self[i] + other[i] for i in range(len(self))])
 
 class Snapshot(object):
     def __init__(self, parent=None, attributes=None):
@@ -145,12 +145,21 @@ class Snapshot(object):
             for hex_digest in subdir.iterate_hex_digests():
                 yield hex_digest
     def get_statistics(self):
-        statistics = SsStats(0, 0, 0)
+        statistics = SnapshotStats(0, 0, 0, 0, 0)
+        hard_links = set()
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
-                statistics += SsStats(1, 0, data[0].st_size)
+                if data[0].st_nlink > 1:
+                    if data[0].st_ino in hard_links:
+                        adj_size = 0
+                    else:
+                        adj_size = data[0].st_size
+                        hard_links.add(data[0].st_ino)
+                else:
+                    adj_size = data[0].st_size
+                statistics += (1, 0, data[0].st_size, adj_size, 0)
             else:
-                statistics += SsStats(0, 1, 0)
+                statistics += (0, 1, 0, 0, 0)
         for subdir in self.subdirs.values():
             statistics += subdir.get_statistics()
         return statistics
@@ -192,8 +201,6 @@ def read_most_recent_snapshot(snapshot_dir_path):
 
 def get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
-
-SnapshotStats = collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count"])
 
 class _SnapshotGenerator(object):
     # The file has gone away
@@ -455,7 +462,7 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
         os.remove(snapshot_file_path)
         blob_mgr.release_contents(snapshot.iterate_hex_digests())
 
-def get_snapshot_list(archive_name, reverse=False):
+def iter_snapshot_list(archive_name, reverse=False):
     from . import config
     archive = config.read_archive_spec(archive_name)
     ss_list = []
@@ -463,8 +470,7 @@ def get_snapshot_list(archive_name, reverse=False):
         snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
         snapshot_size = os.path.getsize(snapshot_file_path)
         snapshot_stats = read_snapshot(snapshot_file_path).get_statistics()
-        ss_list.append((ss_root(snapshot_name), snapshot_size, snapshot_stats))
-    return ss_list
+        yield (ss_root(snapshot_name), snapshot_size, snapshot_stats)
 
 def get_snapshot_name_list(archive_name, reverse=False):
     from . import config
