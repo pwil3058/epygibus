@@ -25,14 +25,6 @@ from . import excpns
 
 APP_NAME_D = APP_NAME + ".d"
 
-class Error(Exception):
-    def __init__(self, *args, **kargs):
-        self.args = args
-        self.kargs = kargs
-
-class ErrorRepoSpecExists(Error):
-    pass
-
 _CONFIG_DIR_PATH = os.path.expanduser(os.path.join("~", ".config", APP_NAME_D))
 _REPOS_DIR_PATH = os.path.join(_CONFIG_DIR_PATH, "repos")
 _ARCHIVES_DIR_PATH = os.path.join(_CONFIG_DIR_PATH, "archives")
