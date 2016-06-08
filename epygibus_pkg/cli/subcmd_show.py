@@ -40,6 +40,7 @@ def run_cmd(args):
     sys.stdout.write(_("  Repository: {}\n").format(archive.repo_name))
     sys.stdout.write(_("  Snapshot Dir: {}\n").format(archive.snapshot_dir_path))
     sys.stdout.write(_("  Skip Broken Soft Links: {}\n").format(archive.skip_broken_soft_links))
+    sys.stdout.write(_("  Compress Snapshots By Default: {}\n").format(archive.compress_default))
     sys.stdout.write(_("Includes:\n"))
     for i in archive.includes:
         sys.stdout.write("  {}\n".format(i))
@@ -56,9 +57,9 @@ def run_cmd(args):
         for name, size, statistics in snapshot.iter_snapshot_list(archive.name, reverse=False):
             if first:
                 first = False
-                sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds     Adjusted New Blobs\n"))
-            nfiles, nlinks, csize, acsize, new_blobs, _etd = statistics
-            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs))
+                sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds     Adjusted New Blobs   CPU Time Total Time    IO Time\n"))
+            nfiles, nlinks, csize, acsize, new_blobs, etd = statistics
+            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,} {:>10} {:>10} {:>10}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs, *etd))
         if first:
             sys.stdout.write(_("Snapshots: None\n"))
     except excpns.Error as edata:
