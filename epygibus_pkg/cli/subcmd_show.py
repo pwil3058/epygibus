@@ -59,7 +59,7 @@ def run_cmd(args):
                 first = False
                 sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds     Adjusted New Blobs   CPU Time Total Time    IO Time\n"))
             nfiles, nlinks, csize, acsize, new_blobs, etd = statistics
-            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,} {:>10} {:>10} {:>10}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs, *etd))
+            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(acsize), new_blobs, *etd))
         if first:
             sys.stdout.write(_("Snapshots: None\n"))
     except excpns.Error as edata:
