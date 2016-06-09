@@ -123,3 +123,12 @@ def delete_repo_spec(repo_name):
             raise excpns.UnknownBlobRepository(repo_name)
         else:
             raise edata
+
+def get_includes_file_path(archive_name):
+    return _archive_includes_path(archive_name)
+
+def get_exclude_dirs_file_path(archive_name):
+    return _archive_exclude_dirs_path(archive_name)
+
+def get_exclude_files_file_path(archive_name):
+    return _archive_exclude_files_path(archive_name)
