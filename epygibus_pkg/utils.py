@@ -13,6 +13,7 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+import os
 
 def format_bytes(number, decimal_pts=3):
     fmt_str = "{{:>{},.{}f}} {{}}".format(4 + decimal_pts, decimal_pts)
@@ -42,3 +43,15 @@ def uncompress_file(file_path):
     with gzip.open(file_path, "rb") as f_in, open(file_path[0:-3], "wb") as f_out:
         shutil.copyfileobj(f_in, f_out)
     os.remove(file_path)
+
+def is_rel_path(path):
+    return not os.path.isabs(os.path.expanduser(path))
+
+def get_link_abs_path(link_path, file_path):
+    e_path = os.path.expanduser(link_path)
+    if os.path.isabs(e_path):
+        return e_path
+    return os.path.abspath(os.path.join(os.path.dirname(file_path), link_path))
+
+def is_broken_link(link_path, file_path):
+    return os.path.exists(get_link_abs_path(link_path, file_path))

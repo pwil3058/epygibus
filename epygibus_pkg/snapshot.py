@@ -22,6 +22,7 @@ import re
 
 from . import excpns
 from . import bmark
+from . import utils
 
 HOME_DIR = os.path.expanduser("~")
 absolute_path = lambda path: os.path.abspath(os.path.expanduser(path))
@@ -76,6 +77,12 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
     @property
     def hex_digest(self):
         return self.payload if stat.S_ISREG(self.attributes.st_mode) else None
+    @property
+    def name(self):
+        return os.path.basename(self.path)
+    @property
+    def dir_path(self):
+        return os.path.dirname(self.path)
     def open_read_only(self):
         from . import blobs
         if not stat.S_ISREG(self.attributes.st_mode):
@@ -177,6 +184,12 @@ class SnapshotPlus(object):
     @property
     def time_statistics(self):
         return bmark.ETD(*self._time_statistics)
+    @property
+    def subdirs(self):
+        return self.snapshot.subdirs
+    @property
+    def files(self):
+        return self.snapshot.files
     def find_dir(self, dir_path):
         return self.snapshot.find_dir(dir_path)
     def find_file(self, file_path, blob_repo_data):
@@ -268,14 +281,14 @@ class _SnapshotGenerator(object):
             files[file_name] = (file_stats, hex_digest)
         elif stat.S_ISLNK(file_stats.st_mode):
             target_file_path = os.readlink(file_path)
-            if self.skip_broken_links and not os.path.exists(target_file_path):
+            if self.skip_broken_links and not utils.is_broken_link(target_file_path, file_path):
                 if self.report_skipped_links:
                     self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
                 return
             self.soft_link_count += 1
             files[file_name] = (file_stats, target_file_path)
     def include_dir(self, abs_dir_path):
-        for dir_path, subdir_paths, file_names in os.walk(abs_dir_path, followlinks=False):
+        for dir_path, subdir_names, file_names in os.walk(abs_dir_path, followlinks=True):
             if self.is_excluded_dir(dir_path):
                 continue
             files = self._snapshot.add_subdir(dir_path, os.lstat(dir_path)).files
@@ -295,10 +308,27 @@ class _SnapshotGenerator(object):
                     if edata.errno in self.FORGIVEABLE_ERRNOS:
                         continue # it's gone away so we skip it
                     raise edata # something we can't handle so throw the towel in
-            excluded_subdir_paths = [subdir_path for subdir_path in subdir_paths if self.is_excluded_dir(subdir_path)]
+            excluded_subdir_names = []
+            for subdir_name in subdir_names:
+                if self.is_excluded_dir(subdir_name):
+                    excluded_subdir_names.append(subdir_name)
+                    continue
+                subdir_path = os.path.join(dir_path, subdir_name)
+                if self.is_excluded_dir(subdir_path):
+                    excluded_subdir_names.append(subdir_name)
+                    continue
+                if os.path.islink(subdir_path):
+                    excluded_subdir_names.append(subdir_name)
+                    try:
+                        self._include_file(files, subdir_name, subdir_path, {})
+                    except OSError as edata:
+                        # race condition
+                        if edata.errno in self.FORGIVEABLE_ERRNOS:
+                            continue # it's gone away so we skip it
+                        raise edata # something we can't handle so throw the towel in
             # NB: this is an in place reduction in the list of subdirectories
-            for esdp in excluded_subdir_paths:
-                subdir_paths.remove(esdp)
+            for esdp in excluded_subdir_names:
+                subdir_names.remove(esdp)
     def include_file(self, abs_file_path):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
@@ -336,14 +366,14 @@ def generate_snapshot(archive, compress=None, use_previous=True, stderr=sys.stde
         snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
-            if os.path.isdir(abs_item):
-                try:
-                    snapshot_generator.include_dir(abs_item)
-                except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.isfile(abs_item):
+            if os.path.isfile(abs_item) or os.path.islink(abs_item):
                 try:
                     snapshot_generator.include_file(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.isdir(abs_item):
+                try:
+                    snapshot_generator.include_dir(abs_item)
                 except EnvironmentError as edata:
                     stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
             elif os.path.exists(abs_item):
@@ -448,9 +478,19 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         for file_data in soft_links:
+            orig_curdir = os.getcwd()
             try:
-                os.symlink(absolute_path(file_data.payload), file_data.path)
-                os.lchmod(file_data.path, file_data.mode)
+                if utils.is_rel_path(file_data.payload):
+                    os.chdir(file_data.dir_path)
+                    os.symlink(file_data.payload, file_data.path)
+                    os.chdir(orig_curdir)
+                else:
+                    os.symlink(file_data.payload, file_data.path)
+                try:
+                    os.lchmod(file_data.path, file_data.mode)
+                except AttributeError:
+                    # NB: some systems don't support lchmod())
+                    os.chmod(file_data.path, file_data.mode)
                 os.lchown(file_data.path, file_data.uid, file_data.gid)
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
@@ -540,7 +580,6 @@ def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1]
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
     file_data.copy_contents_to(target_path, overwrite=overwrite)
 
-
 def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
     snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(absolute_path(subdir_path))
     if as_name:
@@ -550,6 +589,16 @@ def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path))
     snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+
+def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
+    abs_file_path = absolute_path(file_path)
+    file_data = get_snapshot_fs(archive_name, seln_fn).get_file(abs_file_path)
+    file_data.copy_contents_to(abs_file_path, overwrite=True)
+
+def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
+    abs_subdir_path = absolute_path(subdir_path)
+    snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(abs_subdir_path)
+    snapshot_fs.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
 
 def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
@@ -564,14 +613,12 @@ def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):
     return os.path.join(archive.snapshot_dir_path, snapshot_name)
 
 def compress_snapshot(archive_name, seln_fn=lambda l: l[-1]):
-    from . import utils
     snapshot_file_path = get_snapshot_file_path(archive_name, seln_fn)
     if snapshot_file_path.endswith(".gz"):
         raise excpns.SnapshotAlreadyCompressed(archive_name, ss_root(snapshot_file_path))
     utils.compress_file(snapshot_file_path)
 
 def uncompress_snapshot(archive_name, seln_fn=lambda l: l[-1]):
-    from . import utils
     snapshot_file_path = get_snapshot_file_path(archive_name, seln_fn)
     if not snapshot_file_path.endswith(".gz"):
         raise excpns.SnapshotNotCompressed(archive_name, ss_root(snapshot_file_path))

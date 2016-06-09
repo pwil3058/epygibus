@@ -28,3 +28,4 @@ from . import subcmd_prune
 from . import subcmd_show
 from . import subcmd_extract
 from . import subcmd_compress
+from . import subcmd_restore
