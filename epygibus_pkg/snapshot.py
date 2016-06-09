@@ -104,7 +104,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
             os.lchmod(target_file_path, self.mode)
             os.lchown(target_file_path, self.uid, self.gid)
 
-class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "adj_content_bytes", "new_blob_count", "etd"])):
+class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "new_blob_count", "etd"])):
     def __add__(self, other):
         return SnapshotStats(*[self[i] + other[i] for i in range(len(self))])
 
@@ -153,21 +153,12 @@ class Snapshot(object):
             for hex_digest in subdir.iterate_hex_digests():
                 yield hex_digest
     def get_statistics(self):
-        statistics = SnapshotStats(0, 0, 0, 0, 0, bmark.ETD(0, 0, 0))
-        hard_links = set()
+        statistics = SnapshotStats(0, 0, 0, 0, bmark.ETD(0, 0, 0))
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
-                if data[0].st_nlink > 1:
-                    if data[0].st_ino in hard_links:
-                        adj_size = 0
-                    else:
-                        adj_size = data[0].st_size
-                        hard_links.add(data[0].st_ino)
-                else:
-                    adj_size = data[0].st_size
-                statistics += (1, 0, data[0].st_size, adj_size, 0, bmark.ETD(0, 0, 0))
+                statistics += (1, 0, data[0].st_size, 0, bmark.ETD(0, 0, 0))
             else:
-                statistics += (0, 1, 0, 0, 0, bmark.ETD(0, 0, 0))
+                statistics += (0, 1, 0, 0, bmark.ETD(0, 0, 0))
         for subdir in self.subdirs.values():
             statistics += subdir.get_statistics()
         return statistics
@@ -180,7 +171,11 @@ class SnapshotPlus(object):
         self._time_statistics = tuple(statistics[-1][0:])
     @property
     def statistics(self):
-        return SnapshotStats(*(self._statistics + (self.time_statistics,)))
+        try:
+            return SnapshotStats(*(self._statistics + (self.time_statistics,)))
+        except TypeError:
+            z = 3 #TODO: remove this temporary fix
+            return SnapshotStats(*(self._statistics[0:z] + self._statistics[z+1:] + (self.time_statistics,)))
     @property
     def time_statistics(self):
         return bmark.ETD(*self._time_statistics)
@@ -261,7 +256,7 @@ class _SnapshotGenerator(object):
         return SnapshotPlus(self._snapshot, self.statistics)
     @property
     def statistics(self):
-        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.adj_content_count, self.new_blob_count, self.elapsed_time.get_etd())
+        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.new_blob_count, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
