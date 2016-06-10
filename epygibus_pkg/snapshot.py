@@ -31,6 +31,12 @@ path_rel_home = lambda path: os.path.relpath(absolute_path(path), HOME_DIR)
 
 class FStatsMixin:
     @property
+    def name(self):
+        return os.path.basename(self.path)
+    @property
+    def dir_path(self):
+        return os.path.dirname(self.path)
+    @property
     def is_dir(self):
         return stat.S_ISDIR(self.attributes.st_mode)
     @property
@@ -70,19 +76,7 @@ class FStatsMixin:
     def device(self):
         return self.attributes.st_dev
 
-class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "blob_repo_data"]), FStatsMixin):
-    @property
-    def link_tgt(self):
-        return self.payload if stat.S_ISLNK(self.attributes.st_mode) else None
-    @property
-    def hex_digest(self):
-        return self.payload if stat.S_ISREG(self.attributes.st_mode) else None
-    @property
-    def name(self):
-        return os.path.basename(self.path)
-    @property
-    def dir_path(self):
-        return os.path.dirname(self.path)
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "blob_repo_data"]), FStatsMixin):
     def open_read_only(self):
         from . import blobs
         if not stat.S_ISREG(self.attributes.st_mode):
@@ -93,16 +87,38 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "payload", "b
         from . import blobs
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
-        if self.is_reg_file:
-            with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
-                blob_mgr.copy_contents_to(self.payload, target_file_path)
-            os.chmod(target_file_path, self.mode)
-            os.utime(target_file_path, (self.atime, self.mtime))
-            os.chown(target_file_path, self.uid, self.gid)
-        else:
-            os.symlink(absolute_path(self.payload), target_file_path)
-            os.lchmod(target_file_path, self.mode)
-            os.lchown(target_file_path, self.uid, self.gid)
+        with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+            blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
+        os.chmod(target_file_path, self.mode)
+        os.utime(target_file_path, (self.atime, self.mtime))
+        os.chown(target_file_path, self.uid, self.gid)
+
+class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
+    def create_link(self, orig_curdir, stderr):
+        try:
+            #if the file exists we have to remove it or get stat.EEXIST error
+            if os.path.islink(self.path) or os.path.isfile(self.path):
+                os.remove(self.path)
+            elif os.path.isdir(self.path):
+                import shutil
+                shutil.rmtree(self.path)
+            if utils.is_rel_path(self.tgt_path):
+                os.chdir(self.dir_path)
+                try:
+                    os.symlink(self.tgt_path, self.path)
+                finally:
+                    os.chdir(orig_curdir)
+            else:
+                os.symlink(self.tgt_path, self.path)
+            try:
+                os.lchmod(self.path, self.mode)
+            except AttributeError:
+                # NB: some systems don't support lchmod())
+                os.chmod(self.path, self.mode)
+            os.lchown(self.path, self.uid, self.gid)
+        except EnvironmentError as edata:
+            # report the error and move on (we have permission to wreak havoc)
+            stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
 
 class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "new_blob_count", "etd"])):
     def __add__(self, other):
@@ -114,6 +130,8 @@ class Snapshot(object):
         self.attributes = attributes
         self.subdirs = {}
         self.files = {}
+        self.file_links = {}
+        self.subdir_links = {}
     def _add_subdir(self, path_parts, attributes=None):
         name = path_parts[0]
         if len(path_parts) == 1:
@@ -145,6 +163,14 @@ class Snapshot(object):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
         return SFile(file_path, data[0], data[1], blob_repo_data)
+    def find_file_link(self, file_path):
+        dir_path, file_name = os.path.split(file_path)
+        data = self.find_dir(dir_path).file_links[file_name]
+        return SLink(file_path, data[0], data[1])
+    def find_subdir_link(self, subdir_path):
+        dir_path, subdir_name = os.path.split(subdir_path)
+        data = self.find_dir(dir_path).subdir_links[subdir_name]
+        return SLink(subdir_path, data[0], data[1])
     def iterate_hex_digests(self):
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
@@ -159,6 +185,10 @@ class Snapshot(object):
                 statistics += (1, 0, data[0].st_size, 0, bmark.ETD(0, 0, 0))
             else:
                 statistics += (0, 1, 0, 0, bmark.ETD(0, 0, 0))
+        for data in self.file_links.values():
+            statistics += (0, 1, 0, 0, bmark.ETD(0, 0, 0))
+        for data in self.subdir_links.values():
+            statistics += (0, 1, 0, 0, bmark.ETD(0, 0, 0))
         for subdir in self.subdirs.values():
             statistics += subdir.get_statistics()
         return statistics
@@ -185,10 +215,20 @@ class SnapshotPlus(object):
     @property
     def files(self):
         return self.snapshot.files
+    @property
+    def subdir_links(self):
+        return self.snapshot.subdir_links
+    @property
+    def file_links(self):
+        return self.snapshot.file_links
     def find_dir(self, dir_path):
         return self.snapshot.find_dir(dir_path)
     def find_file(self, file_path, blob_repo_data):
         return self.snapshot.find_file(file_path, blob_repo_data)
+    def find_subdir_link(self, dir_path):
+        return self.snapshot.find_subdir_link(dir_path)
+    def find_file_link(self, file_path):
+        return self.snapshot.find_file_link(file_path)
     def iterate_hex_digests(self):
         return self.snapshot.iterate_hex_digests()
     def get_statistics(self):
@@ -244,7 +284,8 @@ class _SnapshotGenerator(object):
         self.content_count = 0
         self.adj_content_count = 0
         self.file_count = 0
-        self.soft_link_count = 0
+        self.file_slink_count = 0
+        self.subdir_slink_count = 0
         self.new_blob_count = 0
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
@@ -256,37 +297,52 @@ class _SnapshotGenerator(object):
         return SnapshotPlus(self._snapshot, self.statistics)
     @property
     def statistics(self):
-        return SnapshotStats(self.file_count, self.soft_link_count, self.content_count, self.new_blob_count, self.elapsed_time.get_etd())
+        return SnapshotStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.new_blob_count, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         file_stats = os.lstat(file_path)
-        if stat.S_ISREG(file_stats.st_mode):
-            prior_file = prior_files.get(file_name, None)
-            if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
-                hex_digest = prior_file[1]
-                self.blob_mgr.incr_ref_count(hex_digest)
-            else:
+        prior_file = prior_files.get(file_name, None)
+        if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
+            hex_digest = prior_file[1]
+            self.blob_mgr.incr_ref_count(hex_digest)
+        else:
+            try: # it's possible blob manager got environment error reading file, if so skip it and report
                 hex_digest, was_new_blob = self.blob_mgr.store_contents(file_path)
                 if was_new_blob:
                     self.new_blob_count += 1
-            self.content_count += file_stats.st_size
-            self.adj_content_count += file_stats.st_size / file_stats.st_nlink
-            self.file_count += 1
-            files[file_name] = (file_stats, hex_digest)
-        elif stat.S_ISLNK(file_stats.st_mode):
-            target_file_path = os.readlink(file_path)
-            if self.skip_broken_links and not utils.is_broken_link(target_file_path, file_path):
-                if self.report_skipped_links:
-                    self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_file_path))
+            except EnvironmentError as edata:
+                self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
                 return
-            self.soft_link_count += 1
-            files[file_name] = (file_stats, target_file_path)
+        self.content_count += file_stats.st_size
+        self.adj_content_count += file_stats.st_size / file_stats.st_nlink
+        self.file_count += 1
+        files[file_name] = (file_stats, hex_digest)
+    def _include_file_link(self, file_links, file_name, file_path):
+        # NB. redundancy in file_name and file_path is deliberate
+        # let the caller handle OSError exceptions
+        target_path = os.readlink(file_path)
+        if self.skip_broken_links and not utils.is_broken_link(target_path, file_path):
+            if self.report_skipped_links:
+                self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
+            return
+        self.file_slink_count += 1
+        file_links[file_name] = (os.lstat(file_path), target_file_path)
+    def _include_subdir_link(self, subdir_links, file_name, file_path):
+        # NB. redundancy in file_name and file_path is deliberate
+        # let the caller handle OSError exceptions
+        target_path = os.readlink(file_path)
+        if self.skip_broken_links and not utils.is_broken_link(target_path, file_path):
+            if self.report_skipped_links:
+                self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
+            return
+        self.subdir_slink_count += 1
+        subdir_links[file_name] = (os.lstat(file_path), target_path)
     def include_dir(self, abs_dir_path):
         for dir_path, subdir_names, file_names in os.walk(abs_dir_path, followlinks=True):
             if self.is_excluded_dir(dir_path):
                 continue
-            files = self._snapshot.add_subdir(dir_path, os.lstat(dir_path)).files
+            new_subdir = self._snapshot.add_subdir(dir_path, os.lstat(dir_path))
             prior_dir = self.prior_snapshot.find_dir(dir_path)
             prior_files = {} if prior_dir is None else prior_dir.files
             for file_name in file_names:
@@ -297,7 +353,10 @@ class _SnapshotGenerator(object):
                 if self.is_excluded_file(file_path):
                     continue
                 try:
-                    self._include_file(files, file_name, file_path, prior_files)
+                    if os.path.islink(file_path):
+                        self._include_file_link(new_subdir.file_links, file_name, file_path)
+                    else:
+                        self._include_file(new_subdir.files, file_name, file_path, prior_files)
                 except OSError as edata:
                     # race condition
                     if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -315,7 +374,7 @@ class _SnapshotGenerator(object):
                 if os.path.islink(subdir_path):
                     excluded_subdir_names.append(subdir_name)
                     try:
-                        self._include_file(files, subdir_name, subdir_path, {})
+                        self._include_subdir_link(new_subdir.subdir_links, subdir_name, subdir_path)
                     except OSError as edata:
                         # race condition
                         if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -336,6 +395,15 @@ class _SnapshotGenerator(object):
             # race condition
             if edata.errno not in self.FORGIVEABLE_ERRNOS:
                 raise edata # something we can't handle so throw the towel in
+    def include_link(self, abs_file_path):
+        # NB: no exclusion checks as explicit inclusion trumps exclusion
+        abs_dir_path, file_name = os.path.split(abs_file_path)
+        if os.path.isdir(abs_file_path):
+            subdir_links = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).subdir_links
+            self._include_subdir_link(subdir_links, file_name, abs_file_path)
+        else:
+            file_links = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).file_links
+            self._include_file_link(file_links, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
         for cre in self._exclude_file_cres:
             if cre.match(file_path_or_name):
@@ -361,7 +429,12 @@ def generate_snapshot(archive, compress=None, use_previous=True, stderr=sys.stde
         snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
-            if os.path.isfile(abs_item) or os.path.islink(abs_item):
+            if os.path.islink(abs_item):
+                try:
+                    snapshot_generator.include_link(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.isfile(abs_item):
                 try:
                     snapshot_generator.include_file(abs_item)
                 except EnvironmentError as edata:
@@ -396,6 +469,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         try:
             file_data = self.snapshot.find_file(abs_file_path, self.blob_repo_data)
         except (KeyError, AttributeError):
+            try:
+                file_link_data = self.snapshot.find_file_link(file_path)
+                raise excpns.IsSymbolicLink(file_path, file_link_data.tgt_path)
+            except (KeyError, AttributeError):
+                pass
             raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
     def get_subdir(self, subdir_path):
@@ -404,6 +482,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         abs_subdir_path = absolute_path(subdir_path)
         subdir_ss = self.snapshot.find_dir(abs_subdir_path)
         if not subdir_ss:
+            try:
+                subdir_link_data = self.snapshot.find_subdir_link(subdir_path)
+                raise excpns.IsSymbolicLink(subdir_path, subdir_link_data.tgt_path)
+            except (KeyError, AttributeError):
+                pass
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
         return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_repo_data)
     def iterate_subdirs(self, pre_path=False, recurse=False):
@@ -424,6 +507,24 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for subdir in self.iterate_subdirs():
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield sfile
+    def iterate_subdir_links(self, pre_path=False, recurse=False):
+        if not isinstance(pre_path, str):
+            pre_path = self.path if pre_path is True else ""
+        for link_name, data in self.snapshot.subdir_links.items():
+            yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
+        if recurse:
+            for subdir in self.iterate_subdirs():
+                for slink in subdir.iterate_subdir_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
+                    yield slink
+    def iterate_file_links(self, pre_path=False, recurse=False):
+        if not isinstance(pre_path, str):
+            pre_path = self.path if pre_path is True else ""
+        for link_name, data in self.snapshot.file_links.items():
+            yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
+        if recurse:
+            for subdir in self.iterate_subdirs():
+                for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
+                    yield slink
     def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr):
         # Create the target directory if necessary
         create_dir = True
@@ -431,9 +532,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             if os.path.isdir(target_dir_path):
                 create_dir = False
                 if not overwrite:
-                    owfiles = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f)]
-                    if owfiles:
-                        raise excpns.SubdirOverwriteError(target_dir_path, len(owfiles))
+                    ow_items = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f)]
+                    ow_items += [f for f in self.iterate_file_links(target_dir_path, True) if os.path.exists(f)]
+                    ow_items += [f for f in self.iterate_subdir_links(target_dir_path, True) if os.path.exists(f)]
+                    if ow_items:
+                        raise excpns.SubdirOverwriteError(target_dir_path, len(ow_items))
             elif overwrite:
                 # remove the file to make way for the directory
                 os.remove(target_dir_path)
@@ -455,14 +558,10 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # Now copy the files
-        soft_links = list()
         hard_links = dict()
         for file_data in self.iterate_files(target_dir_path, True):
             try:
-                if file_data.is_soft_link:
-                    soft_links.append(file_data)
-                    continue
-                elif file_data.is_hard_linked:
+                if file_data.is_hard_linked:
                     if file_data.inode in hard_links:
                         os.link(hard_links[file_data.inode].path, file_data.path)
                         continue
@@ -472,24 +571,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-        for file_data in soft_links:
-            orig_curdir = os.getcwd()
-            try:
-                if utils.is_rel_path(file_data.payload):
-                    os.chdir(file_data.dir_path)
-                    os.symlink(file_data.payload, file_data.path)
-                    os.chdir(orig_curdir)
-                else:
-                    os.symlink(file_data.payload, file_data.path)
-                try:
-                    os.lchmod(file_data.path, file_data.mode)
-                except AttributeError:
-                    # NB: some systems don't support lchmod())
-                    os.chmod(file_data.path, file_data.mode)
-                os.lchown(file_data.path, file_data.uid, file_data.gid)
-            except EnvironmentError as edata:
-                # report the error and move on (we have permission to wreak havoc)
-                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        orig_curdir = os.getcwd()
+        for file_link_data in self.iterate_file_links(target_dir_path, True):
+            file_link_data.create_link(orig_curdir, stderr)
+        for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
+            subdir_link_data.create_link(orig_curdir, stderr)
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config

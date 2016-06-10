@@ -43,8 +43,12 @@ def run_cmd(args):
     try:
         for dir_data in sorted(snapshot_fs.iterate_subdirs()):
             sys.stdout.write(dir_data.path + os.sep + "\n")
+        for dir_link_data in sorted(snapshot_fs.iterate_subdir_links()):
+            sys.stdout.write(dir_link_data.path + os.sep + " -> " + dir_link_data.tgt_path + os.sep + "\n")
         for file_data in sorted(snapshot_fs.iterate_files()):
             sys.stdout.write(file_data.path + "\n")
+        for file_link_data in sorted(snapshot_fs.iterate_file_links()):
+            sys.stdout.write(file_link_data.path + " -> " + file_link_data.tgt_path + "\n")
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

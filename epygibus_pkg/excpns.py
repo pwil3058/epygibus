@@ -37,6 +37,12 @@ class FileNotFound(Error):
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
 
+class IsSymbolicLink(Error):
+    STR_TEMPLATE = _("Error: path \"{path}\" is a symbolic link to \"{tgt_path}\".")
+    def __init__(self, path, tgt_path):
+        self.path = path
+        self.tgt_path = tgt_path
+
 class FileOverwriteError(Error):
     STR_TEMPLATE = _("Error: file \"{target_file_path}\" already exists. Use --overwrite to overwrite it.")
     def __init__(self, target_file_path):
