@@ -19,7 +19,6 @@ from . import cmd
 
 from .. import config
 from .. import snapshot
-from .. import blobs
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(

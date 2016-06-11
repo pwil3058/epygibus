@@ -78,16 +78,16 @@ class FStatsMixin:
 
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "blob_repo_data"]), FStatsMixin):
     def open_read_only(self):
-        from . import blobs
+        from . import repo
         if not stat.S_ISREG(self.attributes.st_mode):
             raise excpns.NotRegularFile(self.path)
-        with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.open_blob_read_only(self.payload)
     def copy_contents_to(self, target_file_path, overwrite=False):
-        from . import blobs
+        from . import repo
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
-        with blobs.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
@@ -419,13 +419,13 @@ GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data
 
 def generate_snapshot(archive, compress=None, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
     import bmark
-    from . import blobs
+    from . import repo
     if compress is None:
         compress = archive.compress_default
     start_time = bmark.get_os_times()
     previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
-    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
-    with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
+    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
         snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
@@ -579,7 +579,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
-    from . import blobs
+    from . import repo
     archive = config.read_archive_spec(archive_name)
     snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
@@ -589,12 +589,12 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     except:
         raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
-    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
+    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
     return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_repo_data)
 
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     from . import config
-    from . import blobs
+    from . import repo
     archive = config.read_archive_spec(archive_name)
     snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
@@ -607,8 +607,8 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
         raise excpns.LastSnapshot(archive_name, ss_root(snapshot_name))
     snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
     snapshot = read_snapshot(snapshot_file_path)
-    blob_repo_data = blobs.get_blob_repo_data(archive.repo_name)
-    with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
+    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
         os.remove(snapshot_file_path)
         blob_mgr.release_contents(snapshot.iterate_hex_digests())
 

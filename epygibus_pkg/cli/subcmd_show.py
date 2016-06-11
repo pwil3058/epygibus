@@ -19,7 +19,6 @@ from . import cmd
 
 from .. import config
 from .. import snapshot
-from .. import blobs
 from .. import excpns
 from .. import utils
 

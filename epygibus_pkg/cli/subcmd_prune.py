@@ -19,7 +19,7 @@ import sys
 from . import cmd
 
 from .. import config
-from .. import blobs
+from .. import repo
 from .. import excpns
 from .. import utils
 
@@ -32,12 +32,12 @@ cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:
-        blob_repo_data = blobs.get_blob_repo_data(args.repo_name)
+        blob_repo_data = repo.get_blob_repo_data(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     stats = None
-    with blobs.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
         stats = blob_mgr.prune_unreferenced_blobs()
     if not stats:
         sys.stdout.write(_("Nothing to do.\n"))

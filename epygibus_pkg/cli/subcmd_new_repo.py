@@ -17,7 +17,7 @@ import sys
 
 from . import cmd
 
-from .. import blobs
+from .. import repo
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
@@ -44,7 +44,7 @@ cmd.add_cmd_argument(PARSER, cmd.UNCOMPRESSED_ARG())
 
 def run_cmd(args):
     try:
-        blobs.create_new_repo(args.repo_name, args.location_dir_path, compressed=not args.uncompressed)
+        repo.create_new_repo(args.repo_name, args.location_dir_path, compressed=not args.uncompressed)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
     return 0

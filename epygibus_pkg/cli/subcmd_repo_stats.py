@@ -19,7 +19,7 @@ import sys
 from . import cmd
 
 from .. import config
-from .. import blobs
+from .. import repo
 from .. import excpns
 from .. import utils
 
@@ -32,7 +32,7 @@ cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:
-        blob_repo_data = blobs.get_blob_repo_data(args.repo_name)
+        blob_repo_data = repo.get_blob_repo_data(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
@@ -41,7 +41,7 @@ def run_cmd(args):
     total_referenced_size = 0
     total_unreferenced_blobs = 0
     total_unreferenced_size = 0
-    with blobs.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
+    with repo.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
         for hex_digest, ref_count, size in blob_mgr.iterate_hex_digests():
             if ref_count:
                 total_referenced_blobs += 1

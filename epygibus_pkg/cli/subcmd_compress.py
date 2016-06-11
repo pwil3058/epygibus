@@ -20,7 +20,7 @@ from . import cmd
 
 from .. import config
 from .. import snapshot
-from .. import blobs
+from .. import repo
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
@@ -54,9 +54,9 @@ def run_cmd(args):
                     sys.stdout.write(_("Nothing to do.\n"))
         else:
             if args.uncompress:
-                blobs.uncompress_repository(args.repo_name)
+                repo.uncompress_repository(args.repo_name)
             else:
-                blobs.compress_repository(args.repo_name)
+                repo.compress_repository(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
