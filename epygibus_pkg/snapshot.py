@@ -280,7 +280,6 @@ class _SnapshotGenerator(object):
         self.report_skipped_links=report_skipped_links
         self.blob_mgr = blob_mgr
         self.content_count = 0
-        self.adj_content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
@@ -309,7 +308,6 @@ class _SnapshotGenerator(object):
             self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
             return
         self.content_count += file_stats.st_size
-        self.adj_content_count += file_stats.st_size / file_stats.st_nlink
         self.file_count += 1
         files[file_name] = (file_stats, hex_digest)
     def _include_file_link(self, file_links, file_name, file_path):
