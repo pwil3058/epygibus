@@ -82,7 +82,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest",
         if not stat.S_ISREG(self.attributes.st_mode):
             raise excpns.NotRegularFile(self.path)
         with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
-            return blob_mgr.open_blob_read_only(self.payload)
+            return blob_mgr.open_blob_read_only(self.hex_digest)
     def copy_contents_to(self, target_file_path, overwrite=False):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
