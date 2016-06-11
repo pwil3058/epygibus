@@ -29,7 +29,7 @@ class OsTimes(collections.namedtuple("OsTimes", ["utime", "stime", "cutime", "cs
         return OsTimes(*(self[i] + other[i] for i in range(len(self))))
     def get_etd(self):
         cpu_time = self.utime + self.stime
-        return ETD(cpu_time, self.rtime, self.rtime - cpu_time)
+        return ETD(cpu_time, self.rtime, max(self.rtime - cpu_time, 0))
 
 def get_os_times():
     return OsTimes(*os.times())

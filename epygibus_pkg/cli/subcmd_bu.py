@@ -20,6 +20,7 @@ from . import cmd
 from .. import config
 from .. import snapshot
 from .. import excpns
+from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
@@ -59,10 +60,22 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
+    if args.stats:
+        ARCHIVE_HDR = _("Archive")
+        len_longest_name = max(len(max(args.archive_name, key=len)), len(ARCHIVE_HDR))
+        TEMPL = "{:>" + str(len_longest_name) + "}: {}: {}:"
+        sys.stdout.write(" " * (len_longest_name - len(ARCHIVE_HDR)) + ARCHIVE_HDR + ":")
+        sys.stdout.write(_("            Snapshot:   Occupies:   #files    #links      Holding New Blobs    Build(%I/O)      Write\n"))
     for archive_name, archive in archives:
         stats = snapshot.generate_snapshot(archive, use_previous=args.trusting, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=compress)
         if args.stats:
-            sys.stdout.write(_("{0} STATS: {1}\n").format(archive_name, stats))
+            ss_name, ss_size, ss_stats, total_etd = stats
+            sys.stdout.write(TEMPL.format(archive_name, ss_name, utils.format_bytes(ss_size)))
+            nfiles, nlinks, csize, new_blobs, construction_etd = ss_stats
+            sys.stdout.write("{:>9,} {:>9,} {:>12} {:>9,}".format(nfiles, nlinks, utils.format_bytes(csize), new_blobs))
+            pct_io = 100 * construction_etd.io_time / construction_etd.real_time
+            write_etd = total_etd - construction_etd
+            sys.stdout.write("{:>8.2f}s({:>4.1f}%) {:>8.2f}s\n".format(construction_etd.real_time, pct_io, write_etd.real_time))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
