@@ -24,15 +24,10 @@ from .. import excpns
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
     description=_("Take a back up snapshot for the nominated archives."),
-    epilog=_("In general, --trusting will only speed up the taking of a snapshot if the previous snapshot is not compressed due to the time taken to decompress the previous archive.")
+    epilog=_("More than one --archive can be specified, if requited.\n\nIn general, --trusting will only speed up the taking of a snapshot if the previous snapshot is not compressed due to the time taken to decompress the previous archive.")
 )
 
-PARSER.add_argument(
-    "archives",
-    help=_("the name(s) of the archive(s) for which the back up snapshot(s) is/are to be taken."),
-    nargs="+",
-    metavar=_("archive"),
-)
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(help_msg=_("the name of the archive for which the back up snapshot is/are to be taken."), action="append"))
 
 PARSER.add_argument(
     "--stats",
@@ -60,7 +55,7 @@ def run_cmd(args):
     # read all archives in one go so that if any fails checks we do nothing
     compress = True if args.compressed else False if args.uncompressed else None
     try:
-        archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archives]
+        archives = [(archive_name, config.read_archive_spec(archive_name)) for archive_name in args.archive_name]
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

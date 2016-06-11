@@ -35,7 +35,7 @@ PARSER.add_argument(
     version=VERSION
 )
 
-REPO_NAME_ARG = lambda help_msg=("The name of the repository."), required=True : _ARG_SPEC(
+REPO_NAME_ARG = lambda help_msg=_("The name of the repository."), required=True : _ARG_SPEC(
     ["--repo", "-R",],
     {
         "help": help_msg,
@@ -45,12 +45,13 @@ REPO_NAME_ARG = lambda help_msg=("The name of the repository."), required=True :
     }
 )
 
-ARCHIVE_NAME_ARG = lambda help_msg=("The name of the archive."), required=True : _ARG_SPEC(
+ARCHIVE_NAME_ARG = lambda help_msg=_("The name of the archive."), required=True, action="store" : _ARG_SPEC(
     ["--archive", "-A",],
     {
         "help": help_msg,
         "dest": "archive_name",
         "required": required,
+        "action": action,
         "metavar": _("name"),
     }
 )
