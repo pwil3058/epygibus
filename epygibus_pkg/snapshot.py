@@ -142,7 +142,7 @@ class Snapshot(object):
             if name not in self.subdirs:
                 self.subdirs[name] = Snapshot(self, attributes)
             elif self.subdirs[name].attributes is None:
-                # cover the case where it was previously created an way to a leaf dir
+                # cover the case where it was previously created on way to a leaf dir
                 self.subdirs[name].attributes = attributes
             return self.subdirs[name]
         else:
@@ -274,12 +274,11 @@ def get_snapshot_file_list(snapshot_dir_path, reverse=False):
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, prior_snapshot=None, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
+    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
         self.report_skipped_links=report_skipped_links
         self.blob_mgr = blob_mgr
-        self.prior_snapshot = prior_snapshot if prior_snapshot else Snapshot()
         self.content_count = 0
         self.adj_content_count = 0
         self.file_count = 0
@@ -300,20 +299,15 @@ class _SnapshotGenerator(object):
         num_new_citems = sum(self.end_counts[:-1]) - sum(self.start_counts[:-1])
         num_released_citems = self.end_counts[1] - self.start_counts[1]
         return SnapshotStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_citems, num_released_citems, self.elapsed_time.get_etd())
-    def _include_file(self, files, file_name, file_path, prior_files):
+    def _include_file(self, files, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         file_stats = os.lstat(file_path)
-        prior_file = prior_files.get(file_name, None)
-        if prior_file and (prior_file[0].st_size == file_stats.st_size) and (prior_file[0].st_mtime == file_stats.st_mtime):
-            hex_digest = prior_file[1]
-            self.blob_mgr.incr_ref_count(hex_digest)
-        else:
-            try: # it's possible content manager got environment error reading file, if so skip it and report
-                hex_digest = self.blob_mgr.store_contents(file_path)
-            except EnvironmentError as edata:
-                self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
-                return
+        try: # it's possible content manager got environment error reading file, if so skip it and report
+            hex_digest = self.blob_mgr.store_contents(file_path)
+        except EnvironmentError as edata:
+            self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
+            return
         self.content_count += file_stats.st_size
         self.adj_content_count += file_stats.st_size / file_stats.st_nlink
         self.file_count += 1
@@ -343,8 +337,6 @@ class _SnapshotGenerator(object):
             if self.is_excluded_dir(dir_path):
                 continue
             new_subdir = self._snapshot.add_subdir(dir_path, os.lstat(dir_path))
-            prior_dir = self.prior_snapshot.find_dir(dir_path)
-            prior_files = {} if prior_dir is None else prior_dir.files
             for file_name in file_names:
                 # NB: checking both name AND full path of file for exclusion
                 if self.is_excluded_file(file_name):
@@ -356,7 +348,7 @@ class _SnapshotGenerator(object):
                     if os.path.islink(file_path):
                         self._include_file_link(new_subdir.file_links, file_name, file_path)
                     else:
-                        self._include_file(new_subdir.files, file_name, file_path, prior_files)
+                        self._include_file(new_subdir.files, file_name, file_path)
                 except OSError as edata:
                     # race condition
                     if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -387,10 +379,8 @@ class _SnapshotGenerator(object):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
         files = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).files
-        prior_dir = self.prior_snapshot.find_dir(abs_dir_path)
-        prior_files = {} if prior_dir is None else prior_dir.files
         try:
-            self._include_file(files, file_name, abs_file_path, prior_files)
+            self._include_file(files, file_name, abs_file_path)
         except OSError as edata:
             # race condition
             if edata.errno not in self.FORGIVEABLE_ERRNOS:
@@ -417,16 +407,15 @@ class _SnapshotGenerator(object):
 
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
 
-def generate_snapshot(archive, compress=None, use_previous=True, stderr=sys.stderr, report_skipped_links=True):
+def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
     import bmark
     from . import repo
     if compress is None:
         compress = archive.compress_default
     start_time = bmark.get_os_times()
-    previous_snapshot = read_most_recent_snapshot(archive.snapshot_dir_path) if use_previous else None
     blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
     with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, previous_snapshot, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
+        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
             if os.path.islink(abs_item):

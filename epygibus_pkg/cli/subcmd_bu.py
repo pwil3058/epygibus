@@ -25,7 +25,7 @@ from .. import utils
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "bu",
     description=_("Take a back up snapshot for the nominated archives."),
-    epilog=_("More than one --archive can be specified, if requited.\n\nIn general, --trusting will only speed up the taking of a snapshot if the previous snapshot is not compressed due to the time taken to decompress the previous archive.")
+    epilog=_("More than one --archive can be specified, if requited.")
 )
 
 cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(help_msg=_("the name of the archive for which the back up snapshot is/are to be taken."), action="append"))
@@ -33,12 +33,6 @@ cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(help_msg=_("the name of the ar
 PARSER.add_argument(
     "--stats",
     help=_("print the statistics for reach archive."),
-    action="store_true"
-)
-
-PARSER.add_argument(
-    "--trusting",
-    help=_("use data (size, m_time) from previous snapshot to (possibly) speed up content processing."),
     action="store_true"
 )
 
@@ -64,11 +58,11 @@ def run_cmd(args):
         ARCHIVE_HDR = _("Archive")
         len_longest_name = max(len(max(args.archive_name, key=len)), len(ARCHIVE_HDR))
         TEMPL = "{:>" + str(len_longest_name) + "}: {}: {}:"
-        sys.stdout.write(" " * (len_longest_name - len(ARCHIVE_HDR) + 78) + "Content Items\n")
+        sys.stdout.write(" " * (len_longest_name - len(ARCHIVE_HDR) + 75) + "Content Items         Time Taken\n")
         sys.stdout.write(" " * (len_longest_name - len(ARCHIVE_HDR)) + ARCHIVE_HDR + ":")
-        sys.stdout.write(_("            Snapshot:   Occupies:   #files    #links      Holding  #Created #Released    Build(%I/O)      Write\n"))
+        sys.stdout.write(_("            Snapshot:   Occupies:   #files    #links      Holding  #Created #Released    Build(%I/O)     Write\n"))
     for archive_name, archive in archives:
-        stats = snapshot.generate_snapshot(archive, use_previous=args.trusting, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=compress)
+        stats = snapshot.generate_snapshot(archive, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=compress)
         if args.stats:
             ss_name, ss_size, ss_stats, total_etd = stats
             sys.stdout.write(TEMPL.format(archive_name, ss_name, utils.format_bytes(ss_size)))
@@ -76,7 +70,7 @@ def run_cmd(args):
             sys.stdout.write("{:>9,} {:>9,} {:>12} {:>9,} {:>9,}".format(nfiles, nlinks, utils.format_bytes(csize), new_blobs, rel_blobs))
             pct_io = 100 * construction_etd.io_time / construction_etd.real_time
             write_etd = total_etd - construction_etd
-            sys.stdout.write("{:>8.2f}s({:>4.1f}%) {:>8.2f}s\n".format(construction_etd.real_time, pct_io, write_etd.real_time))
+            sys.stdout.write("{:>8.2f}s({:>4.1f}) {:>8.2f}s\n".format(construction_etd.real_time, pct_io, write_etd.real_time))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
