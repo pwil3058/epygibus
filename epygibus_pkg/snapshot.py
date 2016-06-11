@@ -330,7 +330,7 @@ class _SnapshotGenerator(object):
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
         self.file_slink_count += 1
-        file_links[file_name] = (os.lstat(file_path), target_file_path)
+        file_links[file_name] = (os.lstat(file_path), target_path)
     def _include_subdir_link(self, subdir_links, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
