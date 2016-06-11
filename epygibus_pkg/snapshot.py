@@ -83,12 +83,15 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest",
             raise excpns.NotRegularFile(self.path)
         with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.open_blob_read_only(self.hex_digest)
-    def copy_contents_to(self, target_file_path, overwrite=False):
+    def copy_contents_to(self, target_file_path, overwrite=False, locked_blob_mgr=None):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
-        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
-            blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
+        if locked_blob_mgr:
+            locked_blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
+        else:
+            with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
+                blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
@@ -307,7 +310,7 @@ class _SnapshotGenerator(object):
             hex_digest = prior_file[1]
             self.blob_mgr.incr_ref_count(hex_digest)
         else:
-            try: # it's possible blob manager got environment error reading file, if so skip it and report
+            try: # it's possible content manager got environment error reading file, if so skip it and report
                 hex_digest, was_new_blob = self.blob_mgr.store_contents(file_path)
                 if was_new_blob:
                     self.new_blob_count += 1
@@ -526,6 +529,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield slink
     def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr):
+        from . import repo
         # Create the target directory if necessary
         create_dir = True
         if os.path.exists(target_dir_path):
@@ -559,18 +563,19 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # Now copy the files
         hard_links = dict()
-        for file_data in self.iterate_files(target_dir_path, True):
-            try:
-                if file_data.is_hard_linked:
-                    if file_data.inode in hard_links:
-                        os.link(hard_links[file_data.inode].path, file_data.path)
-                        continue
-                    else:
-                        hard_links[file_data.inode] = file_data
-                file_data.copy_contents_to(file_data.path, overwrite=overwrite)
-            except EnvironmentError as edata:
-                # report the error and move on (we have permission to wreak havoc)
-                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
+            for file_data in self.iterate_files(target_dir_path, True):
+                try:
+                    if file_data.is_hard_linked:
+                        if file_data.inode in hard_links:
+                            os.link(hard_links[file_data.inode].path, file_data.path)
+                            continue
+                        else:
+                            hard_links[file_data.inode] = file_data
+                    file_data.copy_contents_to(file_data.path, overwrite=overwrite, locked_blob_mgr=blob_mgr)
+                except EnvironmentError as edata:
+                    # report the error and move on (we have permission to wreak havoc)
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         orig_curdir = os.getcwd()
         for file_link_data in self.iterate_file_links(target_dir_path, True):
             file_link_data.create_link(orig_curdir, stderr)
