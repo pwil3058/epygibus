@@ -289,18 +289,20 @@ class _SnapshotGenerator(object):
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
-        self.new_blob_count = 0
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
         self.stderr = stderr
+        self.start_counts = blob_mgr.get_counts()
     def finish(self, elapsed_time):
         self.elapsed_time = elapsed_time
+        self.end_counts = self.blob_mgr.get_counts()
     @property
     def snapshot_plus(self):
         return SnapshotPlus(self._snapshot, self.statistics)
     @property
     def statistics(self):
-        return SnapshotStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.new_blob_count, self.elapsed_time.get_etd())
+        num_new_content_items = sum(self.end_counts[:-1]) - sum(self.start_counts[:-1])
+        return SnapshotStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_content_items, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path, prior_files):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -311,9 +313,7 @@ class _SnapshotGenerator(object):
             self.blob_mgr.incr_ref_count(hex_digest)
         else:
             try: # it's possible content manager got environment error reading file, if so skip it and report
-                hex_digest, was_new_blob = self.blob_mgr.store_contents(file_path)
-                if was_new_blob:
-                    self.new_blob_count += 1
+                hex_digest = self.blob_mgr.store_contents(file_path)
             except EnvironmentError as edata:
                 self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
                 return

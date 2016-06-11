@@ -62,7 +62,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 with open(file_path, "w") as fobj:
                     fobj.write(contents)
             os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
-        return (hex_digest, needs_write)
+        return hex_digest
     def incr_ref_count(self, hex_digest):
         assert self.writeable
         dir_name, file_name = _split_hex_digest(hex_digest)
@@ -84,6 +84,18 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 except EnvironmentError:
                     size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, file_name))
                 yield (dir_name + file_name, count, size)
+    def get_counts(self):
+        num_refed = 0
+        num_unrefed = 0
+        ref_total = 0
+        for dir_name, dir_data in self.ref_counter.items():
+            for _dont_care, count in dir_data.items():
+                if count:
+                    ref_total += count
+                    num_refed += 1
+                else:
+                    num_unrefed += 1
+        return (num_refed, num_unrefed, ref_total)
     def prune_unreferenced_blobs(self):
         assert self.writeable
         blob_count = 0
