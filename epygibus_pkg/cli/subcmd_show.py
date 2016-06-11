@@ -56,9 +56,9 @@ def run_cmd(args):
         for name, size, statistics in snapshot.iter_snapshot_list(archive.name, reverse=False):
             if first:
                 first = False
-                sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds New Blobs   CPU Time Total Time    IO Time\n"))
-            nfiles, nlinks, csize, new_blobs, etd = statistics
-            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_blobs, *etd))
+                sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds New Citem Rel Citem   CPU Time Total Time    IO Time\n"))
+            nfiles, nlinks, csize, new_blobs, rel_blobs, etd = statistics
+            sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_blobs, rel_blobs, *etd))
         if first:
             sys.stdout.write(_("Snapshots: None\n"))
     except excpns.Error as edata:
