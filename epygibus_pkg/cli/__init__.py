@@ -14,7 +14,7 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 # This should be the only place that subcmd_* modules should be imported
-# as this is sufficient to activate them.
+# as this is sufficient to activate them. (Implementation order.)
 from . import subcmd_bu
 from . import subcmd_new_repo
 from . import subcmd_cat
@@ -22,6 +22,7 @@ from . import subcmd_new
 from . import subcmd_la
 from . import subcmd_ldc
 from . import subcmd_del
+# TODO: comment out "list_blobs" (only useful for debugging)
 from . import subcmd_list_blobs
 from . import subcmd_repo_stats
 from . import subcmd_prune
@@ -30,3 +31,4 @@ from . import subcmd_extract
 from . import subcmd_compress
 from . import subcmd_restore
 from . import subcmd_edit
+from . import subcmd_lss

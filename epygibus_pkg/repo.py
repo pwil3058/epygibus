@@ -33,7 +33,7 @@ class CIS(collections.namedtuple("CIS", ["stored_size", "ref_count"])):
     @property
     def stored_size_per_ref(self):
         if self.ref_count > 1:
-            return self.stored_size / self.ref_count
+            return float(self.stored_size) / self.ref_count
         else:
             return self.stored_size
     def __add__(self, other):

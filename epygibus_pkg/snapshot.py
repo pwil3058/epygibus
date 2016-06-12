@@ -125,9 +125,9 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
             # report the error and move on (we have permission to wreak havoc)
             stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
 
-class SnapshotStats(collections.namedtuple("SnapshotStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
+class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
     def __add__(self, other):
-        return SnapshotStats(*[self[i] + other[i] for i in range(len(self))])
+        return CreationStats(*[self[i] + other[i] for i in range(len(self))])
 
 class Snapshot(object):
     def __init__(self, parent=None, attributes=None):
@@ -183,20 +183,6 @@ class Snapshot(object):
         for subdir in self.subdirs.values():
             for hex_digest in subdir.iterate_hex_digests():
                 yield hex_digest
-    def get_statistics(self):
-        statistics = SnapshotStats(0, 0, 0, 0, 0, bmark.ETD(0, 0, 0))
-        for data in self.files.values():
-            if stat.S_ISREG(data[0].st_mode):
-                statistics += (1, 0, data[0].st_size, 0, 0, bmark.ETD(0, 0, 0))
-            else:
-                statistics += (0, 1, 0, 0, 0, bmark.ETD(0, 0, 0))
-        for data in self.file_links.values():
-            statistics += (0, 1, 0, 0, 0, bmark.ETD(0, 0, 0))
-        for data in self.subdir_links.values():
-            statistics += (0, 1, 0, 0, 0, bmark.ETD(0, 0, 0))
-        for subdir in self.subdirs.values():
-            statistics += subdir.get_statistics()
-        return statistics
 
 class SnapshotPlus(object):
     # limit the number of none basic python types to future proof
@@ -205,8 +191,8 @@ class SnapshotPlus(object):
         self._statistics = tuple(statistics[0:-1])
         self._time_statistics = tuple(statistics[-1][0:])
     @property
-    def statistics(self):
-        return SnapshotStats(*(self._statistics + (self.time_statistics,)))
+    def creation_stats(self):
+        return CreationStats(*(self._statistics + (self.time_statistics,)))
     @property
     def time_statistics(self):
         return bmark.ETD(*self._time_statistics)
@@ -232,8 +218,6 @@ class SnapshotPlus(object):
         return self.snapshot.find_file_link(file_path)
     def iterate_hex_digests(self):
         return self.snapshot.iterate_hex_digests()
-    def get_statistics(self):
-        return self.statistics
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -270,7 +254,7 @@ def read_most_recent_snapshot(snapshot_dir_path):
         return read_snapshot(os.path.join(snapshot_dir_path, sorted(candidates, reverse=True)[0]))
     return Snapshot()
 
-def get_snapshot_file_list(snapshot_dir_path, reverse=False):
+def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
 
 class _SnapshotGenerator(object):
@@ -294,12 +278,12 @@ class _SnapshotGenerator(object):
         self.end_counts = self.blob_mgr.get_counts()
     @property
     def snapshot_plus(self):
-        return SnapshotPlus(self._snapshot, self.statistics)
+        return SnapshotPlus(self._snapshot, self.creation_stats)
     @property
-    def statistics(self):
+    def creation_stats(self):
         num_new_citems = sum(self.end_counts[:-1]) - sum(self.start_counts[:-1])
         num_released_citems = self.end_counts[1] - self.start_counts[1]
-        return SnapshotStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_citems, num_released_citems, self.elapsed_time.get_etd())
+        return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_citems, num_released_citems, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -444,7 +428,11 @@ def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_
             stderr.write("{}\n".format(edata))
         finally:
             elapsed_time = bmark.get_os_times() - start_time
-        return GSS(snapshot_name, snapshot_size, snapshot_generator.statistics, elapsed_time.get_etd())
+        return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
+
+class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_count", "content_bytes", "stored_bytes", "stored_bytes_share"])):
+    def __add__(self, other):
+        return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_repo_data"]), FStatsMixin):
     @property
@@ -567,12 +555,23 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             file_link_data.create_link(orig_curdir, stderr)
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
             subdir_link_data.create_link(orig_curdir, stderr)
+    def get_statistics(self):
+        # ["file_count", "soft_link_count", "content_bytes", "stored_bytes", "stored_bytes_share"]
+        statistics = SSFSStats(0, 0, 0, 0, 0)
+        for file_data in self.iterate_files(recurse=True):
+            cis = file_data.get_contents_storage_stats()
+            statistics += (1, 0, file_data.size, cis.stored_size, cis.stored_size_per_ref)
+        for link_data in self.iterate_file_links(recurse=True):
+            statistics += (0, 1, 0, 0, 0)
+        for link_data in self.iterate_subdir_links(recurse=True):
+            statistics += (0, 1, 0, 0, 0)
+        return statistics
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
     from . import repo
     archive = config.read_archive_spec(archive_name)
-    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
     try:
@@ -581,13 +580,27 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
         raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
     blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
-    return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, blob_repo_data)
+    return SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, blob_repo_data)
+
+def iter_snapshot_fs_list(archive_name, reverse=False):
+    from . import config
+    from . import repo
+    archive = config.read_archive_spec(archive_name)
+    snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)
+    if not snapshot_names:
+        raise excpns.EmptyArchive(archive_name)
+    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
+    for snapshot_name in snapshot_names:
+        snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
+        snapshot = read_snapshot(snapshot_file_path)
+        snapshot_fs = SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, blob_repo_data)
+        yield (snapshot_fs, os.path.getsize(snapshot_file_path))
 
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     from . import config
     from . import repo
     archive = config.read_archive_spec(archive_name)
-    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
     try:
@@ -607,16 +620,16 @@ def iter_snapshot_list(archive_name, reverse=False):
     from . import config
     archive = config.read_archive_spec(archive_name)
     ss_list = []
-    for snapshot_name in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse):
+    for snapshot_name in _get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse):
         snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
         snapshot_size = os.path.getsize(snapshot_file_path)
-        snapshot_stats = read_snapshot(snapshot_file_path).get_statistics()
+        snapshot_stats = read_snapshot(snapshot_file_path).creation_stats
         yield (ss_root(snapshot_name), snapshot_size, snapshot_stats)
 
 def get_snapshot_name_list(archive_name, reverse=False):
     from . import config
     archive = config.read_archive_spec(archive_name)
-    return [(ss_root(f), f.endswith(".gz")) for f in get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
+    return [(ss_root(f), f.endswith(".gz")) for f in _get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)]
 
 def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exclude_dir_globs=None, exclude_file_globs=None, skip_broken_sl=True, compress_default=True):
     from . import config
@@ -675,7 +688,7 @@ def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sy
 def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
     archive = config.read_archive_spec(archive_name)
-    snapshot_names = get_snapshot_file_list(archive.snapshot_dir_path)
+    snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
     try:
