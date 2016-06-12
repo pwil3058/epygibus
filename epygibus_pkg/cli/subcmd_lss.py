@@ -69,9 +69,9 @@ def run_cmd(args):
             for snapshot_fs, size in snapshot.iter_snapshot_fs_list(args.archive_name, args.newest_first):
                 if first:
                     first = False
-                    sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds       Stored        Share\n"))
-                nfiles, nlinks, csize, stored_size, share = snapshot_fs.get_statistics()
-                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>12} {:>12}\n".format(snapshot_fs.snapshot_name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), utils.format_bytes(stored_size), utils.format_bytes(share)))
+                    sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds    #Items       Stored        Share\n"))
+                nfiles, nlinks, csize, n_citems, stored_size, share = snapshot_fs.get_statistics()
+                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>12} {:>12}\n".format(snapshot_fs.snapshot_name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), n_citems, utils.format_bytes(stored_size), utils.format_bytes(share)))
         except excpns.Error as edata:
             sys.stderr.write(str(edata) + "\n")
             sys.exit(-1)

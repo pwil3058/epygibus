@@ -430,7 +430,7 @@ def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_
             elapsed_time = bmark.get_os_times() - start_time
         return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
 
-class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_count", "content_bytes", "stored_bytes", "stored_bytes_share"])):
+class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_count", "content_bytes", "n_citems", "stored_bytes", "stored_bytes_share"])):
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
@@ -556,16 +556,27 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
             subdir_link_data.create_link(orig_curdir, stderr)
     def get_statistics(self):
-        # ["file_count", "soft_link_count", "content_bytes", "stored_bytes", "stored_bytes_share"]
-        statistics = SSFSStats(0, 0, 0, 0, 0)
-        for file_data in self.iterate_files(recurse=True):
-            cis = file_data.get_contents_storage_stats()
-            statistics += (1, 0, file_data.size, cis.stored_size, cis.stored_size_per_ref)
+        from . import repo
+        ck_set = set()
+        n_files = 0
+        n_bytes = 0
+        n_stored_bytes = 0
+        n_share_bytes = 0
+        with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
+            for file_data in self.iterate_files(recurse=True):
+                n_files += 1
+                n_bytes += file_data.size
+                cis = blob_mgr.get_content_storage_stats(file_data.hex_digest)
+                n_share_bytes += cis.stored_size_per_ref
+                if not file_data.hex_digest in ck_set:
+                    n_stored_bytes += cis.stored_size
+                    ck_set.add(file_data.hex_digest)
+        n_links = 0
         for link_data in self.iterate_file_links(recurse=True):
-            statistics += (0, 1, 0, 0, 0)
+            n_links += 1
         for link_data in self.iterate_subdir_links(recurse=True):
-            statistics += (0, 1, 0, 0, 0)
-        return statistics
+            n_links += 1
+        return SSFSStats(n_files, n_links, n_bytes, len(ck_set), n_stored_bytes, n_share_bytes)
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
