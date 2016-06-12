@@ -43,8 +43,8 @@ XGROUP.add_argument(
 )
 
 XGROUP.add_argument(
-    "--stats",
-    help=_("show statistics."),
+    "--storage_stats",
+    help=_("show storage statistics."),
     action="store_true"
 )
 
@@ -63,7 +63,7 @@ def run_cmd(args):
         except excpns.Error as edata:
             sys.stderr.write(str(edata) + "\n")
             sys.exit(-1)
-    elif args.stats:
+    elif args.storage_stats:
         try:
             first = True
             for snapshot_fs, size in snapshot.iter_snapshot_fs_list(args.archive_name, args.newest_first):

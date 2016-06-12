@@ -93,7 +93,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest",
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
-    def get_contents_storage_stats(self):
+    def get_content_storage_stats(self):
         from . import repo
         with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.get_content_storage_stats(self.hex_digest)
@@ -562,6 +562,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         n_bytes = 0
         n_stored_bytes = 0
         n_share_bytes = 0
+        # NB not using SFile.get_content_storage_stats() for LOCKING efficiency reasons
         with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
             for file_data in self.iterate_files(recurse=True):
                 n_files += 1
