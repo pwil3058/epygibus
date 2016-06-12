@@ -29,6 +29,16 @@ _split_hex_digest = lambda hex_digest: (hex_digest[:2], hex_digest[2:])
 
 BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
+class CIS(collections.namedtuple("CIS", ["stored_size", "ref_count"])):
+    @property
+    def stored_size_per_ref(self):
+        if self.ref_count > 1:
+            return self.stored_size / self.ref_count
+        else:
+            return self.stored_size
+    def __add__(self, other):
+        return CIS(*[self[i] + other[i] for i in range(len(self))])
+
 def get_blob_repo_data(repo_name):
     from . import config
     from . import excpns
@@ -62,7 +72,25 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 with open(file_path, "w") as fobj:
                     fobj.write(contents)
             os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
+        # NB returning content storage stats here has been tried and
+        # rejected due to time penalties (3 orders of magnitude) on
+        # slow file systems such as cifs mounted network devices
         return hex_digest
+    def _content_stored_size(self, dir_name, file_name):
+        file_path = os.path.join(self.base_dir_path, dir_name, file_name)
+        if self.compressed: # try compressed first
+            try: # but allow for the case that they've been uncompressed
+                return os.path.getsize(file_path + ".gz")
+            except EnvironmentError:
+                return os.path.getsize(file_path)
+        else: # try uncompressed first
+            try: # but allow for the case that they've been compressed
+                return os.path.getsize(file_path)
+            except EnvironmentError:
+                return os.path.getsize(file_path + ".gz")
+    def get_content_storage_stats(self, hex_digest):
+        dir_name, file_name = _split_hex_digest(hex_digest)
+        return CIS(self._content_stored_size(dir_name, file_name), self.ref_counter[dir_name][file_name])
     def release_content(self, hex_digest):
         assert self.writeable
         dir_name, file_name = _split_hex_digest(hex_digest)

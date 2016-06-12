@@ -79,8 +79,6 @@ class FStatsMixin:
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "blob_repo_data"]), FStatsMixin):
     def open_read_only(self):
         from . import repo
-        if not stat.S_ISREG(self.attributes.st_mode):
-            raise excpns.NotRegularFile(self.path)
         with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
             return blob_mgr.open_blob_read_only(self.hex_digest)
     def copy_contents_to(self, target_file_path, overwrite=False, locked_blob_mgr=None):
@@ -95,6 +93,10 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest",
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
+    def get_contents_storage_stats(self):
+        from . import repo
+        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
+            return blob_mgr.get_content_storage_stats(self.hex_digest)
 
 class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
     def create_link(self, orig_curdir, stderr):
