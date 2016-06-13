@@ -132,3 +132,9 @@ def get_exclude_dirs_file_path(archive_name):
 
 def get_exclude_files_file_path(archive_name):
     return _archive_exclude_files_path(archive_name)
+
+def get_archive_name_list():
+    return [name for name in os.listdir(_ARCHIVES_DIR_PATH) if os.path.isdir(os.path.join(_ARCHIVES_DIR_PATH, name))]
+
+def get_repo_name_list():
+    return [name for name in os.listdir(_REPOS_DIR_PATH) if os.path.isfile(os.path.join(_REPOS_DIR_PATH, name))]

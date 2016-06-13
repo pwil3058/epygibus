@@ -18,34 +18,21 @@ import sys
 from . import cmd
 
 from .. import config
-from .. import snapshot
 from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "la",
-    description=_("List the available snapshots in the nominated archive."),
-    epilog=_("Snapshots will be listed in newest to oldest order unless specified otherwise."),
+    description=_("List the names of the available snapshot archives."),
 )
-
-PARSER.add_argument(
-    "--oldest_first",
-    help=_("list snapshots in oldest to newest order."),
-    action="store_false"
-)
-
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshots are to be listed.")))
 
 def run_cmd(args):
     try:
-        snapshot_data_list = snapshot.get_snapshot_name_list(args.archive_name, reverse=args.oldest_first)
+        archive_name_list = config.get_archive_name_list()
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    for snapshot_data in snapshot_data_list:
-        if snapshot_data[1]:
-            sys.stdout.write("{}**\n".format(snapshot_data[0]))
-        else:
-            sys.stdout.write("{}\n".format(snapshot_data[0]))
+    for archive_name in archive_name_list:
+        sys.stdout.write("{}\n".format(archive_name))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
