@@ -25,7 +25,7 @@ _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
 _ref_counter_path = lambda base_dir_path: os.path.join(base_dir_path, _REF_COUNTER_FILE_NAME)
 _lock_file_path = lambda base_dir_path: os.path.join(base_dir_path, _LOCK_FILE_NAME)
-_split_hex_digest = lambda hex_digest: (hex_digest[:2], hex_digest[2:])
+_split_hex_digest = lambda hex_digest: (hex_digest[:2], hex_digest[2:4], hex_digest[4:])
 
 BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
@@ -50,20 +50,25 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         assert self.writeable
         contents = open(file_path, "r").read()
         hex_digest = hashlib.sha1(contents).hexdigest()
-        dir_name, file_name = _split_hex_digest(hex_digest)
+        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
         dir_path = os.path.join(self.base_dir_path, dir_name)
+        subdir_path = os.path.join(dir_path, subdir_name)
         needs_write = True
         if dir_name not in self.ref_counter:
-            self.ref_counter[dir_name] = { file_name : 1 }
+            self.ref_counter[dir_name] = { subdir_name : { file_name : 1 }}
             os.mkdir(dir_path)
-        elif file_name not in self.ref_counter[dir_name]:
-            self.ref_counter[dir_name][file_name] = 1
+            os.mkdir(subdir_path)
+        elif subdir_name not in self.ref_counter[dir_name]:
+            self.ref_counter[dir_name][subdir_name] = { file_name : 1 }
+            os.mkdir(subdir_path)
+        elif file_name not in self.ref_counter[dir_name][subdir_name]:
+            self.ref_counter[dir_name][subdir_name][file_name] = 1
         else:
-            self.ref_counter[dir_name][file_name] += 1
+            self.ref_counter[dir_name][subdir_name][file_name] += 1
             needs_write = False
         if needs_write:
             import stat
-            file_path = os.path.join(dir_path, file_name)
+            file_path = os.path.join(subdir_path, file_name)
             if self.compressed:
                 file_path += ".gz"
                 with gzip.open(file_path, "w") as fobj:
@@ -76,8 +81,8 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         # rejected due to time penalties (3 orders of magnitude) on
         # slow file systems such as cifs mounted network devices
         return hex_digest
-    def _content_stored_size(self, dir_name, file_name):
-        file_path = os.path.join(self.base_dir_path, dir_name, file_name)
+    def _content_stored_size(self, *hex_parts):
+        file_path = os.path.join(self.base_dir_path, *hex_parts)
         if self.compressed: # try compressed first
             try: # but allow for the case that they've been uncompressed
                 return os.path.getsize(file_path + ".gz")
@@ -89,54 +94,58 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             except EnvironmentError:
                 return os.path.getsize(file_path + ".gz")
     def get_content_storage_stats(self, hex_digest):
-        dir_name, file_name = _split_hex_digest(hex_digest)
-        return CIS(self._content_stored_size(dir_name, file_name), self.ref_counter[dir_name][file_name])
+        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+        return CIS(self._content_stored_size(dir_name, subdir_name, file_name), self.ref_counter[dir_name][subdir_name][file_name])
     def release_content(self, hex_digest):
         assert self.writeable
-        dir_name, file_name = _split_hex_digest(hex_digest)
-        self.ref_counter[dir_name][file_name] -= 1
+        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+        self.ref_counter[dir_name][subdir_name][file_name] -= 1
     def release_contents(self, hex_digests):
         assert self.writeable
         for hex_digest in hex_digests:
-            dir_name, file_name = _split_hex_digest(hex_digest)
-            self.ref_counter[dir_name][file_name] -= 1
+            dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+            self.ref_counter[dir_name][subdir_name][file_name] -= 1
     def iterate_hex_digests(self):
         for dir_name, dir_data in self.ref_counter.items():
-            for file_name, count in dir_data.items():
-                try:
-                    size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, file_name + ".gz"))
-                except EnvironmentError:
-                    size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, file_name))
-                yield (dir_name + file_name, count, size)
+            for subdir_name, subdir_data in dir_data.items():
+                for file_name, count in subdir_data.items():
+                    try:
+                        size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name + ".gz"))
+                    except EnvironmentError:
+                        size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name))
+                    yield (dir_name + subdir_name + file_name, count, size)
     def get_counts(self):
         num_refed = 0
         num_unrefed = 0
         ref_total = 0
-        for dir_name, dir_data in self.ref_counter.items():
-            for _dont_care, count in dir_data.items():
-                if count:
-                    ref_total += count
-                    num_refed += 1
-                else:
-                    num_unrefed += 1
+        for dir_data in self.ref_counter.values():
+            for subdir_data in dir_data.values():
+                for count in subdir_data.values():
+                    if count:
+                        ref_total += count
+                        num_refed += 1
+                    else:
+                        num_unrefed += 1
         return (num_refed, num_unrefed, ref_total)
     def prune_unreferenced_blobs(self):
         assert self.writeable
         blob_count = 0
         total_bytes = 0
         for dir_name, dir_data in self.ref_counter.items():
-            for file_name, count in dir_data.items():
-                if count: continue
-                blob_count += 1
-                file_path = os.path.join(self.base_dir_path, dir_name, file_name)
-                total_bytes += os.path.getsize(file_path)
-                try:
-                    os.remove(file_path)
-                except EnvironmentError as edata:
-                    if edata.errno != errno.ENOENT:
-                        raise edata
-                    os.remove(file_path + ".gz")
-                del dir_data[file_name]
+            for subdir_name, subdir_data in dir_data.items():
+                for file_name, count in subdir_data.items():
+                    if count: continue
+                    blob_count += 1
+                    file_path = os.path.join(self.base_dir_path, dir_name, subdir_name, file_name)
+                    try: # try the default first
+                        total_bytes += os.path.getsize(file_path + ".gz")
+                        os.remove(file_path + ".gz")
+                    except EnvironmentError as edata:
+                        if edata.errno != errno.ENOENT:
+                            raise edata
+                        total_bytes += os.path.getsize(file_path)
+                        os.remove(file_path)
+                    del subdir_data[file_name]
         return (blob_count, total_bytes) #if blob_count else None
     def open_blob_read_only(self, hex_digest):
         # NB since this doen't use ref count data it doesn't need locking
@@ -201,19 +210,25 @@ def compress_repository(repo_name):
     brd = get_blob_repo_data(repo_name)
     for entry_name in os.listdir(brd.base_dir_path):
         entry_path = os.path.join(brd.base_dir_path, entry_name)
-        if os.path.isdir(entry_path):
-            with open_blob_repo(brd, True): # don't hog the lock
-                for file_name in os.listdir(entry_path):
+        if not os.path.isdir(entry_path): continue
+        with open_blob_repo(brd, True): # don't hog the lock
+            for subdir_name in os.listdir(entry_path):
+                subdir_path = os.path.join(entry_path, subdir_name)
+                if not os.path.isdir(subdir_path): continue
+                for file_name in os.listdir(subdir_path):
                     if not file_name.endswith(".gz"):
-                        utils.compress_file(os.path.join(entry_path, file_name))
+                        utils.compress_file(os.path.join(subdir_path, file_name))
 
 def uncompress_repository(repo_name):
     from . import utils
     brd = get_blob_repo_data(repo_name)
     for entry_name in os.listdir(brd.base_dir_path):
         entry_path = os.path.join(brd.base_dir_path, entry_name)
-        if os.path.isdir(entry_path):
-            with open_blob_repo(brd, True): # don't hog the lock
-                for file_name in os.listdir(entry_path):
+        if not os.path.isdir(entry_path): continue
+        with open_blob_repo(brd, True): # don't hog the lock
+            for subdir_name in os.listdir(entry_path):
+                subdir_path = os.path.join(entry_path, subdir_name)
+                if not os.path.isdir(subdir_path): continue
+                for file_name in os.listdir(subdir_path):
                     if file_name.endswith(".gz"):
-                        utils.uncompress_file(os.path.join(entry_path, file_name))
+                        utils.uncompress_file(os.path.join(subdir_path, file_name))

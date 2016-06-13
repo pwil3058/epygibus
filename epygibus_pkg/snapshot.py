@@ -281,8 +281,8 @@ class _SnapshotGenerator(object):
         return SnapshotPlus(self._snapshot, self.creation_stats)
     @property
     def creation_stats(self):
-        num_new_citems = sum(self.end_counts[:-1]) - sum(self.start_counts[:-1])
-        num_released_citems = self.end_counts[1] - self.start_counts[1]
+        num_new_citems = max(sum(self.end_counts[:-1]) - sum(self.start_counts[:-1]), 0)
+        num_released_citems = max(self.end_counts[1] - self.start_counts[1], 0)
         return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_citems, num_released_citems, self.elapsed_time.get_etd())
     def _include_file(self, files, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
