@@ -13,23 +13,26 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
-# This should be the only place that subcmd_* modules should be imported
-# as this is sufficient to activate them. (Implementation order.)
-from . import subcmd_bu
-from . import subcmd_new_repo
-from . import subcmd_cat
-from . import subcmd_new
-from . import subcmd_la
-from . import subcmd_ldc
-from . import subcmd_del
-# TODO: comment out "list_blobs" (only useful for debugging)
-from . import subcmd_list_blobs
-from . import subcmd_repo_stats
-from . import subcmd_prune
-from . import subcmd_show
-from . import subcmd_extract
-from . import subcmd_compress
-from . import subcmd_restore
-from . import subcmd_edit
-from . import subcmd_lss
-from . import subcmd_lr
+import sys
+
+from . import cmd
+
+from .. import config
+from .. import excpns
+
+PARSER = cmd.SUB_CMD_PARSER.add_parser(
+    "lr",
+    description=_("List the names of the available content repositories."),
+)
+
+def run_cmd(args):
+    try:
+        repo_name_list = config.get_repo_name_list()
+    except excpns.Error as edata:
+        sys.stderr.write(str(edata) + "\n")
+        sys.exit(-1)
+    for repo_name in repo_name_list:
+        sys.stdout.write("{}\n".format(repo_name))
+    return 0
+
+PARSER.set_defaults(run_cmd=run_cmd)
