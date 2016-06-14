@@ -58,8 +58,8 @@ def run_cmd(args):
                 if first:
                     first = False
                     sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds New Citem Rel Citem   CPU Time Total Time    IO Time\n"))
-                nfiles, nlinks, csize, new_blobs, rel_blobs, etd = statistics
-                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_blobs, rel_blobs, *etd))
+                nfiles, nlinks, csize, new_citems, rel_citems, etd = statistics
+                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_citems, rel_citems, *etd))
         except excpns.Error as edata:
             sys.stderr.write(str(edata) + "\n")
             sys.exit(-1)

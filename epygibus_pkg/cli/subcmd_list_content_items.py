@@ -32,20 +32,20 @@ cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:
-        blob_repo_data = repo.get_blob_repo_data(args.repo_name)
+        repo_mgmt_key = repo.get_repo_mgmt_key(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    total_blobs = 0
+    total_citems = 0
     total_ref_count = 0
     total_size = 0
-    with repo.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
-        for hex_digest, ref_count, size in blob_mgr.iterate_hex_digests():
-            total_blobs += 1
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
+        for hex_digest, ref_count, size in repo_mgr.iterate_hex_digests():
+            total_citems += 1
             total_ref_count += ref_count
             total_size += size
             sys.stdout.write(_("{}: {:>4,}: {}\n").format(hex_digest, ref_count, utils.format_bytes(size)))
-    sys.stdout.write(_("{:,} content items: {:>4,} references: {} total\n").format(total_blobs, total_ref_count, utils.format_bytes(total_size)))
+    sys.stdout.write(_("{:,} content items: {:>4,} references: {} total\n").format(total_citems, total_ref_count, utils.format_bytes(total_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

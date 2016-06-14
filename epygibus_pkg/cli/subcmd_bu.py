@@ -66,8 +66,8 @@ def run_cmd(args):
         if args.stats:
             ss_name, ss_size, ss_stats, total_etd = stats
             sys.stdout.write(TEMPL.format(archive_name, ss_name, utils.format_bytes(ss_size)))
-            nfiles, nlinks, csize, new_blobs, rel_blobs, construction_etd = ss_stats
-            sys.stdout.write("{:>9,} {:>9,} {:>12} {:>9,} {:>9,}".format(nfiles, nlinks, utils.format_bytes(csize), new_blobs, rel_blobs))
+            nfiles, nlinks, csize, new_citems, rel_citems, construction_etd = ss_stats
+            sys.stdout.write("{:>9,} {:>9,} {:>12} {:>9,} {:>9,}".format(nfiles, nlinks, utils.format_bytes(csize), new_citems, rel_citems))
             pct_io = 100 * construction_etd.io_time / construction_etd.real_time
             write_etd = total_etd - construction_etd
             sys.stdout.write("{:>8.2f}s({:>4.1f}) {:>8.2f}s\n".format(construction_etd.real_time, pct_io, write_etd.real_time))

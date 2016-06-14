@@ -32,26 +32,26 @@ cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:
-        blob_repo_data = repo.get_blob_repo_data(args.repo_name)
+        repo_mgmt_key = repo.get_repo_mgmt_key(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    total_referenced_blobs = 0
+    total_referenced_citems = 0
     total_ref_count = 0
     total_referenced_size = 0
-    total_unreferenced_blobs = 0
+    total_unreferenced_citems = 0
     total_unreferenced_size = 0
-    with repo.open_blob_repo(blob_repo_data, writeable=False) as blob_mgr:
-        for hex_digest, ref_count, size in blob_mgr.iterate_hex_digests():
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
+        for hex_digest, ref_count, size in repo_mgr.iterate_hex_digests():
             if ref_count:
-                total_referenced_blobs += 1
+                total_referenced_citems += 1
                 total_ref_count += ref_count
                 total_referenced_size += size
             else:
-                total_unreferenced_blobs += 1
+                total_unreferenced_citems += 1
                 total_unreferenced_size += size
-    sys.stdout.write(_("  Referenced {:,} content items: {:>4,} references: {} total\n").format(total_referenced_blobs, total_ref_count, utils.format_bytes(total_referenced_size)))
-    sys.stdout.write(_("Unreferenced {:,} content items: {:>4,} references: {} total\n").format(total_unreferenced_blobs, 0, utils.format_bytes(total_unreferenced_size)))
+    sys.stdout.write(_("  Referenced {:,} content items: {:>4,} references: {} total\n").format(total_referenced_citems, total_ref_count, utils.format_bytes(total_referenced_size)))
+    sys.stdout.write(_("Unreferenced {:,} content items: {:>4,} references: {} total\n").format(total_unreferenced_citems, 0, utils.format_bytes(total_unreferenced_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

@@ -32,13 +32,13 @@ cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
 
 def run_cmd(args):
     try:
-        blob_repo_data = repo.get_blob_repo_data(args.repo_name)
+        repo_mgmt_key = repo.get_repo_mgmt_key(args.repo_name)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     stats = None
-    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        stats = blob_mgr.prune_unreferenced_blobs()
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
+        stats = repo_mgr.prune_unreferenced_content()
     if not stats:
         sys.stdout.write(_("Nothing to do.\n"))
     else:

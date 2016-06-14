@@ -76,27 +76,27 @@ class FStatsMixin:
     def device(self):
         return self.attributes.st_dev
 
-class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "blob_repo_data"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "repo_mgmt_key"]), FStatsMixin):
     def open_read_only(self):
         from . import repo
-        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
-            return blob_mgr.open_blob_read_only(self.hex_digest)
-    def copy_contents_to(self, target_file_path, overwrite=False, locked_blob_mgr=None):
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+            return repo_mgr.open_contents_read_only(self.hex_digest)
+    def copy_contents_to(self, target_file_path, overwrite=False, locked_repo_mgr=None):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
-        if locked_blob_mgr:
-            locked_blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
+        if locked_repo_mgr:
+            locked_repo_mgr.copy_contents_to(self.hex_digest, target_file_path)
         else:
-            with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
-                blob_mgr.copy_contents_to(self.hex_digest, target_file_path)
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
+                repo_mgr.copy_contents_to(self.hex_digest, target_file_path)
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
     def get_content_storage_stats(self):
         from . import repo
-        with repo.open_blob_repo(self.blob_repo_data, writeable=True) as blob_mgr:
-            return blob_mgr.get_content_storage_stats(self.hex_digest)
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+            return repo_mgr.get_content_storage_stats(self.hex_digest)
 
 class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
     def create_link(self, orig_curdir, stderr):
@@ -164,10 +164,10 @@ class Snapshot(object):
         if not dir_path:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
-    def find_file(self, file_path, blob_repo_data):
+    def find_file(self, file_path, repo_mgmt_key):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).files[file_name]
-        return SFile(file_path, data[0], data[1], blob_repo_data)
+        return SFile(file_path, data[0], data[1], repo_mgmt_key)
     def find_file_link(self, file_path):
         dir_path, file_name = os.path.split(file_path)
         data = self.find_dir(dir_path).file_links[file_name]
@@ -210,8 +210,8 @@ class SnapshotPlus(object):
         return self.snapshot.file_links
     def find_dir(self, dir_path):
         return self.snapshot.find_dir(dir_path)
-    def find_file(self, file_path, blob_repo_data):
-        return self.snapshot.find_file(file_path, blob_repo_data)
+    def find_file(self, file_path, repo_mgmt_key):
+        return self.snapshot.find_file(file_path, repo_mgmt_key)
     def find_subdir_link(self, dir_path):
         return self.snapshot.find_subdir_link(dir_path)
     def find_file_link(self, file_path):
@@ -260,11 +260,11 @@ def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, blob_mgr, exclude_dir_cres, exclude_file_cres, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
+    def __init__(self, repo_mgr, exclude_dir_cres, exclude_file_cres, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
         self._snapshot = Snapshot()
         self.skip_broken_links=skip_broken_links
         self.report_skipped_links=report_skipped_links
-        self.blob_mgr = blob_mgr
+        self.repo_mgr = repo_mgr
         self.content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
@@ -272,10 +272,10 @@ class _SnapshotGenerator(object):
         self._exclude_dir_cres = exclude_dir_cres
         self._exclude_file_cres = exclude_file_cres
         self.stderr = stderr
-        self.start_counts = blob_mgr.get_counts()
+        self.start_counts = repo_mgr.get_counts()
     def finish(self, elapsed_time):
         self.elapsed_time = elapsed_time
-        self.end_counts = self.blob_mgr.get_counts()
+        self.end_counts = self.repo_mgr.get_counts()
     @property
     def snapshot_plus(self):
         return SnapshotPlus(self._snapshot, self.creation_stats)
@@ -289,7 +289,7 @@ class _SnapshotGenerator(object):
         # let the caller handle OSError exceptions
         file_stats = os.lstat(file_path)
         try: # it's possible content manager got environment error reading file, if so skip it and report
-            hex_digest = self.blob_mgr.store_contents(file_path)
+            hex_digest = self.repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
             self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
             return
@@ -397,9 +397,9 @@ def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_
     if compress is None:
         compress = archive.compress_default
     start_time = bmark.get_os_times()
-    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
-    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
-        snapshot_generator = _SnapshotGenerator(blob_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
+    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
+        snapshot_generator = _SnapshotGenerator(repo_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
             if os.path.islink(abs_item):
@@ -434,7 +434,7 @@ class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_co
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
-class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "blob_repo_data"]), FStatsMixin):
+class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), FStatsMixin):
     @property
     def attributes(self):
         return self.snapshot.attributes
@@ -444,7 +444,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
-            file_data = self.snapshot.find_file(abs_file_path, self.blob_repo_data)
+            file_data = self.snapshot.find_file(abs_file_path, self.repo_mgmt_key)
         except (KeyError, AttributeError):
             try:
                 file_link_data = self.snapshot.find_file_link(file_path)
@@ -465,12 +465,12 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             except (KeyError, AttributeError):
                 pass
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
-        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.blob_repo_data)
+        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.repo_mgmt_key)
     def iterate_subdirs(self, pre_path=False, recurse=False):
         if not isinstance(pre_path, str):
             pre_path = self.path if pre_path is True else ""
         for subdir_name, ss_snapshot in self.snapshot.subdirs.items():
-            snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.blob_repo_data)
+            snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.repo_mgmt_key)
             yield snapshot_fs
             if recurse:
                 for r_snapshot_fs in snapshot_fs.iterate_subdirs(pre_path=True, recurse=True):
@@ -479,7 +479,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         if not isinstance(pre_path, str):
             pre_path = self.path if pre_path is True else ""
         for file_name, data in self.snapshot.files.items():
-            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.blob_repo_data)
+            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.repo_mgmt_key)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -537,7 +537,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # Now copy the files
         hard_links = dict()
-        with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
                 try:
                     if file_data.is_hard_linked:
@@ -546,7 +546,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                             continue
                         else:
                             hard_links[file_data.inode] = file_data
-                    file_data.copy_contents_to(file_data.path, overwrite=overwrite, locked_blob_mgr=blob_mgr)
+                    file_data.copy_contents_to(file_data.path, overwrite=overwrite, locked_repo_mgr=repo_mgr)
                 except EnvironmentError as edata:
                     # report the error and move on (we have permission to wreak havoc)
                     stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
@@ -563,11 +563,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         n_stored_bytes = 0
         n_share_bytes = 0
         # NB not using SFile.get_content_storage_stats() for LOCKING efficiency reasons
-        with repo.open_blob_repo(self.blob_repo_data, writeable=False) as blob_mgr:
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(recurse=True):
                 n_files += 1
                 n_bytes += file_data.size
-                cis = blob_mgr.get_content_storage_stats(file_data.hex_digest)
+                cis = repo_mgr.get_content_storage_stats(file_data.hex_digest)
                 n_share_bytes += cis.stored_size_per_ref
                 if not file_data.hex_digest in ck_set:
                     n_stored_bytes += cis.stored_size
@@ -591,8 +591,8 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     except:
         raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
-    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
-    return SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, blob_repo_data)
+    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    return SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, repo_mgmt_key)
 
 def iter_snapshot_fs_list(archive_name, reverse=False):
     from . import config
@@ -601,11 +601,11 @@ def iter_snapshot_fs_list(archive_name, reverse=False):
     snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
-    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
+    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
     for snapshot_name in snapshot_names:
         snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
         snapshot = read_snapshot(snapshot_file_path)
-        snapshot_fs = SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, blob_repo_data)
+        snapshot_fs = SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, repo_mgmt_key)
         yield (snapshot_fs, os.path.getsize(snapshot_file_path))
 
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
@@ -623,10 +623,10 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
         raise excpns.LastSnapshot(archive_name, ss_root(snapshot_name))
     snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
     snapshot = read_snapshot(snapshot_file_path)
-    blob_repo_data = repo.get_blob_repo_data(archive.repo_name)
-    with repo.open_blob_repo(blob_repo_data, writeable=True) as blob_mgr:
+    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
         os.remove(snapshot_file_path)
-        blob_mgr.release_contents(snapshot.iterate_hex_digests())
+        repo_mgr.release_contents(snapshot.iterate_hex_digests())
 
 def iter_snapshot_list(archive_name, reverse=False):
     from . import config
