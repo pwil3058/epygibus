@@ -25,7 +25,9 @@ _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
 _ref_counter_path = lambda base_dir_path: os.path.join(base_dir_path, _REF_COUNTER_FILE_NAME)
 _lock_file_path = lambda base_dir_path: os.path.join(base_dir_path, _LOCK_FILE_NAME)
-_split_hex_digest = lambda hex_digest: (hex_digest[:2], hex_digest[2:4], hex_digest[4:])
+_ld1 = 1
+_ld2 = _ld1 + 2
+_split_hex_digest = lambda hex_digest: (hex_digest[:_ld1], hex_digest[_ld1:_ld2], hex_digest[_ld2:])
 
 BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
@@ -127,7 +129,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                     else:
                         num_unrefed += 1
         return (num_refed, num_unrefed, ref_total)
-    def prune_unreferenced_blobs(self):
+    def prune_unreferenced_blobs(self, rm_empty_dirs=False, rm_empty_subdirs=True):
         assert self.writeable
         blob_count = 0
         total_bytes = 0
@@ -146,6 +148,12 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                         total_bytes += os.path.getsize(file_path)
                         os.remove(file_path)
                     del subdir_data[file_name]
+                if rm_empty_subdirs and len(dir_data[subdir_name]) == 0:
+                    del dir_data[subdir_name]
+                    os.rmdir(os.path.join(self.base_dir_path, dir_name, subdir_name))
+            if rm_empty_dirs and len(self.ref_counter[dir_name]) == 0:
+                del self.ref_counter[dir_name]
+                os.rmdir(os.path.join(self.base_dir_path, dir_name))
         return (blob_count, total_bytes) #if blob_count else None
     def open_blob_read_only(self, hex_digest):
         # NB since this doen't use ref count data it doesn't need locking
