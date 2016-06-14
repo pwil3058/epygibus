@@ -42,7 +42,7 @@ def run_cmd(args):
     total_unreferenced_citems = 0
     total_unreferenced_size = 0
     with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
-        for hex_digest, ref_count, size in repo_mgr.iterate_hex_digests():
+        for content_token, ref_count, size in repo_mgr.iterate_content_tokens():
             if ref_count:
                 total_referenced_citems += 1
                 total_ref_count += ref_count

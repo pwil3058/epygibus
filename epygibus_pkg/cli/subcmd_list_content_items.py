@@ -40,11 +40,11 @@ def run_cmd(args):
     total_ref_count = 0
     total_size = 0
     with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
-        for hex_digest, ref_count, size in repo_mgr.iterate_hex_digests():
+        for content_token, ref_count, size in repo_mgr.iterate_content_tokens():
             total_citems += 1
             total_ref_count += ref_count
             total_size += size
-            sys.stdout.write(_("{}: {:>4,}: {}\n").format(hex_digest, ref_count, utils.format_bytes(size)))
+            sys.stdout.write(_("{}: {:>4,}: {}\n").format(content_token, ref_count, utils.format_bytes(size)))
     sys.stdout.write(_("{:,} content items: {:>4,} references: {} total\n").format(total_citems, total_ref_count, utils.format_bytes(total_size)))
     return 0
 

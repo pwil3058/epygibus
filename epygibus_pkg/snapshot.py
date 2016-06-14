@@ -76,27 +76,27 @@ class FStatsMixin:
     def device(self):
         return self.attributes.st_dev
 
-class SFile(collections.namedtuple("SFile", ["path", "attributes", "hex_digest", "repo_mgmt_key"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), FStatsMixin):
     def open_read_only(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-            return repo_mgr.open_contents_read_only(self.hex_digest)
+            return repo_mgr.open_contents_read_only(self.content_token)
     def copy_contents_to(self, target_file_path, overwrite=False, locked_repo_mgr=None):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
         if locked_repo_mgr:
-            locked_repo_mgr.copy_contents_to(self.hex_digest, target_file_path)
+            locked_repo_mgr.copy_contents_to(self.content_token, target_file_path)
         else:
             with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
-                repo_mgr.copy_contents_to(self.hex_digest, target_file_path)
+                repo_mgr.copy_contents_to(self.content_token, target_file_path)
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-            return repo_mgr.get_content_storage_stats(self.hex_digest)
+            return repo_mgr.get_content_storage_stats(self.content_token)
 
 class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
     def create_link(self, orig_curdir, stderr):
@@ -176,13 +176,13 @@ class Snapshot(object):
         dir_path, subdir_name = os.path.split(subdir_path)
         data = self.find_dir(dir_path).subdir_links[subdir_name]
         return SLink(subdir_path, data[0], data[1])
-    def iterate_hex_digests(self):
+    def iterate_content_tokens(self):
         for data in self.files.values():
             if stat.S_ISREG(data[0].st_mode):
                 yield data[1]
         for subdir in self.subdirs.values():
-            for hex_digest in subdir.iterate_hex_digests():
-                yield hex_digest
+            for content_token in subdir.iterate_content_tokens():
+                yield content_token
 
 class SnapshotPlus(object):
     # limit the number of none basic python types to future proof
@@ -216,8 +216,8 @@ class SnapshotPlus(object):
         return self.snapshot.find_subdir_link(dir_path)
     def find_file_link(self, file_path):
         return self.snapshot.find_file_link(file_path)
-    def iterate_hex_digests(self):
-        return self.snapshot.iterate_hex_digests()
+    def iterate_content_tokens(self):
+        return self.snapshot.iterate_content_tokens()
 
 def read_snapshot(snapshot_file_path):
     import cPickle
@@ -289,13 +289,13 @@ class _SnapshotGenerator(object):
         # let the caller handle OSError exceptions
         file_stats = os.lstat(file_path)
         try: # it's possible content manager got environment error reading file, if so skip it and report
-            hex_digest = self.repo_mgr.store_contents(file_path)
+            content_token = self.repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
             self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
             return
         self.content_count += file_stats.st_size
         self.file_count += 1
-        files[file_name] = (file_stats, hex_digest)
+        files[file_name] = (file_stats, content_token)
     def _include_file_link(self, file_links, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -567,11 +567,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for file_data in self.iterate_files(recurse=True):
                 n_files += 1
                 n_bytes += file_data.size
-                cis = repo_mgr.get_content_storage_stats(file_data.hex_digest)
+                cis = repo_mgr.get_content_storage_stats(file_data.content_token)
                 n_share_bytes += cis.stored_size_per_ref
-                if not file_data.hex_digest in ck_set:
+                if not file_data.content_token in ck_set:
                     n_stored_bytes += cis.stored_size
-                    ck_set.add(file_data.hex_digest)
+                    ck_set.add(file_data.content_token)
         n_links = 0
         for link_data in self.iterate_file_links(recurse=True):
             n_links += 1
@@ -626,7 +626,7 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
     with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
         os.remove(snapshot_file_path)
-        repo_mgr.release_contents(snapshot.iterate_hex_digests())
+        repo_mgr.release_contents(snapshot.iterate_content_tokens())
 
 def iter_snapshot_list(archive_name, reverse=False):
     from . import config

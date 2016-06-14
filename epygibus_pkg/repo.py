@@ -27,7 +27,7 @@ _ref_counter_path = lambda base_dir_path: os.path.join(base_dir_path, _REF_COUNT
 _lock_file_path = lambda base_dir_path: os.path.join(base_dir_path, _LOCK_FILE_NAME)
 _ld1 = 1
 _ld2 = _ld1 + 2
-_split_hex_digest = lambda hex_digest: (hex_digest[:_ld1], hex_digest[_ld1:_ld2], hex_digest[_ld2:])
+_split_content_token = lambda content_token: (content_token[:_ld1], content_token[_ld1:_ld2], content_token[_ld2:])
 
 BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
@@ -51,8 +51,8 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
     def store_contents(self, file_path):
         assert self.writeable
         contents = open(file_path, "r").read()
-        hex_digest = hashlib.sha1(contents).hexdigest()
-        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+        content_token = hashlib.sha1(contents).hexdigest()
+        dir_name, subdir_name, file_name = _split_content_token(content_token)
         dir_path = os.path.join(self.base_dir_path, dir_name)
         subdir_path = os.path.join(dir_path, subdir_name)
         needs_write = True
@@ -82,9 +82,9 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         # NB returning content storage stats here has been tried and
         # rejected due to time penalties (3 orders of magnitude) on
         # slow file systems such as cifs mounted network devices
-        return hex_digest
-    def _content_stored_size(self, *hex_parts):
-        file_path = os.path.join(self.base_dir_path, *hex_parts)
+        return content_token
+    def _content_stored_size(self, *token_parts):
+        file_path = os.path.join(self.base_dir_path, *token_parts)
         if self.compressed: # try compressed first
             try: # but allow for the case that they've been uncompressed
                 return os.path.getsize(file_path + ".gz")
@@ -95,19 +95,19 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 return os.path.getsize(file_path)
             except EnvironmentError:
                 return os.path.getsize(file_path + ".gz")
-    def get_content_storage_stats(self, hex_digest):
-        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+    def get_content_storage_stats(self, content_token):
+        dir_name, subdir_name, file_name = _split_content_token(content_token)
         return CIS(self._content_stored_size(dir_name, subdir_name, file_name), self.ref_counter[dir_name][subdir_name][file_name])
-    def release_content(self, hex_digest):
+    def release_content(self, content_token):
         assert self.writeable
-        dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+        dir_name, subdir_name, file_name = _split_content_token(content_token)
         self.ref_counter[dir_name][subdir_name][file_name] -= 1
-    def release_contents(self, hex_digests):
+    def release_contents(self, content_tokens):
         assert self.writeable
-        for hex_digest in hex_digests:
-            dir_name, subdir_name, file_name = _split_hex_digest(hex_digest)
+        for content_token in content_tokens:
+            dir_name, subdir_name, file_name = _split_content_token(content_token)
             self.ref_counter[dir_name][subdir_name][file_name] -= 1
-    def iterate_hex_digests(self):
+    def iterate_content_tokens(self):
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
                 for file_name, count in subdir_data.items():
@@ -155,18 +155,18 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 del self.ref_counter[dir_name]
                 os.rmdir(os.path.join(self.base_dir_path, dir_name))
         return (citem_count, total_bytes) #if citem_count else None
-    def open_contents_read_only(self, hex_digest):
+    def open_contents_read_only(self, content_token):
         # NB since this doen't use ref count data it doesn't need locking
-        file_path = os.path.join(self.base_dir_path, *_split_hex_digest(hex_digest))
+        file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
             return open(file_path, "r")
         except EnvironmentError as edata:
             if edata.errno != errno.ENOENT:
                 raise edata
             return gzip.open(file_path + ".gz", "r")
-    def copy_contents_to(self, hex_digest, target_file_path):
+    def copy_contents_to(self, content_token, target_file_path):
         import shutil
-        file_path = os.path.join(self.base_dir_path, *_split_hex_digest(hex_digest))
+        file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
             shutil.copy(file_path, target_file_path)
         except EnvironmentError as edata:
