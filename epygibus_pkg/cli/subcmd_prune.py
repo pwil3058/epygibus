@@ -25,7 +25,7 @@ from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "prune",
-    description=_("Remove unreferenced blobs in the named repository."),
+    description=_("Remove unreferenced content items in the named repository."),
 )
 
 cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
@@ -42,7 +42,7 @@ def run_cmd(args):
     if not stats:
         sys.stdout.write(_("Nothing to do.\n"))
     else:
-        sys.stdout.write(_("{:>4,} unreferenced blobs removed freeing {}\n").format(stats[0], utils.format_bytes(stats[1])))
+        sys.stdout.write(_("{:>4,} unreferenced content items removed freeing {}\n").format(stats[0], utils.format_bytes(stats[1])))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

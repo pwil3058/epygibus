@@ -22,8 +22,8 @@ from . import subcmd_new
 from . import subcmd_la
 from . import subcmd_ldc
 from . import subcmd_del
-# TODO: comment out "list_blobs" (only useful for debugging)
-from . import subcmd_list_blobs
+# TODO: comment out "list_content_items" (only useful for debugging)
+from . import subcmd_list_content_items
 from . import subcmd_repo_stats
 from . import subcmd_prune
 from . import subcmd_show

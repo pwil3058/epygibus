@@ -80,22 +80,22 @@ class SnapshotArchiveLocationNoPerm(Error):
         self.archive_name = archive_name
 
 class UnknownBlobRepository(Error):
-    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" is not defined.")
+    STR_TEMPLATE = _("Error: content repository \"{repo_name}\" is not defined.")
     def __init__(self, repo_name):
         self.repo_name = repo_name
 
 class BlobRepositoryExists(Error):
-    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" is already defined.")
+    STR_TEMPLATE = _("Error: content repository \"{repo_name}\" is already defined.")
     def __init__(self, repo_name):
         self.repo_name = repo_name
 
 class BlobRepositoryLocationExists(Error):
-    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" location already exists.")
+    STR_TEMPLATE = _("Error: content repository \"{repo_name}\" location already exists.")
     def __init__(self, repo_name):
         self.repo_name = repo_name
 
 class BlobRepositoryLocationNoPerm(Error):
-    STR_TEMPLATE = _("Error: blob repository \"{repo_name}\" location permission denied.")
+    STR_TEMPLATE = _("Error: content repository \"{repo_name}\" location permission denied.")
     def __init__(self, repo_name):
         self.repo_name = repo_name
 

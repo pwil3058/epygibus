@@ -108,7 +108,7 @@ def read_repo_spec(repo_name):
     return Repo(repo_name, base_dir_path, eval(compressed))
 
 def write_repo_spec(repo_name, in_dir_path, compressed=True):
-    base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "blobs", os.environ["USER"], repo_name)
+    base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "repos", os.environ["USER"], repo_name)
     cf_path = _repo_file_path(repo_name)
     if os.path.exists(cf_path):
         raise excpns.BlobRepositoryExists(repo_name)

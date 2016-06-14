@@ -50,8 +50,8 @@ def run_cmd(args):
             else:
                 total_unreferenced_blobs += 1
                 total_unreferenced_size += size
-    sys.stdout.write(_("  Referenced {:,} blobs: {:>4,} references: {} total\n").format(total_referenced_blobs, total_ref_count, utils.format_bytes(total_referenced_size)))
-    sys.stdout.write(_("Unreferenced {:,} blobs: {:>4,} references: {} total\n").format(total_unreferenced_blobs, 0, utils.format_bytes(total_unreferenced_size)))
+    sys.stdout.write(_("  Referenced {:,} content items: {:>4,} references: {} total\n").format(total_referenced_blobs, total_ref_count, utils.format_bytes(total_referenced_size)))
+    sys.stdout.write(_("Unreferenced {:,} content items: {:>4,} references: {} total\n").format(total_unreferenced_blobs, 0, utils.format_bytes(total_unreferenced_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

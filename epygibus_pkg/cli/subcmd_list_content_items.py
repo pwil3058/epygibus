@@ -24,8 +24,8 @@ from .. import excpns
 from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
-    "list_blobs",
-    description=_("List the blobs and reference counts for named repository."),
+    "list_content_items",
+    description=_("List the content items and reference counts for named repository."),
 )
 
 cmd.add_cmd_argument(PARSER, cmd.REPO_NAME_ARG())
@@ -45,7 +45,7 @@ def run_cmd(args):
             total_ref_count += ref_count
             total_size += size
             sys.stdout.write(_("{}: {:>4,}: {}\n").format(hex_digest, ref_count, utils.format_bytes(size)))
-    sys.stdout.write(_("{:,} blobs: {:>4,} references: {} total\n").format(total_blobs, total_ref_count, utils.format_bytes(total_size)))
+    sys.stdout.write(_("{:,} content items: {:>4,} references: {} total\n").format(total_blobs, total_ref_count, utils.format_bytes(total_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

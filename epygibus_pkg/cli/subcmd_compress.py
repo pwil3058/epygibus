@@ -29,7 +29,7 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
 )
 
 MXGROUP = PARSER.add_mutually_exclusive_group()
-cmd.add_cmd_argument(MXGROUP, cmd.REPO_NAME_ARG(_("the name of the repository whose blobs to be compressed/uncompressed."), False))
+cmd.add_cmd_argument(MXGROUP, cmd.REPO_NAME_ARG(_("the name of the repository whose content items are to be compressed/uncompressed."), False))
 cmd.add_cmd_argument(MXGROUP, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be compressed/uncompressed."), False))
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
