@@ -100,7 +100,7 @@ It is __not__ necessary to install __epygibus__ as it can be run
 directly from the source tree's base directory (or anywhere else,
 if that directory is in your PATH).
 
-## Using __epygibus__.
+## Setting __epygibus__ Up For Use.
 
 ### Creating a Content Repository
 
@@ -182,3 +182,103 @@ which will open the editor specified by the `EDITOR` environment variable
 specification of the files/directories to be included, the glob
 expressions describing directories to be excluded or the glob expressions
 describing files to be excluded according to the option specified.
+
+## Managing a Snapshot Archive and Its Snapshots.
+
+As already mentioned, back up snapshots are created using the `bu` sub command.
+The essential signature for this command is:
+
+```
+epygibus [--stats] [--quiet] [-U|-C] -A <archive_name> [-A <another_archive_name>]
+```
+
+and it should be noted that it will accept multiple `-A` arguments to
+allow a single command to make multiple snapshots which will be created
+in the given order. As part of the experimental nature of this project
+commands such as `bu` gather statistics on their performance and these
+will be displayed if the `--stats` option is specified.  The `--quiet`
+option will turn off the reporting of skipped broken symbolic links.
+The `-U` and `-C` can be used to override the archive's default
+compression setting and cause this snapshot to be uncompressed or
+compressed respectively.
+
+### Deleting a Snapshot
+
+The `del` sub command is provided as a mechanism for deleting an
+archives snapshots.  Its essential signature is:
+
+```
+epygibus del [--remove_last_ok] [--back N] -A <archive-name>
+```
+
+and by default (as a safety measure) it will not delete a snapshot
+if it is the only existing snapshot for the specified archive but
+this behaviour can be overridden by using the `-remove_last_ok` option.
+By default, if no `--back` option is specified, the __oldest__ snapshot
+belonging to the specified archive will be deleted.  The argument to the
+`--back` option can a __positive__ integer specifying how far back from
+the __newest__ snapshot the desired snapshot to be deleted is (i.e. `--back=1` will
+chose the second __newest__ for deletion and `--back=0` will select the
+newest) or a __negative__ integer to select relative to the oldest
+snapshot starting with `-1` for the oldest (i.e. `--back=-1` will select
+the __oldest__ snapshot, `--back=-2` will select the second oldest, etc.)
+
+### Listing Available Snapshots
+
+The `lss` command is provided for getting a list of an archive's current
+snapshots and its essential signature is:
+
+```
+epygibus lss [--newest_first] [--build_stats | --storage_stats] -A name
+```
+
+and without any optional arguments it will list the "names" of the
+snapshots in order of creation (use `--newest_first` to reverse this order).
+The "name" of a snapshot is a 19 character
+date time group (DTG) string indicating the time (UTC/GMT) at which the snapshot
+was made (e.g. "2016-06-14-00-57-11" would be the name of a snapshot taken
+at 57 minutes and 11 seconds after midnight on the 14th June 2016) and
+in conjunction with name of the archive to which it belongs should form
+a unique identifier for the snapshot.  The name will be decorated with
+a "**" if its file is compressed.
+
+If the `--build_stats` is specified the `**` decoration will be replaced
+with the creation statistics for each snapshot and the `--storage-stats`
+will give statistics for the current storage being used by the snapshots.
+These are useful for evaluating the time/space efficiency of the snapshots.
+
+### Restoring a File or Directory from a Snapshot
+
+The command `restore` is provided to restore a file, a directory or a
+full snapshot and its signature is:
+
+```
+epygibus restore -A <archive_name> [--back N] (--file <path> | --dir <path> | --all)
+```
+
+where `--back` works the same as for previously described for
+selecting which snapshot to use and
+the __newest__ snapshot will be used if the `--back` option is omitted.
+
+### Extracting a File or Directory from a Snapshot
+
+The command `extract` is provided to extract a copy of a file or directory
+from a snapshot and its signature is:
+
+```
+epygibus extract -A <archive_name> [--back N] (--file <path> | --dir <path>) [--into_dir <path>] [--with_name <name>] [--overwrite]
+```
+
+where `--back` works the same as for previously described for
+selecting which snapshot to use and
+the __newest__ snapshot will be used if the `--back` option is omitted.
+
+By default, the copy of the file or directory will be placed in the
+current working directory unless otherwise specified with the `--into_dir <path>`
+option.  The `--with_name` option can be used to change the __name__ of the
+extracted file or directory if desired.
+
+Because of the danger of accidental overwriting of existing files or
+directories `extract` will fail if it detects such a case but the
+`--overwrite` option can be used to override this behaviour and overwrite
+existing files and directories where necessary.
