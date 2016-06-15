@@ -127,6 +127,9 @@ without effecting __epygibus__ functionality.
 
 ### Creating a Snapshot Archive
 
+Once a content repository has been created, it is now possible to
+create snapshot archives and the command:
+
 ```
 epygibus new --location=<directory path> -I <file/directory path> -R <repository name> -A <archive name>
 ```
@@ -144,7 +147,7 @@ epygibus bu -A <archive name>
 would cause a snapshot to be taken of the file or directory
 identified by `<file/directory path>` and placed in the directory mentioned
 above with the contents of any files being stored separately in the
-`<repository name> content repository.
+`<repository name>` content repository.
 By default, the snapshot will be compressed (using gzip) but this
 default behaviour can be altered by giving the `-U` option to the `new`
 command.  As for repositories, existing snapshots can be compressed/uncompressed
@@ -166,3 +169,16 @@ Multiple `-I` arguments can be used with the `new` command to specify
 multiple files or directories for inclusion in the back up snapshots.
 Also, there are options for specifying files/directories (using blob expressions)
 that should be excluded  from snapshots (see `epygibus new -h` for details).
+
+The files/directories to be included/excluded in an existing archive's
+snapshots can be changed using the command:
+
+```
+epygibus edit (--includes | --excluded_dirs | --excluded_files) -A <archive name>
+```
+
+which will open the editor specified by the `EDITOR` environment variable
+(or `vi` if that variable is not set) on the file containing the
+specification of the files/directories to be included, the glob
+expressions describing directories to be excluded or the glob expressions
+describing files to be excluded according to the option specified.
