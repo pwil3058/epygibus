@@ -99,3 +99,70 @@ for more details.
 It is __not__ necessary to install __epygibus__ as it can be run
 directly from the source tree's base directory (or anywhere else,
 if that directory is in your PATH).
+
+## Using __epygibus__.
+
+### Creating a Content Repository
+
+The first thing that needs to be done is create a content repository:
+
+```
+epygibus new_repo --location=<directory path> <repository name>
+```
+
+will create a directory with path `<directory path>/epygibus.d/repos/<user name>/<repository name>`
+and initialize a lock file and reference count file in that directory.
+To refer to this repository in future __epygibus__ <repository name>
+should be used.  By default, file content will be stored in compressed files
+(using gzip) in the repository. The `-U` option to the above command would
+override this default cause them to be created uncompressed.  This
+option only effects the way the content files are __created__ and they
+may be compressed/uncompressed at any time using:
+
+```
+epygibus compress [-U] -R <repository name>
+```
+
+without effecting __epygibus__ functionality.
+
+### Creating a Snapshot Archive
+
+```
+epygibus new --location=<directory path> -I <file/directory path> -R <repository name> -A <archive name>
+```
+
+will create a directory with path
+`<directory path>/epygibus.d/snapshots/<hostname>/<user name>/<archive name>`
+and <archive name> should be used to identify this archive and its
+snapshots with __epygibus__ commands.  For example, after the above
+command:
+
+```
+epygibus bu -A <archive name>
+```
+
+would cause a snapshot to be taken of the file or directory
+identified by `<file/directory path>` and placed in the directory mentioned
+above with the contents of any files being stored separately in the
+`<repository name> content repository.
+By default, the snapshot will be compressed (using gzip) but this
+default behaviour can be altered by giving the `-U` option to the `new`
+command.  As for repositories, existing snapshots can be compressed/uncompressed
+using:
+
+```
+epygibus compress [-U] -A <archive name> [--back=N]
+```
+
+without effecting __epygibus__ functionality where the `--back` argument
+specifies which snapshot (`N` before the latest snapshot, default `0`) should be
+compressed/uncompressed.
+
+Also by default, back up snapshots would skip any broken symbolic links
+encountered but this behaviour can be overridden by using the
+`--keep_broken_soft_links` option to the `new` command above.
+
+Multiple `-I` arguments can be used with the `new` command to specify
+multiple files or directories for inclusion in the back up snapshots.
+Also, there are options for specifying files/directories (using blob expressions)
+that should be excluded  from snapshots (see `epygibus new -h` for details).
