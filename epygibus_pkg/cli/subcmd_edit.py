@@ -48,8 +48,6 @@ XGROUP.add_argument(
     action="store_true",
 )
 
-cmd.add_cmd_argument(PARSER, cmd.UNCOMPRESSED_ARG(_("set default snapshot compression option to \"compress\" insteatd of\"uncompress\".")))
-
 cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive to be edited.")))
 
 def run_cmd(args):
