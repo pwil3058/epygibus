@@ -19,6 +19,7 @@ import collections
 import fnmatch
 import errno
 import re
+import io
 
 from . import APP_NAME
 from . import excpns
@@ -35,7 +36,7 @@ if not os.path.exists(_CONFIG_DIR_PATH):
     os.mkdir(_ARCHIVES_DIR_PATH)
 
 _repo_file_path = lambda rname: os.path.join(_REPOS_DIR_PATH, rname)
-_repo_config_lines = lambda rname: [l.rstrip() for l in open(_repo_file_path(rname), "r").readlines()]
+_repo_config_lines = lambda rname: [l.rstrip() for l in io.open(_repo_file_path(rname), "r").readlines()]
 
 _archive_dir_path = lambda pname: os.path.join(_ARCHIVES_DIR_PATH, pname)
 _archive_config_path = lambda pname: os.path.join(_archive_dir_path(pname), "config")
@@ -43,10 +44,10 @@ _archive_includes_path = lambda pname: os.path.join(_archive_dir_path(pname), "i
 _archive_exclude_dirs_path = lambda pname: os.path.join(_archive_dir_path(pname), "exclude_dirs")
 _archive_exclude_files_path = lambda pname: os.path.join(_archive_dir_path(pname), "exclude_files")
 
-_archive_config_lines = lambda pname: open(_archive_config_path(pname), "r").readlines()
-_includes_file_lines = lambda pname: open(_archive_includes_path(pname), "r").readlines()
-_exclude_dir_lines = lambda pname: open(_archive_exclude_dirs_path(pname), "r").readlines()
-_exclude_file_lines = lambda pname: open(_archive_exclude_files_path(pname), "r").readlines()
+_archive_config_lines = lambda pname: io.open(_archive_config_path(pname), "r").readlines()
+_includes_file_lines = lambda pname: io.open(_archive_includes_path(pname), "r").readlines()
+_exclude_dir_lines = lambda pname: io.open(_archive_exclude_dirs_path(pname), "r").readlines()
+_exclude_file_lines = lambda pname: io.open(_archive_exclude_files_path(pname), "r").readlines()
 
 Archive = collections.namedtuple("Archive", ["name", "repo_name", "snapshot_dir_path", "includes", "exclude_dir_globs", "exclude_file_globs", "exclude_dir_cres", "exclude_file_cres", "skip_broken_soft_links", "compress_default"])
 
@@ -70,10 +71,10 @@ def write_archive_spec(archive_name, location_dir_path, repo_name, includes, exc
     base_dir_path = os.path.join(os.path.abspath(location_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], archive_name)
     try:
         os.mkdir(_archive_dir_path(archive_name))
-        open(_archive_config_path(archive_name), "w").writelines([p + os.linesep for p in [repo_name, base_dir_path, str(skip_broken_sl), str(compress_default)]])
-        open(_archive_includes_path(archive_name), "w").writelines([i + os.linesep for i in includes])
-        open(_archive_exclude_dirs_path(archive_name), "w").writelines([x + os.linesep for x in exclude_dir_globs])
-        open(_archive_exclude_files_path(archive_name), "w").writelines([x + os.linesep for x in exclude_file_globs])
+        io.open(_archive_config_path(archive_name), "w").writelines([p.decode() + os.linesep for p in [repo_name, base_dir_path, str(skip_broken_sl), str(compress_default)]])
+        io.open(_archive_includes_path(archive_name), "w").writelines([i.decode() + os.linesep for i in includes])
+        io.open(_archive_exclude_dirs_path(archive_name), "w").writelines([x.decode() + os.linesep for x in exclude_dir_globs])
+        io.open(_archive_exclude_files_path(archive_name), "w").writelines([x.decode() + os.linesep for x in exclude_file_globs])
     except OSError as edata:
         if edata.errno == errno.EEXIST:
             raise excpns.SnapshotArchiveExists(archive_name)
@@ -112,7 +113,7 @@ def write_repo_spec(repo_name, in_dir_path, compressed=True):
     cf_path = _repo_file_path(repo_name)
     if os.path.exists(cf_path):
         raise excpns.BlobRepositoryExists(repo_name)
-    open(cf_path, "w").writelines([p + os.linesep for p in [base_dir_path, str(compressed)]])
+    io.open(cf_path, "w").writelines([p.decode() + os.linesep for p in [base_dir_path, str(compressed)]])
     return Repo(repo_name, base_dir_path, compressed)
 
 def delete_repo_spec(repo_name):

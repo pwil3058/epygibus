@@ -19,6 +19,12 @@ import stat
 import errno
 import sys
 import re
+import io
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from . import excpns
 from . import bmark
@@ -220,13 +226,12 @@ class SnapshotPlus(object):
         return self.snapshot.iterate_content_tokens()
 
 def read_snapshot(snapshot_file_path):
-    import cPickle
     if snapshot_file_path.endswith(".gz"):
         import gzip
         fobj = gzip.open(snapshot_file_path, "rb")
     else:
-        fobj = open(snapshot_file_path, "rb")
-    return cPickle.load(fobj)
+        fobj = io.open(snapshot_file_path, "rb")
+    return pickle.load(fobj)
 
 # NB: make sure that these two are in concert
 _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
@@ -234,7 +239,6 @@ _SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\
 ss_root = lambda fname: os.path.basename(fname).split(".")[0]
 
 def write_snapshot(snapshot_dir_path, snapshot, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
-    import cPickle
     import time
     snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
     snapshot_file_path = os.path.join(snapshot_dir_path, snapshot_file_name)
@@ -243,8 +247,8 @@ def write_snapshot(snapshot_dir_path, snapshot, compress=False, permissions=stat
         snapshot_file_path += ".gz"
         fobj = gzip.open(snapshot_file_path, "wb")
     else:
-        fobj = open(snapshot_file_path, "wb")
-    cPickle.dump(snapshot, fobj, cPickle.HIGHEST_PROTOCOL)
+        fobj = io.open(snapshot_file_path, "wb")
+    pickle.dump(snapshot, fobj, pickle.HIGHEST_PROTOCOL)
     os.chmod(snapshot_file_path, permissions)
     return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 
@@ -392,7 +396,7 @@ class _SnapshotGenerator(object):
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
-    import bmark
+    from . import bmark
     from . import repo
     if compress is None:
         compress = archive.compress_default
@@ -467,8 +471,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
         return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.repo_mgmt_key)
     def iterate_subdirs(self, pre_path=False, recurse=False):
-        if not isinstance(pre_path, str):
-            pre_path = self.path if pre_path is True else ""
+        pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for subdir_name, ss_snapshot in self.snapshot.subdirs.items():
             snapshot_fs = SnapshotFS(os.path.join(pre_path, subdir_name), self.archive_name, self.snapshot_name, ss_snapshot, self.repo_mgmt_key)
             yield snapshot_fs
@@ -476,8 +479,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 for r_snapshot_fs in snapshot_fs.iterate_subdirs(pre_path=True, recurse=True):
                     yield r_snapshot_fs
     def iterate_files(self, pre_path=False, recurse=False):
-        if not isinstance(pre_path, str):
-            pre_path = self.path if pre_path is True else ""
+        pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for file_name, data in self.snapshot.files.items():
             yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.repo_mgmt_key)
         if recurse:
@@ -485,8 +487,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield sfile
     def iterate_subdir_links(self, pre_path=False, recurse=False):
-        if not isinstance(pre_path, str):
-            pre_path = self.path if pre_path is True else ""
+        pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.subdir_links.items():
             yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
         if recurse:
@@ -494,8 +495,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 for slink in subdir.iterate_subdir_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield slink
     def iterate_file_links(self, pre_path=False, recurse=False):
-        if not isinstance(pre_path, str):
-            pre_path = self.path if pre_path is True else ""
+        pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.file_links.items():
             yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
         if recurse:

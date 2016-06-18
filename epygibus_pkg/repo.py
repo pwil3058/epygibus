@@ -14,12 +14,17 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import hashlib
-import cPickle
 from contextlib import contextmanager
 import errno
 import gzip
 import os
 import collections
+import io
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
@@ -50,7 +55,7 @@ def get_repo_mgmt_key(repo_name):
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable", "compressed"])):
     def store_contents(self, file_path):
         assert self.writeable
-        contents = open(file_path, "r").read()
+        contents = io.open(file_path, "rb").read()
         content_token = hashlib.sha1(contents).hexdigest()
         dir_name, subdir_name, file_name = _split_content_token(content_token)
         dir_path = os.path.join(self.base_dir_path, dir_name)
@@ -73,10 +78,10 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             file_path = os.path.join(subdir_path, file_name)
             if self.compressed:
                 file_path += ".gz"
-                with gzip.open(file_path, "w") as fobj:
+                with gzip.open(file_path, "wb") as fobj:
                     fobj.write(contents)
             else:
-                with open(file_path, "w") as fobj:
+                with io.open(file_path, "wb") as fobj:
                     fobj.write(contents)
             os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
         # NB returning content storage stats here has been tried and
@@ -155,15 +160,15 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 del self.ref_counter[dir_name]
                 os.rmdir(os.path.join(self.base_dir_path, dir_name))
         return (citem_count, total_bytes) #if citem_count else None
-    def open_contents_read_only(self, content_token):
+    def open_contents_read_only(self, content_token, binary=False):
         # NB since this doen't use ref count data it doesn't need locking
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
-            return open(file_path, "r")
+            return gzip.open(file_path + ".gz", "rb" if binary else "r")
         except EnvironmentError as edata:
             if edata.errno != errno.ENOENT:
                 raise edata
-            return gzip.open(file_path + ".gz", "r")
+            return io.open(file_path, "rb" if binary else "r")
     def copy_contents_to(self, content_token, target_file_path):
         import shutil
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
@@ -172,19 +177,20 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         except EnvironmentError as edata:
             if edata.errno != errno.ENOENT:
                 raise edata
-            open(target_file_path, "w").write(gzip.open(file_path + ".gz", "r").read())
+            with gzip.open(file_path + ".gz", "rb") as f_in, io.open(target_file_path, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
 
 @contextmanager
 def open_repo_mgr(repo_mgmt_key, writeable=False):
     import fcntl
     fobj = os.open(repo_mgmt_key.lock_file_path, os.O_RDWR if writeable else os.O_RDONLY)
     fcntl.lockf(fobj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
-    ref_counter = cPickle.load(open(repo_mgmt_key.ref_counter_path, "rb"))
+    ref_counter = pickle.load(io.open(repo_mgmt_key.ref_counter_path, "rb"))
     try:
         yield _BlobRepo(ref_counter, repo_mgmt_key.base_dir_path, writeable, compressed=repo_mgmt_key.compressed)
     finally:
         if writeable:
-            cPickle.dump(ref_counter, open(repo_mgmt_key.ref_counter_path, "wb"), cPickle.HIGHEST_PROTOCOL)
+            pickle.dump(ref_counter, io.open(repo_mgmt_key.ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
 
@@ -199,9 +205,9 @@ def initialize_repo(repo_spec):
         else:
             raise edata
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
-    cPickle.dump(dict(), open(ref_counter_path, "wb"))
+    pickle.dump(dict(), io.open(ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
-    open(lock_file_path, "wb").write("content_repo_lock")
+    io.open(lock_file_path, "wb").write(b"content_repo_lock")
 
 def create_new_repo(repo_name, location_dir_path, compressed):
     from . import config

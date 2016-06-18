@@ -30,8 +30,8 @@ def compress_file(file_path):
     assert not file_path.endswith(".gz")
     import gzip
     import shutil
-    import os
-    with open(file_path, "rb") as f_in, gzip.open(file_path + ".gz", "wb") as f_out:
+    import io
+    with io.open(file_path, "rb") as f_in, gzip.open(file_path + ".gz", "wb") as f_out:
         shutil.copyfileobj(f_in, f_out)
     os.remove(file_path)
 
@@ -39,8 +39,8 @@ def uncompress_file(file_path):
     assert file_path.endswith(".gz")
     import gzip
     import shutil
-    import os
-    with gzip.open(file_path, "rb") as f_in, open(file_path[0:-3], "wb") as f_out:
+    import io
+    with gzip.open(file_path, "rb") as f_in, io.open(file_path[0:-3], "wb") as f_out:
         shutil.copyfileobj(f_in, f_out)
     os.remove(file_path)
 
