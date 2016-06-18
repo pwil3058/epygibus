@@ -50,7 +50,12 @@ def run_cmd(args):
         sys.exit(-2)
     contents = file_data.open_read_only().read()
     for line in contents.splitlines(True):
-        sys.stdout.write(line)
+        # WORKAROUND: Cope with Python 2.7.x/3.4.x I/O differences
+        # NB: whether this fires depends on whether io or gzip opened the file so don't try simpler fix.
+        try:
+            sys.stdout.write(line)
+        except TypeError:
+            sys.stdout.write(line.decode())
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

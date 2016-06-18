@@ -26,10 +26,7 @@ import sys
 import re
 import io
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+from .w2and3 import pickle, PICKLE_PROTOCOL
 
 from . import excpns
 from . import bmark
@@ -88,10 +85,10 @@ class FStatsMixin:
         return self.attributes.st_dev
 
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), FStatsMixin):
-    def open_read_only(self):
+    def open_read_only(self, binary=False):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-            return repo_mgr.open_contents_read_only(self.content_token)
+            return repo_mgr.open_contents_read_only(self.content_token, binary=binary)
     def copy_contents_to(self, target_file_path, overwrite=False, locked_repo_mgr=None):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
@@ -253,7 +250,7 @@ def write_snapshot(snapshot_dir_path, snapshot, compress=False, permissions=stat
         fobj = gzip.open(snapshot_file_path, "wb")
     else:
         fobj = io.open(snapshot_file_path, "wb")
-    pickle.dump(snapshot, fobj, pickle.HIGHEST_PROTOCOL)
+    pickle.dump(snapshot, fobj, PICKLE_PROTOCOL)
     os.chmod(snapshot_file_path, permissions)
     return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 

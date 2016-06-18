@@ -26,10 +26,7 @@ import os
 import collections
 import io
 
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+from .w2and3 import pickle, PICKLE_PROTOCOL
 
 _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
@@ -195,7 +192,7 @@ def open_repo_mgr(repo_mgmt_key, writeable=False):
         yield _BlobRepo(ref_counter, repo_mgmt_key.base_dir_path, writeable, compressed=repo_mgmt_key.compressed)
     finally:
         if writeable:
-            pickle.dump(ref_counter, io.open(repo_mgmt_key.ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
+            pickle.dump(ref_counter, io.open(repo_mgmt_key.ref_counter_path, "wb"), PICKLE_PROTOCOL)
         fcntl.lockf(fobj, fcntl.LOCK_UN)
         os.close(fobj)
 
@@ -210,7 +207,7 @@ def initialize_repo(repo_spec):
         else:
             raise edata
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
-    pickle.dump(dict(), io.open(ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
+    pickle.dump(dict(), io.open(ref_counter_path, "wb"), PICKLE_PROTOCOL)
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
     io.open(lock_file_path, "wb").write(b"content_repo_lock")
 
