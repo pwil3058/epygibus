@@ -101,6 +101,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
         os.chmod(target_file_path, self.mode)
         os.utime(target_file_path, (self.atime, self.mtime))
         os.chown(target_file_path, self.uid, self.gid)
+        return 1
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -129,9 +130,11 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
                 # NB: some systems don't support lchmod())
                 os.chmod(self.path, self.mode)
             os.lchown(self.path, self.uid, self.gid)
+            return 1
         except EnvironmentError as edata:
             # report the error and move on (we have permission to wreak havoc)
             stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            return 0
 
 class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
     def __add__(self, other):
@@ -440,6 +443,10 @@ class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_co
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
+class CCStats(collections.namedtuple("CCStats", ["file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"])):
+    def __add__(self, other):
+        return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
+
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), FStatsMixin):
     @property
     def attributes(self):
@@ -508,13 +515,14 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         from . import repo
         # Create the target directory if necessary
         create_dir = True
+        dir_count = 0
         if os.path.exists(target_dir_path):
             if os.path.isdir(target_dir_path):
                 create_dir = False
                 if not overwrite:
-                    ow_items = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f)]
-                    ow_items += [f for f in self.iterate_file_links(target_dir_path, True) if os.path.exists(f)]
-                    ow_items += [f for f in self.iterate_subdir_links(target_dir_path, True) if os.path.exists(f)]
+                    ow_items = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f.path)]
+                    ow_items += [f for f in self.iterate_file_links(target_dir_path, True) if os.path.exists(f.path)]
+                    ow_items += [f for f in self.iterate_subdir_links(target_dir_path, True) if os.path.exists(f.path)]
                     if ow_items:
                         raise excpns.SubdirOverwriteError(target_dir_path, len(ow_items))
             elif overwrite:
@@ -525,6 +533,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         if create_dir:
             os.mkdir(target_dir_path, self.mode)
             os.lchown(target_dir_path, self.uid, self.gid)
+            dir_count += 1
         # Now create the subdirs
         for subdir in self.iterate_subdirs(target_dir_path, True):
             try:
@@ -533,30 +542,43 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 elif os.path.exists(subdir.path):
                     os.remove(subdir.path)
                 os.mkdir(subdir.path, subdir.mode)
+                dir_count += 1
                 os.lchown(subdir.path, subdir.uid, subdir.gid)
+                dir_count += 1
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # Now copy the files
         hard_links = dict()
+        file_count = 0
+        gross_size = 0
+        net_size = 0
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
                 try:
                     if file_data.is_hard_linked:
                         if file_data.inode in hard_links:
                             os.link(hard_links[file_data.inode].path, file_data.path)
+                            file_count += 1
+                            gross_size += file_data.size
                             continue
                         else:
                             hard_links[file_data.inode] = file_data
                     file_data.copy_contents_to(file_data.path, overwrite=overwrite, locked_repo_mgr=repo_mgr)
+                    file_count += 1
+                    gross_size += file_data.size
+                    net_size += file_data.size
                 except EnvironmentError as edata:
                     # report the error and move on (we have permission to wreak havoc)
                     stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         orig_curdir = os.getcwd()
+        link_count = 0
         for file_link_data in self.iterate_file_links(target_dir_path, True):
-            file_link_data.create_link(orig_curdir, stderr)
+            link_count += file_link_data.create_link(orig_curdir, stderr)
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
-            subdir_link_data.create_link(orig_curdir, stderr)
+            link_count += subdir_link_data.create_link(orig_curdir, stderr)
+        # ["file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"]
+        return CCStats(file_count, link_count, len(hard_links), gross_size, net_size)
     def get_statistics(self):
         from . import repo
         ck_set = set()
@@ -686,7 +708,7 @@ def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l
             raise excpns.InvalidArgument(as_name)
         target_path = os.path.join(absolute_path(into_dir_path), as_name)
     else:
-        target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path))
+        target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path.rstrip(os.sep)))
     snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
 
 def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):

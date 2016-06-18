@@ -54,7 +54,7 @@ class FileOverwriteError(Error):
         self.target_file_path = target_file_path
 
 class SubdirOverwriteError(Error):
-    STR_TEMPLATE = _("Error: directory \"{target_dir_path}\" contains {nfiles} that will be overwritten. Use --overwrite to overwrite them.")
+    STR_TEMPLATE = _("Error: directory \"{target_dir_path}\" contains {nfiles} file(s) that will be overwritten. Use --overwrite to overwrite them.")
     def __init__(self, target_dir_path, nfiles):
         self.target_dir_path = target_dir_path
         self.nfiles = nfiles
