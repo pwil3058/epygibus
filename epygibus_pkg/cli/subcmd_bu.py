@@ -37,7 +37,7 @@ cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(help_msg=_("the name of the ar
 
 PARSER.add_argument(
     "--stats",
-    help=_("print the statistics for reach archive."),
+    help=_("print the statistics for each archive."),
     action="store_true"
 )
 

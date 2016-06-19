@@ -26,6 +26,7 @@ from . import cmd
 from .. import config
 from .. import snapshot
 from .. import excpns
+from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "extract",
@@ -75,12 +76,26 @@ PARSER.add_argument(
     action = "store_true",
 )
 
+PARSER.add_argument(
+    "--stats",
+    help=_("print the statistics for the extraction."),
+    action="store_true"
+)
+
+FST = _("Extracted: 1 file {} in {:.2f} seconds {:.1f}% I/O.\n")
+
+DST = _("Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}) in {:.2f} seconds {:.1f}% I/O.\n")
+
 def run_cmd(args):
     try:
         if args.file_path:
-            snapshot.copy_file_to(args.archive_name, args.file_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            size, etd = snapshot.copy_file_to(args.archive_name, args.file_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            if args.stats:
+                sys.stdout.write(FST.format(utils.format_bytes(size), etd.real_time, etd.percent_io))
         else:
-            snapshot.copy_subdir_to(args.archive_name, args.dir_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            cs, etd = snapshot.copy_subdir_to(args.archive_name, args.dir_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            if args.stats:
+                sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

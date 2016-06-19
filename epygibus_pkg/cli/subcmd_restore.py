@@ -26,6 +26,7 @@ from . import cmd
 from .. import config
 from .. import snapshot
 from .. import excpns
+from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "restore",
@@ -60,14 +61,30 @@ XGROUP.add_argument(
     action = "store_true",
 )
 
+PARSER.add_argument(
+    "--stats",
+    help=_("print the statistics for the restoration."),
+    action="store_true"
+)
+
+FST = _("Extracted: 1 file {} in {:.2f} seconds {:.1f}% I/O.\n")
+
+DST = _("Restored: {} dirs, {} files, {} symbolic links, {} hard links, {}({}) in {:.2f} seconds {:.1f}% I/O.\n")
+
 def run_cmd(args):
     try:
         if args.file_path:
-            snapshot.restore_file(args.archive_name, args.file_path, seln_fn=lambda l: l[-1-args.back])
+            size, etd = snapshot.restore_file(args.archive_name, args.file_path, seln_fn=lambda l: l[-1-args.back])
+            if args.stats:
+                sys.stdout.write(FST.format(utils.format_bytes(size), etd.real_time, etd.percent_io))
         elif args.dir_path:
-            snapshot.restore_subdir(args.archive_name, args.dir_path, seln_fn=lambda l: l[-1-args.back])
+            cs, etd = snapshot.restore_subdir(args.archive_name, args.dir_path, seln_fn=lambda l: l[-1-args.back])
+            if args.stats:
+                sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
         elif args.all:
-            snapshot.restore_subdir(args.archive_name, os.sep, seln_fn=lambda l: l[-1-args.back])
+            cs, etd = snapshot.restore_subdir(args.archive_name, os.sep, seln_fn=lambda l: l[-1-args.back])
+            if args.stats:
+                sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

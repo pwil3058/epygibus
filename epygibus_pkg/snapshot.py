@@ -443,7 +443,7 @@ class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_co
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
-class CCStats(collections.namedtuple("CCStats", ["file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"])):
+class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"])):
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
@@ -577,8 +577,8 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             link_count += file_link_data.create_link(orig_curdir, stderr)
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
             link_count += subdir_link_data.create_link(orig_curdir, stderr)
-        # ["file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"]
-        return CCStats(file_count, link_count, len(hard_links), gross_size, net_size)
+        # ["dir_count", "file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"]
+        return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
     def get_statistics(self):
         from . import repo
         ck_set = set()
@@ -691,6 +691,7 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
             raise edata
 
 def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False):
+    start_times = bmark.get_os_times()
     snapshot_fs = get_snapshot_fs(archive_name, seln_fn)
     file_data = snapshot_fs.get_file(absolute_path(file_path))
     if as_name:
@@ -700,8 +701,10 @@ def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1]
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
     file_data.copy_contents_to(target_path, overwrite=overwrite)
+    return (file_data.size, (bmark.get_os_times() - start_times).get_etd())
 
 def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
+    start_times = bmark.get_os_times()
     snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(absolute_path(subdir_path))
     if as_name:
         if os.path.dirname(as_name):
@@ -709,17 +712,22 @@ def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l
         target_path = os.path.join(absolute_path(into_dir_path), as_name)
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path.rstrip(os.sep)))
-    snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+    copy_stats = snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+    return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
 def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
+    start_times = bmark.get_os_times()
     abs_file_path = absolute_path(file_path)
     file_data = get_snapshot_fs(archive_name, seln_fn).get_file(abs_file_path)
     file_data.copy_contents_to(abs_file_path, overwrite=True)
+    return (file_data.size, (bmark.get_os_times() - start_times).get_etd())
 
 def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
+    start_times = bmark.get_os_times()
     abs_subdir_path = absolute_path(subdir_path)
     snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(abs_subdir_path)
-    snapshot_fs.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    copy_stats = snapshot_fs.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
 def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
