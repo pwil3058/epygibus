@@ -37,6 +37,13 @@ absolute_path = lambda path: os.path.abspath(os.path.expanduser(path))
 relative_path = lambda path: os.path.relpath(absolute_path(path))
 path_rel_home = lambda path: os.path.relpath(absolute_path(path), HOME_DIR)
 
+# indices of fields in iterable version of os.lstat() output
+# NB: storing this data as tuple() to aid Python 2/3 compatibility
+NFIELDS = 10
+MODE_I, INO_I, DEV_I, NLINK_I, UID_I, GID_I, SIZE_I, ATIME_I, MTIME_I, CTIME_I = range(NFIELDS)
+ATTR_TUPLE = lambda attributes: tuple(attributes[:NFIELDS])
+get_attr_tuple = lambda path: ATTR_TUPLE(os.lstat(path))
+
 class FStatsMixin:
     @property
     def name(self):
@@ -45,44 +52,38 @@ class FStatsMixin:
     def dir_path(self):
         return os.path.dirname(self.path)
     @property
-    def is_dir(self):
-        return stat.S_ISDIR(self.attributes.st_mode)
-    @property
     def is_hard_linked(self):
-        return self.attributes.st_nlink > 1
-    @property
-    def is_soft_link(self):
-        return stat.S_ISLNK(self.attributes.st_mode)
-    @property
-    def is_reg_file(self):
-        return stat.S_ISREG(self.attributes.st_mode)
+        return self.attributes[NLINK_I] > 1
     @property
     def mode(self):
-        return self.attributes.st_mode
+        return self.attributes[MODE_I]
     @property
     def atime(self):
-        return self.attributes.st_atime
+        return self.attributes[ATIME_I]
     @property
     def mtime(self):
-        return self.attributes.st_mtime
+        return self.attributes[MTIME_I]
+    @property
+    def ctime(self):
+        return self.attributes[CTIME_I]
     @property
     def nlink(self):
-        return self.attributes.st_nlink
+        return self.attributes[NLINK_I]
     @property
     def size(self):
-        return self.attributes.st_size
+        return self.attributes[SIZE_I]
     @property
     def uid(self):
-        return self.attributes.st_uid
+        return self.attributes[UID_I]
     @property
     def gid(self):
-        return self.attributes.st_gid
+        return self.attributes[GID_I]
     @property
     def inode(self):
-        return self.attributes.st_ino
+        return self.attributes[INO_I]
     @property
     def device(self):
-        return self.attributes.st_dev
+        return self.attributes[DEV_I]
 
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), FStatsMixin):
     def open_read_only(self, binary=False):
@@ -148,7 +149,7 @@ class Snapshot(object):
         self.files = {}
         self.file_links = {}
         self.subdir_links = {}
-    def _add_subdir(self, path_parts, attributes=None):
+    def _add_subdir(self, path_parts, attributes):
         name = path_parts[0]
         if len(path_parts) == 1:
             # neeed to be careful that we don't clobber existing data
@@ -162,7 +163,7 @@ class Snapshot(object):
             if name not in self.subdirs:
                 self.subdirs[name] = Snapshot(self)
             return self.subdirs[name]._add_subdir(path_parts[1:], attributes)
-    def add_subdir(self, dir_path, attributes=None):
+    def add_subdir(self, dir_path, attributes):
         return self._add_subdir(dir_path.strip(os.sep).split(os.sep), attributes)
     def _find_dir(self, dirpath_parts):
         if not dirpath_parts:
@@ -188,9 +189,8 @@ class Snapshot(object):
         data = self.find_dir(dir_path).subdir_links[subdir_name]
         return SLink(subdir_path, data[0], data[1])
     def iterate_content_tokens(self):
-        for data in self.files.values():
-            if stat.S_ISREG(data[0].st_mode):
-                yield data[1]
+        for _dont_care, content_token in self.files.values():
+            yield content_token
         for subdir in self.subdirs.values():
             for content_token in subdir.iterate_content_tokens():
                 yield content_token
@@ -296,15 +296,15 @@ class _SnapshotGenerator(object):
     def _include_file(self, files, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
-        file_stats = os.lstat(file_path)
         try: # it's possible content manager got environment error reading file, if so skip it and report
             content_token = self.repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
             self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
             return
-        self.content_count += file_stats.st_size
+        file_attrs = get_attr_tuple(file_path)
+        self.content_count += file_attrs[SIZE_I]
         self.file_count += 1
-        files[file_name] = (file_stats, content_token)
+        files[file_name] = (file_attrs, content_token)
     def _include_file_link(self, file_links, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -314,7 +314,7 @@ class _SnapshotGenerator(object):
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
         self.file_slink_count += 1
-        file_links[file_name] = (os.lstat(file_path), target_path)
+        file_links[file_name] = (get_attr_tuple(file_path), target_path)
     def _include_subdir_link(self, subdir_links, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -324,12 +324,12 @@ class _SnapshotGenerator(object):
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
         self.subdir_slink_count += 1
-        subdir_links[file_name] = (os.lstat(file_path), target_path)
+        subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
     def include_dir(self, abs_dir_path):
         for dir_path, subdir_names, file_names in os.walk(abs_dir_path, followlinks=True):
             if self.is_excluded_dir(dir_path):
                 continue
-            new_subdir = self._snapshot.add_subdir(dir_path, os.lstat(dir_path))
+            new_subdir = self._snapshot.add_subdir(dir_path, get_attr_tuple(dir_path))
             for file_name in file_names:
                 # NB: checking both name AND full path of file for exclusion
                 if self.is_excluded_file(file_name):
@@ -371,7 +371,7 @@ class _SnapshotGenerator(object):
     def include_file(self, abs_file_path):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
-        files = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).files
+        files = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).files
         try:
             self._include_file(files, file_name, abs_file_path)
         except OSError as edata:
@@ -382,10 +382,10 @@ class _SnapshotGenerator(object):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
         if os.path.isdir(abs_file_path):
-            subdir_links = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).subdir_links
+            subdir_links = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).subdir_links
             self._include_subdir_link(subdir_links, file_name, abs_file_path)
         else:
-            file_links = self._snapshot.add_subdir(abs_dir_path, os.lstat(abs_dir_path)).file_links
+            file_links = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).file_links
             self._include_file_link(file_links, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
         for cre in self._exclude_file_cres:
