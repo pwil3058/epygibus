@@ -25,6 +25,7 @@ import gzip
 import os
 import collections
 import io
+import shutil
 
 from .w2and3 import pickle, PICKLE_PROTOCOL
 
@@ -41,9 +42,9 @@ BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_cou
 class CIS(collections.namedtuple("CIS", ["stored_size", "ref_count"])):
     @property
     def stored_size_per_ref(self):
-        if self.ref_count > 1:
+        try:
             return float(self.stored_size) / self.ref_count
-        else:
+        except ZeroDivisionError:
             return self.stored_size
     def __add__(self, other):
         return CIS(*[self[i] + other[i] for i in range(len(self))])
@@ -57,38 +58,39 @@ def get_repo_mgmt_key(repo_name):
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable", "compressed"])):
     def store_contents(self, file_path):
         assert self.writeable
-        contents = io.open(file_path, "rb").read()
-        content_token = hashlib.sha1(contents).hexdigest()
-        dir_name, subdir_name, file_name = _split_content_token(content_token)
-        dir_path = os.path.join(self.base_dir_path, dir_name)
-        subdir_path = os.path.join(dir_path, subdir_name)
-        needs_write = True
-        if dir_name not in self.ref_counter:
-            self.ref_counter[dir_name] = { subdir_name : { file_name : 1 }}
-            os.mkdir(dir_path)
-            os.mkdir(subdir_path)
-        elif subdir_name not in self.ref_counter[dir_name]:
-            self.ref_counter[dir_name][subdir_name] = { file_name : 1 }
-            os.mkdir(subdir_path)
-        elif file_name not in self.ref_counter[dir_name][subdir_name]:
-            self.ref_counter[dir_name][subdir_name][file_name] = 1
-        else:
-            self.ref_counter[dir_name][subdir_name][file_name] += 1
-            needs_write = False
-        if needs_write:
-            import stat
-            file_path = os.path.join(subdir_path, file_name)
-            if self.compressed:
-                file_path += ".gz"
-                with gzip.open(file_path, "wb") as fobj:
-                    fobj.write(contents)
+        with io.open(file_path, "rb") as f_in:
+            content_token = hashlib.sha1(f_in.read()).hexdigest()
+            dir_name, subdir_name, file_name = _split_content_token(content_token)
+            dir_path = os.path.join(self.base_dir_path, dir_name)
+            subdir_path = os.path.join(dir_path, subdir_name)
+            needs_write = True
+            if dir_name not in self.ref_counter:
+                self.ref_counter[dir_name] = { subdir_name : { file_name : 1 }}
+                os.mkdir(dir_path)
+                os.mkdir(subdir_path)
+            elif subdir_name not in self.ref_counter[dir_name]:
+                self.ref_counter[dir_name][subdir_name] = { file_name : 1 }
+                os.mkdir(subdir_path)
+            elif file_name not in self.ref_counter[dir_name][subdir_name]:
+                self.ref_counter[dir_name][subdir_name][file_name] = 1
             else:
-                with io.open(file_path, "wb") as fobj:
-                    fobj.write(contents)
-            os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
-        # NB returning content storage stats here has been tried and
-        # rejected due to time penalties (3 orders of magnitude) on
-        # slow file systems such as cifs mounted network devices
+                self.ref_counter[dir_name][subdir_name][file_name] += 1
+                needs_write = False
+            if needs_write:
+                import stat
+                f_in.seek(0)
+                file_path = os.path.join(subdir_path, file_name)
+                if self.compressed:
+                    file_path += ".gz"
+                    with gzip.open(file_path, "wb") as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                else:
+                    with io.open(file_path, "wb") as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
+            # NB returning content storage stats here has been tried and
+            # rejected due to time penalties (3 orders of magnitude) on
+            # slow file systems such as cifs mounted network devices
         return content_token
     def _content_stored_size(self, *token_parts):
         file_path = os.path.join(self.base_dir_path, *token_parts)
@@ -172,7 +174,6 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 raise edata
             return io.open(file_path, "rb" if binary else "r")
     def copy_contents_to(self, content_token, target_file_path):
-        import shutil
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
             shutil.copy(file_path, target_file_path)
