@@ -173,15 +173,27 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             if edata.errno != errno.ENOENT:
                 raise edata
             return io.open(file_path, "rb" if binary else "r")
-    def copy_contents_to(self, content_token, target_file_path):
+    def copy_contents_to(self, content_token, target_file_path, attributes):
+        from . import excpns
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
-            shutil.copy(file_path, target_file_path)
+            with io.open(target_file_path, "wb") as f_out:
+                try: # try compressed first as that is the default
+                    with gzip.open(file_path + ".gz", "rb") as f_in:
+                        shutil.copyfileobj(f_in, f_out)
+                except EnvironmentError as edata:
+                    if edata.errno != errno.ENOENT:
+                        raise edata
+                    with io.open(file_path, "rb") as f_in:
+                        shutil.copyfileobj(f_in, f_out)
         except EnvironmentError as edata:
-            if edata.errno != errno.ENOENT:
-                raise edata
-            with gzip.open(file_path + ".gz", "rb") as f_in, io.open(target_file_path, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+            raise excpns.CopyFileFailed(target_file_path, os.strerror(edata.errno))
+        try:
+            os.chmod(target_file_path, attributes.st_mode)
+            os.utime(target_file_path, (attributes.st_atime, attributes.st_mtime))
+            os.chown(target_file_path, attributes.st_uid, attributes.st_gid)
+        except EnvironmentError as edata:
+            raise excpns.SetAttributesFailed(target_file_path, os.strerror(edata.errno))
 
 @contextmanager
 def open_repo_mgr(repo_mgmt_key, writeable=False):

@@ -43,6 +43,9 @@ NFIELDS = 10
 MODE_I, INO_I, DEV_I, NLINK_I, UID_I, GID_I, SIZE_I, ATIME_I, MTIME_I, CTIME_I = range(NFIELDS)
 ATTR_TUPLE = lambda attributes: tuple(attributes[:NFIELDS])
 get_attr_tuple = lambda path: ATTR_TUPLE(os.lstat(path))
+# a named tuple for passing around the data (if needed)
+# use the same names os.lstat() output for interchangeability
+ATTRS_NAMED = collections.namedtuple("ATTRS_NAMED", ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"])
 
 class FStatsMixin:
     @property
@@ -90,23 +93,19 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             return repo_mgr.open_contents_read_only(self.content_token, binary=binary)
-    def copy_contents_to(self, target_file_path, overwrite=False, locked_repo_mgr=None):
+    def copy_contents_to(self, target_file_path, overwrite=False):
         from . import repo
         if not overwrite and os.path.isfile(target_file_path):
             raise excpns.FileOverwriteError(target_file_path)
-        if locked_repo_mgr:
-            locked_repo_mgr.copy_contents_to(self.content_token, target_file_path)
-        else:
-            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
-                repo_mgr.copy_contents_to(self.content_token, target_file_path)
-        os.chmod(target_file_path, self.mode)
-        os.utime(target_file_path, (self.atime, self.mtime))
-        os.chown(target_file_path, self.uid, self.gid)
-        return 1
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
+            repo_mgr.copy_contents_to(self.content_token, target_file_path, self.attributes)
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             return repo_mgr.get_content_storage_stats(self.content_token)
+    @classmethod
+    def make(cls, path, f_data, repo_mgmt_key):
+        return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1], repo_mgmt_key)
 
 class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
     def create_link(self, orig_curdir, stderr):
@@ -136,6 +135,9 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
             # report the error and move on (we have permission to wreak havoc)
             stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
             return 0
+    @classmethod
+    def make(cls, path, f_data):
+        return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1])
 
 class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
     def __add__(self, other):
@@ -178,16 +180,13 @@ class Snapshot(object):
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
     def find_file(self, file_path, repo_mgmt_key):
         dir_path, file_name = os.path.split(file_path)
-        data = self.find_dir(dir_path).files[file_name]
-        return SFile(file_path, data[0], data[1], repo_mgmt_key)
+        return SFile.make(file_path, self.find_dir(dir_path).files[file_name], repo_mgmt_key)
     def find_file_link(self, file_path):
         dir_path, file_name = os.path.split(file_path)
-        data = self.find_dir(dir_path).file_links[file_name]
-        return SLink(file_path, data[0], data[1])
+        return SLink.make(file_path, self.find_dir(dir_path).file_links[file_name])
     def find_subdir_link(self, subdir_path):
         dir_path, subdir_name = os.path.split(subdir_path)
-        data = self.find_dir(dir_path).subdir_links[subdir_name]
-        return SLink(subdir_path, data[0], data[1])
+        return SLink.make(subdir_path, self.find_dir(dir_path).subdir_links[subdir_name])
     def iterate_content_tokens(self):
         for _dont_care, content_token in self.files.values():
             yield content_token
@@ -490,7 +489,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def iterate_files(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for file_name, data in self.snapshot.files.items():
-            yield SFile(os.path.join(pre_path, file_name), data[0], data[1], self.repo_mgmt_key)
+            yield SFile.make(os.path.join(pre_path, file_name), data, self.repo_mgmt_key)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for sfile in subdir.iterate_files(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -498,7 +497,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def iterate_subdir_links(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.subdir_links.items():
-            yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
+            yield SLink.make(os.path.join(pre_path, link_name), data)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_subdir_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -506,7 +505,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def iterate_file_links(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.file_links.items():
-            yield SLink(os.path.join(pre_path, link_name), data[0], data[1])
+            yield SLink.make(os.path.join(pre_path, link_name), data)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -555,22 +554,28 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         net_size = 0
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
-                try:
-                    if file_data.is_hard_linked:
-                        if file_data.inode in hard_links:
+                if file_data.is_hard_linked:
+                    if file_data.inode in hard_links:
+                        try:
                             os.link(hard_links[file_data.inode].path, file_data.path)
                             file_count += 1
                             gross_size += file_data.size
-                            continue
-                        else:
-                            hard_links[file_data.inode] = file_data
-                    file_data.copy_contents_to(file_data.path, overwrite=overwrite, locked_repo_mgr=repo_mgr)
-                    file_count += 1
-                    gross_size += file_data.size
-                    net_size += file_data.size
-                except EnvironmentError as edata:
-                    # report the error and move on (we have permission to wreak havoc)
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+                        except EnvironmentError as edata:
+                            # report the error and move on (we have permission to wreak havoc)
+                            stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.inode].path, edata.strerror))
+                        continue
+                    else:
+                        hard_links[file_data.inode] = file_data
+                try:
+                    repo_mgr.copy_contents_to(file_data.content_token, file_data.path, file_data.attributes)
+                except excpns.CopyFileFailed as edata:
+                    stderr.write(str(edata) + "\n")
+                    continue
+                except excpns.SetAttributesFailed as edata:
+                    stderr.write(str(edata) + "\n")
+                file_count += 1
+                gross_size += file_data.size
+                net_size += file_data.size
         orig_curdir = os.getcwd()
         link_count = 0
         for file_link_data in self.iterate_file_links(target_dir_path, True):

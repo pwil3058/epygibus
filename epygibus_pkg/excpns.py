@@ -28,6 +28,18 @@ class InvalidArgument(Error):
     def __init__(self, argument):
         self.argument = argument
 
+class CopyFileFailed(Error):
+    STR_TEMPLATE = _("Error: copying \"{file_path}\" failed: {reason}.")
+    def __init__(self, file_path, reason):
+        self.file_path = file_path
+        self.reason = reason
+
+class SetAttributesFailed(Error):
+    STR_TEMPLATE = _("Error: setting \"{file_path}\" attributes failed: {reason}.")
+    def __init__(self, file_path, reason):
+        self.file_path = file_path
+        self.reason = reason
+
 class DirNotFound(Error):
     STR_TEMPLATE = _("Error: directory \"{dir_path}\" not found in \"{archive_name}::{snapshot_name}\" snapshot.")
     def __init__(self, dir_path, archive_name, snapshot_name):
