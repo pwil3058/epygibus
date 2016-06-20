@@ -47,48 +47,15 @@ get_attr_tuple = lambda path: ATTR_TUPLE(os.lstat(path))
 # use the same names os.lstat() output for interchangeability
 ATTRS_NAMED = collections.namedtuple("ATTRS_NAMED", ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"])
 
-class FStatsMixin:
+class PathComponentsMixin:
     @property
     def name(self):
         return os.path.basename(self.path)
     @property
     def dir_path(self):
         return os.path.dirname(self.path)
-    @property
-    def is_hard_linked(self):
-        return self.attributes[NLINK_I] > 1
-    @property
-    def mode(self):
-        return self.attributes[MODE_I]
-    @property
-    def atime(self):
-        return self.attributes[ATIME_I]
-    @property
-    def mtime(self):
-        return self.attributes[MTIME_I]
-    @property
-    def ctime(self):
-        return self.attributes[CTIME_I]
-    @property
-    def nlink(self):
-        return self.attributes[NLINK_I]
-    @property
-    def size(self):
-        return self.attributes[SIZE_I]
-    @property
-    def uid(self):
-        return self.attributes[UID_I]
-    @property
-    def gid(self):
-        return self.attributes[GID_I]
-    @property
-    def inode(self):
-        return self.attributes[INO_I]
-    @property
-    def device(self):
-        return self.attributes[DEV_I]
 
-class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), FStatsMixin):
+class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), PathComponentsMixin):
     def open_read_only(self, binary=False):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -103,11 +70,14 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             return repo_mgr.get_content_storage_stats(self.content_token)
+    @property
+    def is_hard_linked(self):
+        return self.attributes.st_nlink > 1
     @classmethod
     def make(cls, path, f_data, repo_mgmt_key):
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1], repo_mgmt_key)
 
-class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), FStatsMixin):
+class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), PathComponentsMixin):
     def create_link(self, orig_curdir, stderr):
         try:
             #if the file exists we have to remove it or get stat.EEXIST error
@@ -125,11 +95,11 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
             else:
                 os.symlink(self.tgt_path, self.path)
             try:
-                os.lchmod(self.path, self.mode)
+                os.lchmod(self.path, self.attributes.st_mode)
             except AttributeError:
                 # NB: some systems don't support lchmod())
-                os.chmod(self.path, self.mode)
-            os.lchown(self.path, self.uid, self.gid)
+                os.chmod(self.path, self.attributes.st_mode)
+            os.lchown(self.path, self.attributes.st_uid, self.attributes.st_gid)
             return 1
         except EnvironmentError as edata:
             # report the error and move on (we have permission to wreak havoc)
@@ -446,7 +416,7 @@ class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "sof
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
-class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), FStatsMixin):
+class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), PathComponentsMixin):
     @property
     def attributes(self):
         return self.snapshot.attributes
@@ -530,8 +500,8 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             else:
                 raise excpns.FileOverwriteError(target_dir_path)
         if create_dir:
-            os.mkdir(target_dir_path, self.mode)
-            os.lchown(target_dir_path, self.uid, self.gid)
+            os.mkdir(target_dir_path, self.attributes.st_mode)
+            os.lchown(target_dir_path, self.attributes.st_uid, self.attributes.st_gid)
             dir_count += 1
         # Now create the subdirs
         for subdir in self.iterate_subdirs(target_dir_path, True):
@@ -540,9 +510,9 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                     continue
                 elif os.path.exists(subdir.path):
                     os.remove(subdir.path)
-                os.mkdir(subdir.path, subdir.mode)
+                os.mkdir(subdir.path, subdir.attributes.st_mode)
                 dir_count += 1
-                os.lchown(subdir.path, subdir.uid, subdir.gid)
+                os.lchown(subdir.path, subdir.attributes.st_uid, subdir.attributes.st_gid)
                 dir_count += 1
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
@@ -555,17 +525,17 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
                 if file_data.is_hard_linked:
-                    if file_data.inode in hard_links:
+                    if file_data.attributes.st_ino in hard_links:
                         try:
-                            os.link(hard_links[file_data.inode].path, file_data.path)
+                            os.link(hard_links[file_data.attributes.st_ino].path, file_data.path)
                             file_count += 1
-                            gross_size += file_data.size
+                            gross_size += file_data.attributes.st_size
                         except EnvironmentError as edata:
                             # report the error and move on (we have permission to wreak havoc)
-                            stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.inode].path, edata.strerror))
+                            stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.attributes.st_ino].path, edata.strerror))
                         continue
                     else:
-                        hard_links[file_data.inode] = file_data
+                        hard_links[file_data.attributes.st_ino] = file_data
                 try:
                     repo_mgr.copy_contents_to(file_data.content_token, file_data.path, file_data.attributes)
                 except excpns.CopyFileFailed as edata:
@@ -574,8 +544,8 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 except excpns.SetAttributesFailed as edata:
                     stderr.write(str(edata) + "\n")
                 file_count += 1
-                gross_size += file_data.size
-                net_size += file_data.size
+                gross_size += file_data.attributes.st_size
+                net_size += file_data.attributes.st_size
         orig_curdir = os.getcwd()
         link_count = 0
         for file_link_data in self.iterate_file_links(target_dir_path, True):
@@ -595,7 +565,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(recurse=True):
                 n_files += 1
-                n_bytes += file_data.size
+                n_bytes += file_data.attributes.st_size
                 cis = repo_mgr.get_content_storage_stats(file_data.content_token)
                 n_share_bytes += cis.stored_size_per_ref
                 if not file_data.content_token in ck_set:
@@ -706,7 +676,7 @@ def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1]
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
     file_data.copy_contents_to(target_path, overwrite=overwrite)
-    return (file_data.size, (bmark.get_os_times() - start_times).get_etd())
+    return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
 
 def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
     start_times = bmark.get_os_times()
@@ -725,7 +695,7 @@ def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
     abs_file_path = absolute_path(file_path)
     file_data = get_snapshot_fs(archive_name, seln_fn).get_file(abs_file_path)
     file_data.copy_contents_to(abs_file_path, overwrite=True)
-    return (file_data.size, (bmark.get_os_times() - start_times).get_etd())
+    return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
 
 def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
     start_times = bmark.get_os_times()
