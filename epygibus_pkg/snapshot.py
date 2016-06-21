@@ -238,17 +238,15 @@ def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, repo_mgr, exclude_dir_cres, exclude_file_cres, skip_broken_links=False, stderr=sys.stderr, report_skipped_links=False):
+    def __init__(self, repo_mgr, archive, stderr=sys.stderr, report_skipped_links=False):
         self._snapshot = Snapshot()
-        self.skip_broken_links=skip_broken_links
+        self._archive = archive
         self.report_skipped_links=report_skipped_links
         self.repo_mgr = repo_mgr
         self.content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
-        self._exclude_dir_cres = exclude_dir_cres
-        self._exclude_file_cres = exclude_file_cres
         self.stderr = stderr
         self.start_counts = repo_mgr.get_counts()
     def finish(self, elapsed_time):
@@ -278,7 +276,7 @@ class _SnapshotGenerator(object):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
-        if self.skip_broken_links and not utils.is_broken_link(target_path, file_path):
+        if self._archive.skip_broken_soft_links and not utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
@@ -288,7 +286,7 @@ class _SnapshotGenerator(object):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
-        if self.skip_broken_links and not utils.is_broken_link(target_path, file_path):
+        if self._archive.skip_broken_soft_links and not utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
@@ -357,12 +355,12 @@ class _SnapshotGenerator(object):
             file_links = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).file_links
             self._include_file_link(file_links, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
-        for cre in self._exclude_file_cres:
+        for cre in self._archive.exclude_file_cres:
             if cre.match(file_path_or_name):
                 return True
         return False
     def is_excluded_dir(self, dir_path_or_name):
-        for cre in self._exclude_dir_cres:
+        for cre in self._archive.exclude_dir_cres:
             if cre.match(dir_path_or_name):
                 return True
         return False
@@ -377,7 +375,7 @@ def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_
     start_time = bmark.get_os_times()
     repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
     with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
-        snapshot_generator = _SnapshotGenerator(repo_mgr, archive.exclude_dir_cres, archive.exclude_file_cres, archive.skip_broken_soft_links, stderr=stderr, report_skipped_links=report_skipped_links)
+        snapshot_generator = _SnapshotGenerator(repo_mgr, archive, stderr=stderr, report_skipped_links=report_skipped_links)
         for item in archive.includes:
             abs_item = absolute_path(item)
             if os.path.islink(abs_item):
