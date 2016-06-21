@@ -121,22 +121,21 @@ class Snapshot(object):
         self.files = {}
         self.file_links = {}
         self.subdir_links = {}
-    def _add_subdir(self, path_parts, attributes):
-        name = path_parts[0]
-        if len(path_parts) == 1:
+    def _find_or_add_subdir(self, path_parts, index, attributes):
+        name = path_parts[index]
+        if index == len(path_parts) - 1:
             # neeed to be careful that we don't clobber existing data
             if name not in self.subdirs:
                 self.subdirs[name] = Snapshot(self, attributes)
-            elif self.subdirs[name].attributes is None:
-                # cover the case where it was previously created on way to a leaf dir
-                self.subdirs[name].attributes = attributes
             return self.subdirs[name]
         else:
             if name not in self.subdirs:
-                self.subdirs[name] = Snapshot(self)
-            return self.subdirs[name]._add_subdir(path_parts[1:], attributes)
-    def add_subdir(self, dir_path, attributes):
-        return self._add_subdir(dir_path.strip(os.sep).split(os.sep), attributes)
+                subdir_attributes = get_attr_tuple(os.path.join(os.sep, *path_parts[:index+1]))
+                self.subdirs[name] = Snapshot(self, subdir_attributes)
+            return self.subdirs[name]._find_or_add_subdir(path_parts, index + 1, attributes)
+    def find_or_add_subdir(self, abs_subdir_path):
+        attributes = get_attr_tuple(abs_subdir_path)
+        return self._find_or_add_subdir(abs_subdir_path.strip(os.sep).split(os.sep), 0, attributes)
     def _find_dir(self, dirpath_parts):
         if not dirpath_parts:
             return self
@@ -292,16 +291,16 @@ class _SnapshotGenerator(object):
             return
         self.subdir_slink_count += 1
         subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
-    def include_dir(self, abs_dir_path):
-        for dir_path, subdir_names, file_names in os.walk(abs_dir_path, followlinks=True):
-            if self.is_excluded_dir(dir_path):
+    def include_dir(self, abs_base_dir_path):
+        for abs_dir_path, subdir_names, file_names in os.walk(abs_base_dir_path, followlinks=True):
+            if self.is_excluded_dir(abs_dir_path):
                 continue
-            new_subdir = self._snapshot.add_subdir(dir_path, get_attr_tuple(dir_path))
+            new_subdir = self._snapshot.find_or_add_subdir(abs_dir_path)
             for file_name in file_names:
                 # NB: checking both name AND full path of file for exclusion
                 if self.is_excluded_file(file_name):
                     continue
-                file_path = os.path.join(dir_path, file_name)
+                file_path = os.path.join(abs_dir_path, file_name)
                 if self.is_excluded_file(file_path):
                     continue
                 try:
@@ -319,14 +318,14 @@ class _SnapshotGenerator(object):
                 if self.is_excluded_dir(subdir_name):
                     excluded_subdir_names.append(subdir_name)
                     continue
-                subdir_path = os.path.join(dir_path, subdir_name)
-                if self.is_excluded_dir(subdir_path):
+                abs_subdir_path = os.path.join(abs_dir_path, subdir_name)
+                if self.is_excluded_dir(abs_subdir_path):
                     excluded_subdir_names.append(subdir_name)
                     continue
-                if os.path.islink(subdir_path):
+                if os.path.islink(abs_subdir_path):
                     excluded_subdir_names.append(subdir_name)
                     try:
-                        self._include_subdir_link(new_subdir.subdir_links, subdir_name, subdir_path)
+                        self._include_subdir_link(new_subdir.subdir_links, subdir_name, abs_subdir_path)
                     except OSError as edata:
                         # race condition
                         if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -338,7 +337,7 @@ class _SnapshotGenerator(object):
     def include_file(self, abs_file_path):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
-        files = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).files
+        files = self._snapshot.find_or_add_subdir(abs_dir_path).files
         try:
             self._include_file(files, file_name, abs_file_path)
         except OSError as edata:
@@ -349,10 +348,10 @@ class _SnapshotGenerator(object):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
         if os.path.isdir(abs_file_path):
-            subdir_links = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).subdir_links
+            subdir_links = self._snapshot.find_or_add_subdir(abs_dir_path).subdir_links
             self._include_subdir_link(subdir_links, file_name, abs_file_path)
         else:
-            file_links = self._snapshot.add_subdir(abs_dir_path, get_attr_tuple(abs_dir_path)).file_links
+            file_links = self._snapshot.find_or_add_subdir(abs_dir_path).file_links
             self._include_file_link(file_links, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
         for cre in self._archive.exclude_file_cres:
