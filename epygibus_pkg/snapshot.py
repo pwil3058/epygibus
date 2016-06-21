@@ -276,7 +276,7 @@ class _SnapshotGenerator(object):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
-        if self._archive.skip_broken_soft_links and not utils.is_broken_link(target_path, file_path):
+        if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
@@ -286,7 +286,7 @@ class _SnapshotGenerator(object):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
-        if self._archive.skip_broken_soft_links and not utils.is_broken_link(target_path, file_path):
+        if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return

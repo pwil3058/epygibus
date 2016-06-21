@@ -59,4 +59,4 @@ def get_link_abs_path(link_path, file_path):
     return os.path.abspath(os.path.join(os.path.dirname(file_path), link_path))
 
 def is_broken_link(link_path, file_path):
-    return os.path.exists(get_link_abs_path(link_path, file_path))
+    return not os.path.exists(get_link_abs_path(link_path, file_path))
