@@ -198,16 +198,17 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
 @contextmanager
 def open_repo_mgr(repo_mgmt_key, writeable=False):
     import fcntl
-    fobj = os.open(repo_mgmt_key.lock_file_path, os.O_RDWR if writeable else os.O_RDONLY)
-    fcntl.lockf(fobj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
-    ref_counter = pickle.load(io.open(repo_mgmt_key.ref_counter_path, "rb"))
-    try:
-        yield _BlobRepo(ref_counter, repo_mgmt_key.base_dir_path, writeable, compressed=repo_mgmt_key.compressed)
-    finally:
-        if writeable:
-            pickle.dump(ref_counter, io.open(repo_mgmt_key.ref_counter_path, "wb"), PICKLE_PROTOCOL)
-        fcntl.lockf(fobj, fcntl.LOCK_UN)
-        os.close(fobj)
+    with io.open(repo_mgmt_key.lock_file_path, "wb" if writeable else "rb") as fobj:
+        fcntl.lockf(fobj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
+        with io.open(repo_mgmt_key.ref_counter_path, "rb") as ref_in:
+            ref_counter = pickle.load(ref_in)
+        try:
+            yield _BlobRepo(ref_counter, repo_mgmt_key.base_dir_path, writeable, compressed=repo_mgmt_key.compressed)
+        finally:
+            if writeable:
+                with io.open(repo_mgmt_key.ref_counter_path, "wb") as ref_out:
+                    pickle.dump(ref_counter, ref_out, PICKLE_PROTOCOL)
+            fcntl.lockf(fobj, fcntl.LOCK_UN)
 
 def initialize_repo(repo_spec):
     try:
