@@ -237,33 +237,36 @@ def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
 class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, repo_mgr, archive, stderr=sys.stderr, report_skipped_links=False):
+    def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
+        from . import repo
         self._snapshot = Snapshot()
         self._archive = archive
         self.report_skipped_links=report_skipped_links
-        self.repo_mgr = repo_mgr
+        self.repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
         self.content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
         self.stderr = stderr
-        self.start_counts = repo_mgr.get_counts()
+        self.released_items = 0
+        self.created_items = 0
+    def adjust_item_stats(self, start_counts, end_counts):
+        # TODO: check the maths here (use a namedtuple)
+        self.created_items = max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
+        self.released_items = max(end_counts[1] - start_counts[1], 0)
     def finish(self, elapsed_time):
         self.elapsed_time = elapsed_time
-        self.end_counts = self.repo_mgr.get_counts()
     @property
     def snapshot_plus(self):
         return SnapshotPlus(self._snapshot, self.creation_stats)
     @property
     def creation_stats(self):
-        num_new_citems = max(sum(self.end_counts[:-1]) - sum(self.start_counts[:-1]), 0)
-        num_released_citems = max(self.end_counts[1] - self.start_counts[1], 0)
-        return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, num_new_citems, num_released_citems, self.elapsed_time.get_etd())
-    def _include_file(self, files, file_name, file_path):
+        return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.created_items, self.released_items, self.elapsed_time.get_etd())
+    def _include_file(self, files, file_name, file_path, repo_mgr):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         try: # it's possible content manager got environment error reading file, if so skip it and report
-            content_token = self.repo_mgr.store_contents(file_path)
+            content_token = repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
             self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
             return
@@ -292,54 +295,62 @@ class _SnapshotGenerator(object):
         self.subdir_slink_count += 1
         subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
     def include_dir(self, abs_base_dir_path):
-        for abs_dir_path, subdir_names, file_names in os.walk(abs_base_dir_path, followlinks=True):
-            if self.is_excluded_dir(abs_dir_path):
-                continue
-            new_subdir = self._snapshot.find_or_add_subdir(abs_dir_path)
-            for file_name in file_names:
-                # NB: checking both name AND full path of file for exclusion
-                if self.is_excluded_file(file_name):
+        from . import repo
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+            start_counts = repo_mgr.get_counts()
+            for abs_dir_path, subdir_names, file_names in os.walk(abs_base_dir_path, followlinks=True):
+                if self.is_excluded_dir(abs_dir_path):
                     continue
-                file_path = os.path.join(abs_dir_path, file_name)
-                if self.is_excluded_file(file_path):
-                    continue
-                try:
-                    if os.path.islink(file_path):
-                        self._include_file_link(new_subdir.file_links, file_name, file_path)
-                    else:
-                        self._include_file(new_subdir.files, file_name, file_path)
-                except OSError as edata:
-                    # race condition
-                    if edata.errno in self.FORGIVEABLE_ERRNOS:
-                        continue # it's gone away so we skip it
-                    raise edata # something we can't handle so throw the towel in
-            excluded_subdir_names = []
-            for subdir_name in subdir_names:
-                if self.is_excluded_dir(subdir_name):
-                    excluded_subdir_names.append(subdir_name)
-                    continue
-                abs_subdir_path = os.path.join(abs_dir_path, subdir_name)
-                if self.is_excluded_dir(abs_subdir_path):
-                    excluded_subdir_names.append(subdir_name)
-                    continue
-                if os.path.islink(abs_subdir_path):
-                    excluded_subdir_names.append(subdir_name)
+                new_subdir = self._snapshot.find_or_add_subdir(abs_dir_path)
+                for file_name in file_names:
+                    # NB: checking both name AND full path of file for exclusion
+                    if self.is_excluded_file(file_name):
+                        continue
+                    file_path = os.path.join(abs_dir_path, file_name)
+                    if self.is_excluded_file(file_path):
+                        continue
                     try:
-                        self._include_subdir_link(new_subdir.subdir_links, subdir_name, abs_subdir_path)
+                        if os.path.islink(file_path):
+                            self._include_file_link(new_subdir.file_links, file_name, file_path)
+                        else:
+                            self._include_file(new_subdir.files, file_name, file_path, repo_mgr)
                     except OSError as edata:
                         # race condition
                         if edata.errno in self.FORGIVEABLE_ERRNOS:
                             continue # it's gone away so we skip it
                         raise edata # something we can't handle so throw the towel in
-            # NB: this is an in place reduction in the list of subdirectories
-            for esdp in excluded_subdir_names:
-                subdir_names.remove(esdp)
+                excluded_subdir_names = []
+                for subdir_name in subdir_names:
+                    if self.is_excluded_dir(subdir_name):
+                        excluded_subdir_names.append(subdir_name)
+                        continue
+                    abs_subdir_path = os.path.join(abs_dir_path, subdir_name)
+                    if self.is_excluded_dir(abs_subdir_path):
+                        excluded_subdir_names.append(subdir_name)
+                        continue
+                    if os.path.islink(abs_subdir_path):
+                        excluded_subdir_names.append(subdir_name)
+                        try:
+                            self._include_subdir_link(new_subdir.subdir_links, subdir_name, abs_subdir_path)
+                        except OSError as edata:
+                            # race condition
+                            if edata.errno in self.FORGIVEABLE_ERRNOS:
+                                continue # it's gone away so we skip it
+                            raise edata # something we can't handle so throw the towel in
+                # NB: this is an in place reduction in the list of subdirectories
+                for esdp in excluded_subdir_names:
+                    subdir_names.remove(esdp)
+            self.adjust_item_stats(start_counts, repo_mgr.get_counts())
     def include_file(self, abs_file_path):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
+        from . import repo
         abs_dir_path, file_name = os.path.split(abs_file_path)
         files = self._snapshot.find_or_add_subdir(abs_dir_path).files
         try:
-            self._include_file(files, file_name, abs_file_path)
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                start_counts = repo_mgr.get_counts()
+                self._include_file(files, file_name, abs_file_path, repo_mgr)
+                self.adjust_item_stats(start_counts, repo_mgr.get_counts())
         except OSError as edata:
             # race condition
             if edata.errno not in self.FORGIVEABLE_ERRNOS:
@@ -368,42 +379,39 @@ GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
     from . import bmark
-    from . import repo
     if compress is None:
         compress = archive.compress_default
     start_time = bmark.get_os_times()
-    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
-    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
-        snapshot_generator = _SnapshotGenerator(repo_mgr, archive, stderr=stderr, report_skipped_links=report_skipped_links)
-        for item in archive.includes:
-            abs_item = absolute_path(item)
-            if os.path.islink(abs_item):
-                try:
-                    snapshot_generator.include_link(abs_item)
-                except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.isfile(abs_item):
-                try:
-                    snapshot_generator.include_file(abs_item)
-                except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.isdir(abs_item):
-                try:
-                    snapshot_generator.include_dir(abs_item)
-                except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.exists(abs_item):
-                stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
-            else:
-                stderr.write(_("{0}: not found. Skipped.\n").format(item))
-        snapshot_generator.finish(bmark.get_os_times() - start_time)
-        try:
-            snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
-        except EnvironmentError as edata:
-            stderr.write("{}\n".format(edata))
-        finally:
-            elapsed_time = bmark.get_os_times() - start_time
-        return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
+    snapshot_generator = _SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links)
+    for item in archive.includes:
+        abs_item = absolute_path(item)
+        if os.path.islink(abs_item):
+            try:
+                snapshot_generator.include_link(abs_item)
+            except EnvironmentError as edata:
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        elif os.path.isfile(abs_item):
+            try:
+                snapshot_generator.include_file(abs_item)
+            except EnvironmentError as edata:
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        elif os.path.isdir(abs_item):
+            try:
+                snapshot_generator.include_dir(abs_item)
+            except EnvironmentError as edata:
+                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        elif os.path.exists(abs_item):
+            stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
+        else:
+            stderr.write(_("{0}: not found. Skipped.\n").format(item))
+    snapshot_generator.finish(bmark.get_os_times() - start_time)
+    try:
+        snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
+    except EnvironmentError as edata:
+        stderr.write("{}\n".format(edata))
+    finally:
+        elapsed_time = bmark.get_os_times() - start_time
+    return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
 
 class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_count", "content_bytes", "n_citems", "stored_bytes", "stored_bytes_share"])):
     def __add__(self, other):
