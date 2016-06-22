@@ -211,20 +211,6 @@ _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
 _SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\.gz)?")
 ss_root = lambda fname: os.path.basename(fname).split(".")[0]
 
-def write_snapshot(snapshot_dir_path, snapshot, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
-    import time
-    snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
-    snapshot_file_path = os.path.join(snapshot_dir_path, snapshot_file_name)
-    if compress:
-        import gzip
-        snapshot_file_path += ".gz"
-        fobj = gzip.open(snapshot_file_path, "wb")
-    else:
-        fobj = io.open(snapshot_file_path, "wb")
-    pickle.dump(snapshot, fobj, PICKLE_PROTOCOL)
-    os.chmod(snapshot_file_path, permissions)
-    return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
-
 def read_most_recent_snapshot(snapshot_dir_path):
     candidates = [f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)]
     if candidates:
@@ -241,7 +227,6 @@ class _SnapshotGenerator(object):
         from . import repo
         from . import bmark
         start_time = bmark.get_os_times()
-        self._snapshot = Snapshot()
         self._archive = archive
         self.report_skipped_links=report_skipped_links
         self.repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
@@ -252,15 +237,28 @@ class _SnapshotGenerator(object):
         self.stderr = stderr
         self.released_items = 0
         self.created_items = 0
-        self.generate()
+        try:
+            self.generate()
+        except Exception as excpn:
+            # We've failed BUT we may have stashed some content
+            # so we need to try and release that content
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
+            raise excpn
         self.elapsed_time = bmark.get_os_times() - start_time
-    def adjust_item_stats(self, start_counts, end_counts):
+        self.snapshot_written = False
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        if not self.snapshot_written:
+            from . import repo
+            # there will be no persistent record so release content
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
+    def _adjust_item_stats(self, start_counts, end_counts):
         # TODO: check the maths here (use a namedtuple)
         self.created_items = max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
         self.released_items = max(end_counts[1] - start_counts[1], 0)
-    @property
-    def snapshot_plus(self):
-        return SnapshotPlus(self._snapshot, self.creation_stats)
     @property
     def creation_stats(self):
         return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.created_items, self.released_items, self.elapsed_time.get_etd())
@@ -342,7 +340,7 @@ class _SnapshotGenerator(object):
                 # NB: this is an in place reduction in the list of subdirectories
                 for esdp in excluded_subdir_names:
                     subdir_names.remove(esdp)
-            self.adjust_item_stats(start_counts, repo_mgr.get_counts())
+            self._adjust_item_stats(start_counts, repo_mgr.get_counts())
     def include_file(self, abs_file_path):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         from . import repo
@@ -352,7 +350,7 @@ class _SnapshotGenerator(object):
             with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
                 start_counts = repo_mgr.get_counts()
                 self._include_file(files, file_name, abs_file_path, repo_mgr)
-                self.adjust_item_stats(start_counts, repo_mgr.get_counts())
+                self._adjust_item_stats(start_counts, repo_mgr.get_counts())
         except OSError as edata:
             # race condition
             if edata.errno not in self.FORGIVEABLE_ERRNOS:
@@ -377,6 +375,7 @@ class _SnapshotGenerator(object):
                 return True
         return False
     def generate(self):
+        self._snapshot = Snapshot()
         for item in self._archive.includes:
             abs_item = absolute_path(item)
             if os.path.islink(abs_item):
@@ -398,22 +397,33 @@ class _SnapshotGenerator(object):
                 stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
             else:
                 stderr.write(_("{0}: not found. Skipped.\n").format(item))
+    def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
+        assert not self.snapshot_written
+        import time
+        snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
+        snapshot_file_path = os.path.join(self._archive.snapshot_dir_path, snapshot_file_name)
+        if compress is None:
+            compress = self._archive.compress_default
+        if compress:
+            import gzip as io_module
+            snapshot_file_path += ".gz"
+        else:
+            io_module = io
+        with io_module.open(snapshot_file_path, "wb") as fobj:
+            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats), fobj, PICKLE_PROTOCOL)
+        self.snapshot_written = True # for refernce count purposes we don't care if the permissions get set
+        os.chmod(snapshot_file_path, permissions)
+        return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "write_etd"])
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
     from . import bmark
-    if compress is None:
-        compress = archive.compress_default
-    snapshot_generator = _SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links)
-    start_time = bmark.get_os_times()
-    try:
-        snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
-    except EnvironmentError as edata:
-        stderr.write("{}\n".format(edata))
-    finally:
+    with _SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links) as snapshot_generator:
+        start_time = bmark.get_os_times()
+        snapshot_name, snapshot_size = snapshot_generator.write_snapshot(compress=compress)
         elapsed_time = bmark.get_os_times() - start_time
-    return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
+        return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
 
 class SSFSStats(collections.namedtuple("SSFSStats", ["file_count", "soft_link_count", "content_bytes", "n_citems", "stored_bytes", "stored_bytes_share"])):
     def __add__(self, other):
