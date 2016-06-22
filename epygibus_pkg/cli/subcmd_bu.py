@@ -69,11 +69,10 @@ def run_cmd(args):
     for archive_name, archive in archives:
         stats = snapshot.generate_snapshot(archive, stderr=sys.stderr, report_skipped_links=not args.quiet, compress=compress)
         if args.stats:
-            ss_name, ss_size, ss_stats, total_etd = stats
+            ss_name, ss_size, ss_stats, write_etd = stats
             sys.stdout.write(TEMPL.format(archive_name, ss_name, utils.format_bytes(ss_size)))
             nfiles, nlinks, csize, new_citems, rel_citems, construction_etd = ss_stats
             sys.stdout.write("{:>9,} {:>9,} {:>12} {:>9,} {:>9,}".format(nfiles, nlinks, utils.format_bytes(csize), new_citems, rel_citems))
-            write_etd = total_etd - construction_etd
             sys.stdout.write("{:>8.2f}s({:>4.1f}) {:>8.2f}s\n".format(construction_etd.real_time, construction_etd.percent_io, write_etd.real_time))
     return 0
 

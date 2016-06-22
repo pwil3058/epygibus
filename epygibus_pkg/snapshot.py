@@ -239,6 +239,8 @@ class _SnapshotGenerator(object):
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
     def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
         from . import repo
+        from . import bmark
+        start_time = bmark.get_os_times()
         self._snapshot = Snapshot()
         self._archive = archive
         self.report_skipped_links=report_skipped_links
@@ -250,12 +252,12 @@ class _SnapshotGenerator(object):
         self.stderr = stderr
         self.released_items = 0
         self.created_items = 0
+        self.generate()
+        self.elapsed_time = bmark.get_os_times() - start_time
     def adjust_item_stats(self, start_counts, end_counts):
         # TODO: check the maths here (use a namedtuple)
         self.created_items = max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
         self.released_items = max(end_counts[1] - start_counts[1], 0)
-    def finish(self, elapsed_time):
-        self.elapsed_time = elapsed_time
     @property
     def snapshot_plus(self):
         return SnapshotPlus(self._snapshot, self.creation_stats)
@@ -374,37 +376,37 @@ class _SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
+    def generate(self):
+        for item in self._archive.includes:
+            abs_item = absolute_path(item)
+            if os.path.islink(abs_item):
+                try:
+                    self.include_link(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.isfile(abs_item):
+                try:
+                    self.include_file(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.isdir(abs_item):
+                try:
+                    self.include_dir(abs_item)
+                except EnvironmentError as edata:
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+            elif os.path.exists(abs_item):
+                stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
+            else:
+                stderr.write(_("{0}: not found. Skipped.\n").format(item))
 
-GSS = collections.namedtuple("GSS", ["name", "size", "stats", "elapsed_time_data"])
+GSS = collections.namedtuple("GSS", ["name", "size", "stats", "write_etd"])
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
     from . import bmark
     if compress is None:
         compress = archive.compress_default
-    start_time = bmark.get_os_times()
     snapshot_generator = _SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links)
-    for item in archive.includes:
-        abs_item = absolute_path(item)
-        if os.path.islink(abs_item):
-            try:
-                snapshot_generator.include_link(abs_item)
-            except EnvironmentError as edata:
-                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-        elif os.path.isfile(abs_item):
-            try:
-                snapshot_generator.include_file(abs_item)
-            except EnvironmentError as edata:
-                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-        elif os.path.isdir(abs_item):
-            try:
-                snapshot_generator.include_dir(abs_item)
-            except EnvironmentError as edata:
-                stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-        elif os.path.exists(abs_item):
-            stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
-        else:
-            stderr.write(_("{0}: not found. Skipped.\n").format(item))
-    snapshot_generator.finish(bmark.get_os_times() - start_time)
+    start_time = bmark.get_os_times()
     try:
         snapshot_name, snapshot_size = write_snapshot(archive.snapshot_dir_path, snapshot_generator.snapshot_plus, compress=compress)
     except EnvironmentError as edata:
