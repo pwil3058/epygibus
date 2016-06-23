@@ -220,7 +220,7 @@ def read_most_recent_snapshot(snapshot_dir_path):
 def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
 
-class _SnapshotGenerator(object):
+class SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
     def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
@@ -228,37 +228,29 @@ class _SnapshotGenerator(object):
         import fnmatch
         from . import repo
         from . import bmark
-        start_time = bmark.get_os_times()
         self._archive = archive
         self._exclude_dir_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_dir_globs]
         self._exclude_file_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_file_globs]
         self.report_skipped_links=report_skipped_links
         self.repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
         self.stderr = stderr
+        self._reset_counters()
+        self._snapshot = None
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        if self._snapshot:
+            from . import repo
+            # there will be no persistent record so release content
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
+    def _reset_counters(self):
         self.content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
         self.released_items = 0
         self.created_items = 0
-        try:
-            self._generate()
-        except Exception as excpn:
-            # We've failed BUT we may have stashed some content
-            # so we need to try and release that content
-            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
-            raise excpn
-        self.elapsed_time = bmark.get_os_times() - start_time
-        self.snapshot_written = False
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        if not self.snapshot_written:
-            from . import repo
-            # there will be no persistent record so release content
-            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
     def _adjust_item_stats(self, start_counts, end_counts):
         # TODO: check the maths here (use a namedtuple)
         self.created_items = max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
@@ -355,8 +347,15 @@ class _SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
-    def _generate(self):
+    def generate_snapshot(self):
         from . import repo
+        start_time = bmark.get_os_times()
+        self._reset_counters()
+        if self._snapshot is not None:
+            # it hasn't been written and there will be no persistent record so release content
+            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
+            self._snapshot = None
         self._snapshot = Snapshot()
         for item in self._archive.includes:
             abs_item_path = absolute_path(item)
@@ -396,8 +395,9 @@ class _SnapshotGenerator(object):
                     self.stderr.write(_("{0} ({1}): is not a file or directory. Skipped.\n").format(item, abs_item_path))
                 else:
                     self.stderr.write(_("{0} ({1}): not found. Skipped.\n").format(item, abs_item_path))
+        self.elapsed_time = bmark.get_os_times() - start_time
     def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
-        assert not self.snapshot_written
+        assert self._snapshot is not None
         import time
         snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
         snapshot_file_path = os.path.join(self._archive.snapshot_dir_path, snapshot_file_name)
@@ -410,7 +410,7 @@ class _SnapshotGenerator(object):
             io_module = io
         with io_module.open(snapshot_file_path, "wb") as fobj:
             pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats), fobj, PICKLE_PROTOCOL)
-        self.snapshot_written = True # for refernce count purposes we don't care if the permissions get set
+        self._snapshot = None # for refernce count purposes we don't care if the permissions get set
         os.chmod(snapshot_file_path, permissions)
         return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 
@@ -418,7 +418,8 @@ GSS = collections.namedtuple("GSS", ["name", "size", "stats", "write_etd"])
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True):
     from . import bmark
-    with _SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links) as snapshot_generator:
+    with SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links) as snapshot_generator:
+        snapshot_generator.generate_snapshot()
         start_time = bmark.get_os_times()
         snapshot_name, snapshot_size = snapshot_generator.write_snapshot(compress=compress)
         elapsed_time = bmark.get_os_times() - start_time
