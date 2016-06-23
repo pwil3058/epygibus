@@ -230,11 +230,11 @@ class _SnapshotGenerator(object):
         self._archive = archive
         self.report_skipped_links=report_skipped_links
         self.repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+        self.stderr = stderr
         self.content_count = 0
         self.file_count = 0
         self.file_slink_count = 0
         self.subdir_slink_count = 0
-        self.stderr = stderr
         self.released_items = 0
         self.created_items = 0
         try:
@@ -262,19 +262,19 @@ class _SnapshotGenerator(object):
     @property
     def creation_stats(self):
         return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.created_items, self.released_items, self.elapsed_time.get_etd())
-    def _include_file(self, files, file_name, file_path, repo_mgr):
+    def _include_file(self, subdir_ss, file_name, file_path, repo_mgr):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         try: # it's possible content manager got environment error reading file, if so skip it and report
             content_token = repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
-            self.stderr.write(_("Error: \"{}\": {}. Skipping.\n").format(file_path, edata.strerror))
+            self.stderr.write(_("Error: saving \"{}\" content failed: {}. Skipping.\n").format(file_path, edata.strerror))
             return
         file_attrs = get_attr_tuple(file_path)
         self.content_count += file_attrs[SIZE_I]
         self.file_count += 1
-        files[file_name] = (file_attrs, content_token)
-    def _include_file_link(self, file_links, file_name, file_path):
+        subdir_ss.files[file_name] = (file_attrs, content_token)
+    def _include_file_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
@@ -283,8 +283,8 @@ class _SnapshotGenerator(object):
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
         self.file_slink_count += 1
-        file_links[file_name] = (get_attr_tuple(file_path), target_path)
-    def _include_subdir_link(self, subdir_links, file_name, file_path):
+        subdir_ss.file_links[file_name] = (get_attr_tuple(file_path), target_path)
+    def _include_subdir_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         target_path = os.readlink(file_path)
@@ -293,7 +293,7 @@ class _SnapshotGenerator(object):
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
             return
         self.subdir_slink_count += 1
-        subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
+        subdir_ss.subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
     def include_dir(self, abs_base_dir_path):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -301,7 +301,7 @@ class _SnapshotGenerator(object):
             for abs_dir_path, subdir_names, file_names in os.walk(abs_base_dir_path, followlinks=True):
                 if self.is_excluded_dir(abs_dir_path):
                     continue
-                new_subdir = self._snapshot.find_or_add_subdir(abs_dir_path)
+                new_subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
                 for file_name in file_names:
                     # NB: checking both name AND full path of file for exclusion
                     if self.is_excluded_file(file_name):
@@ -311,9 +311,9 @@ class _SnapshotGenerator(object):
                         continue
                     try:
                         if os.path.islink(file_path):
-                            self._include_file_link(new_subdir.file_links, file_name, file_path)
+                            self._include_file_link(new_subdir_ss, file_name, file_path)
                         else:
-                            self._include_file(new_subdir.files, file_name, file_path, repo_mgr)
+                            self._include_file(new_subdir_ss, file_name, file_path, repo_mgr)
                     except OSError as edata:
                         # race condition
                         if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -331,7 +331,7 @@ class _SnapshotGenerator(object):
                     if os.path.islink(abs_subdir_path):
                         excluded_subdir_names.append(subdir_name)
                         try:
-                            self._include_subdir_link(new_subdir.subdir_links, subdir_name, abs_subdir_path)
+                            self._include_subdir_link(new_subdir_ss, subdir_name, abs_subdir_path)
                         except OSError as edata:
                             # race condition
                             if edata.errno in self.FORGIVEABLE_ERRNOS:
@@ -345,11 +345,11 @@ class _SnapshotGenerator(object):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         from . import repo
         abs_dir_path, file_name = os.path.split(abs_file_path)
-        files = self._snapshot.find_or_add_subdir(abs_dir_path).files
+        subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
         try:
             with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
                 start_counts = repo_mgr.get_counts()
-                self._include_file(files, file_name, abs_file_path, repo_mgr)
+                self._include_file(subdir_ss, file_name, abs_file_path, repo_mgr)
                 self._adjust_item_stats(start_counts, repo_mgr.get_counts())
         except OSError as edata:
             # race condition
@@ -359,11 +359,11 @@ class _SnapshotGenerator(object):
         # NB: no exclusion checks as explicit inclusion trumps exclusion
         abs_dir_path, file_name = os.path.split(abs_file_path)
         if os.path.isdir(abs_file_path):
-            subdir_links = self._snapshot.find_or_add_subdir(abs_dir_path).subdir_links
-            self._include_subdir_link(subdir_links, file_name, abs_file_path)
+            subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
+            self._include_subdir_link(subdir_ss, file_name, abs_file_path)
         else:
-            file_links = self._snapshot.find_or_add_subdir(abs_dir_path).file_links
-            self._include_file_link(file_links, file_name, abs_file_path)
+            subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
+            self._include_file_link(subdir_ss, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
         for cre in self._archive.exclude_file_cres:
             if cre.match(file_path_or_name):
