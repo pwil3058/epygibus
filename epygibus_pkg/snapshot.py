@@ -238,7 +238,7 @@ class _SnapshotGenerator(object):
         self.released_items = 0
         self.created_items = 0
         try:
-            self.generate()
+            self._generate()
         except Exception as excpn:
             # We've failed BUT we may have stashed some content
             # so we need to try and release that content
@@ -294,7 +294,7 @@ class _SnapshotGenerator(object):
             return
         self.subdir_slink_count += 1
         subdir_ss.subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
-    def include_dir(self, abs_base_dir_path):
+    def _include_dir(self, abs_base_dir_path):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             start_counts = repo_mgr.get_counts()
@@ -341,29 +341,6 @@ class _SnapshotGenerator(object):
                 for esdp in excluded_subdir_names:
                     subdir_names.remove(esdp)
             self._adjust_item_stats(start_counts, repo_mgr.get_counts())
-    def include_file(self, abs_file_path):
-        # NB: no exclusion checks as explicit inclusion trumps exclusion
-        from . import repo
-        abs_dir_path, file_name = os.path.split(abs_file_path)
-        subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
-        try:
-            with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
-                start_counts = repo_mgr.get_counts()
-                self._include_file(subdir_ss, file_name, abs_file_path, repo_mgr)
-                self._adjust_item_stats(start_counts, repo_mgr.get_counts())
-        except OSError as edata:
-            # race condition
-            if edata.errno not in self.FORGIVEABLE_ERRNOS:
-                raise edata # something we can't handle so throw the towel in
-    def include_link(self, abs_file_path):
-        # NB: no exclusion checks as explicit inclusion trumps exclusion
-        abs_dir_path, file_name = os.path.split(abs_file_path)
-        if os.path.isdir(abs_file_path):
-            subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
-            self._include_subdir_link(subdir_ss, file_name, abs_file_path)
-        else:
-            subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
-            self._include_file_link(subdir_ss, file_name, abs_file_path)
     def is_excluded_file(self, file_path_or_name):
         for cre in self._archive.exclude_file_cres:
             if cre.match(file_path_or_name):
@@ -374,29 +351,47 @@ class _SnapshotGenerator(object):
             if cre.match(dir_path_or_name):
                 return True
         return False
-    def generate(self):
+    def _generate(self):
+        from . import repo
         self._snapshot = Snapshot()
         for item in self._archive.includes:
-            abs_item = absolute_path(item)
-            if os.path.islink(abs_item):
+            abs_item_path = absolute_path(item)
+            if os.path.islink(abs_item_path):
+                # NB: no exclusion checks as explicit inclusion trumps exclusion
+                abs_dir_path, file_name = os.path.split(abs_item_path)
                 try:
-                    self.include_link(abs_item)
+                    subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
+                    if os.path.isdir(abs_item_path):
+                        self._include_subdir_link(subdir_ss, file_name, abs_item_path)
+                    else:
+                        self._include_file_link(subdir_ss, file_name, abs_item_path)
                 except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.isfile(abs_item):
+                    self.stderr.write(_("Error: processing link {} failed: {}: Skipping.\n").format(abs_item_path, edata.strerror))
+            elif os.path.isfile(abs_item_path):
+                abs_dir_path, file_name = os.path.split(abs_item_path)
                 try:
-                    self.include_file(abs_item)
+                    subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
+                    with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+                        start_counts = repo_mgr.get_counts()
+                        self._include_file(subdir_ss, file_name, abs_item_path, repo_mgr)
+                        self._adjust_item_stats(start_counts, repo_mgr.get_counts())
                 except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.isdir(abs_item):
+                    self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
+            elif os.path.isdir(abs_item_path):
                 try:
-                    self.include_dir(abs_item)
+                    self._include_dir(abs_item_path)
                 except EnvironmentError as edata:
-                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            elif os.path.exists(abs_item):
-                stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
-            else:
-                stderr.write(_("{0}: not found. Skipped.\n").format(item))
+                    self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
+            elif item == abs_item_path:
+                if os.path.exists(abs_item_path):
+                    self.stderr.write(_("{0}: is not a file or directory. Skipped.\n").format(item))
+                else:
+                    self.stderr.write(_("{0}: not found. Skipped.\n").format(item))
+            else: # tell them what we thought they meant
+                if os.path.exists(abs_item_path):
+                    self.stderr.write(_("{0} ({1}): is not a file or directory. Skipped.\n").format(item, abs_item_path))
+                else:
+                    self.stderr.write(_("{0} ({1}): not found. Skipped.\n").format(item, abs_item_path))
     def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
         assert not self.snapshot_written
         import time

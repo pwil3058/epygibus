@@ -66,7 +66,8 @@ def read_archive_spec(archive_name, stderr=sys.stderr):
     try:
         compress_default = "True"
         repo, p_dir_path, skip, compress_default = [l.rstrip() for l in _archive_config_lines(archive_name)]
-        includes = [os.path.abspath(os.path.expanduser(f.rstrip())) for f in _includes_file_lines(archive_name)]
+        # NB: leave expansion to absolute paths to the snapshot generator
+        includes = [f.strip() for f in _includes_file_lines(archive_name)]
         dir_excludes_globs = [glob.rstrip() for glob in _exclude_dir_lines(archive_name)]
         file_excludes_globs = [glob.rstrip() for glob in _exclude_file_lines(archive_name)]
         dir_excludes_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in dir_excludes_globs]
