@@ -224,10 +224,14 @@ class _SnapshotGenerator(object):
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
     def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
+        import re
+        import fnmatch
         from . import repo
         from . import bmark
         start_time = bmark.get_os_times()
         self._archive = archive
+        self._exclude_dir_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_dir_globs]
+        self._exclude_file_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_file_globs]
         self.report_skipped_links=report_skipped_links
         self.repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
         self.stderr = stderr
@@ -342,12 +346,12 @@ class _SnapshotGenerator(object):
                     subdir_names.remove(esdp)
             self._adjust_item_stats(start_counts, repo_mgr.get_counts())
     def is_excluded_file(self, file_path_or_name):
-        for cre in self._archive.exclude_file_cres:
+        for cre in self._exclude_file_cres:
             if cre.match(file_path_or_name):
                 return True
         return False
     def is_excluded_dir(self, dir_path_or_name):
-        for cre in self._archive.exclude_dir_cres:
+        for cre in self._exclude_dir_cres:
             if cre.match(dir_path_or_name):
                 return True
         return False
