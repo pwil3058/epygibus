@@ -208,8 +208,40 @@ def read_snapshot(snapshot_file_path):
 
 # NB: make sure that these two are in concert
 _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
+SNAPSHOT_NAME_CRE = re.compile("(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})")
+SNAPSHOT_WC_NAME_CRE = re.compile("(\d{4}|.)-(\d{2}|.)-(\d{2}|.)(-(\d{2}|.)(-(\d{2})(-(\d{2}))?)?)?")
 _SNAPSHOT_FILE_NAME_CRE = re.compile("\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.pkl(\.gz)?")
 ss_root = lambda fname: os.path.basename(fname).split(".")[0]
+_Y, _MO, _D, _DC0, _H, _DC1, _MI, _DC2, _S = range(9)
+
+def validate_snapshot_name(name):
+    import datetime
+    m = SNAPSHOT_NAME_CRE.match(name)
+    if not m:
+        return False
+    numbers = [int(n) for n in m.groups()]
+    try:
+        date = datetime.date(*numbers[:3])
+    except ValueError:
+        return False
+    return numbers[3] < 24 and numbers[4] < 60 and numbers[5] < 60
+
+def expand_snapshot_wc_name(wc_name):
+    import time
+    m = SNAPSHOT_WC_NAME_CRE.match(wc_name)
+    if not m:
+        raise ValueError
+    now = time.strftime("%Y%m%d%H", time.gmtime())
+    groups = m.groups()
+    name = now[:4] if groups[_Y] == "." else groups[_Y]
+    name += "-" + (now[4:6] if groups[_MO] == "." else groups[_MO])
+    name += "-" + (now[6:8] if groups[_D] == "." else groups[_D])
+    name += "-" + (now[8:10] if groups[_H] == "." else "00" if groups[_H] is None else groups[_H])
+    name += "-" + ("00" if groups[_MI] is None else groups[_MI])
+    name += "-" + ("00" if groups[_S] is None else groups[_S])
+    if not validate_snapshot_name(name):
+        raise ValueError
+    return name
 
 def read_most_recent_snapshot(snapshot_dir_path):
     candidates = [f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)]
