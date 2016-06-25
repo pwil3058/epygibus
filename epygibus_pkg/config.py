@@ -147,3 +147,6 @@ def get_archive_name_list():
 
 def get_repo_name_list():
     return [name for name in os.listdir(_REPOS_DIR_PATH) if os.path.isfile(os.path.join(_REPOS_DIR_PATH, name))]
+
+def get_repo_spec_list():
+    return [read_repo_spec(name) for name in get_repo_name_list()]

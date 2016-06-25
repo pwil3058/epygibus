@@ -60,3 +60,12 @@ def get_link_abs_path(link_path, file_path):
 
 def is_broken_link(link_path, file_path):
     return not os.path.exists(get_link_abs_path(link_path, file_path))
+
+def create_flag_generator():
+    """
+    Create a new flag generator
+    """
+    next_flag_num = 0
+    while True:
+        yield 2 ** next_flag_num
+        next_flag_num += 1
