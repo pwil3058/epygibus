@@ -27,6 +27,7 @@ from .. import config
 from .. import snapshot
 from .. import repo
 from .. import excpns
+from .. import utils
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "compress",
@@ -59,9 +60,11 @@ def run_cmd(args):
                     sys.stdout.write(_("Nothing to do.\n"))
         else:
             if args.uncompress:
-                repo.uncompress_repository(args.repo_name)
+                size_change = repo.uncompress_repository(args.repo_name)
+                sys.stdout.write(_("Disk usage increased by {}.\n").format(utils.format_bytes(size_change)))
             else:
-                repo.compress_repository(args.repo_name)
+                size_change = repo.compress_repository(args.repo_name)
+                sys.stdout.write(_("Disk usage decreased by {}.\n").format(utils.format_bytes(size_change)))
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

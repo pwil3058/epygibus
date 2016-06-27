@@ -55,6 +55,8 @@ def get_repo_mgmt_key(repo_name):
     repo_spec = config.read_repo_spec(repo_name)
     return BlobRepoData(repo_spec.base_dir_path, _ref_counter_path(repo_spec.base_dir_path), _lock_file_path(repo_spec.base_dir_path), repo_spec.compressed)
 
+_REF_COUNT, _CONTENT_SIZE, _STORED_SIZE = range(3)
+
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable", "compressed"])):
     def store_contents(self, file_path):
         assert self.writeable
@@ -65,16 +67,19 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             subdir_path = os.path.join(dir_path, subdir_name)
             needs_write = True
             if dir_name not in self.ref_counter:
-                self.ref_counter[dir_name] = { subdir_name : { file_name : 1 }}
+                c_size = os.path.getsize(file_path)
+                self.ref_counter[dir_name] = { subdir_name : { file_name : [1, c_size, c_size] }}
                 os.mkdir(dir_path)
                 os.mkdir(subdir_path)
             elif subdir_name not in self.ref_counter[dir_name]:
-                self.ref_counter[dir_name][subdir_name] = { file_name : 1 }
+                c_size = os.path.getsize(file_path)
+                self.ref_counter[dir_name][subdir_name] = { file_name : [1, c_size, c_size] }
                 os.mkdir(subdir_path)
             elif file_name not in self.ref_counter[dir_name][subdir_name]:
-                self.ref_counter[dir_name][subdir_name][file_name] = 1
+                c_size = os.path.getsize(file_path)
+                self.ref_counter[dir_name][subdir_name][file_name] = [1, c_size, c_size]
             else:
-                self.ref_counter[dir_name][subdir_name][file_name] += 1
+                self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT] += 1
                 needs_write = False
             if needs_write:
                 import stat
@@ -87,6 +92,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 else:
                     with io.open(file_path, "wb") as f_out:
                         shutil.copyfileobj(f_in, f_out)
+                self.ref_counter[dir_name][subdir_name][file_name][_STORED_SIZE] = os.path.getsize(file_path)
                 os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
             # NB returning content storage stats here has been tried and
             # rejected due to time penalties (3 orders of magnitude) on
@@ -106,32 +112,32 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 return os.path.getsize(file_path + ".gz")
     def get_content_storage_stats(self, content_token):
         dir_name, subdir_name, file_name = _split_content_token(content_token)
-        return CIS(self._content_stored_size(dir_name, subdir_name, file_name), self.ref_counter[dir_name][subdir_name][file_name])
+        return CIS(self._content_stored_size(dir_name, subdir_name, file_name), self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT])
     def release_content(self, content_token):
         assert self.writeable
         dir_name, subdir_name, file_name = _split_content_token(content_token)
-        self.ref_counter[dir_name][subdir_name][file_name] -= 1
+        self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT] -= 1
     def release_contents(self, content_tokens):
         assert self.writeable
         for content_token in content_tokens:
             dir_name, subdir_name, file_name = _split_content_token(content_token)
-            self.ref_counter[dir_name][subdir_name][file_name] -= 1
+            self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT] -= 1
     def iterate_content_tokens(self):
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
-                for file_name, count in subdir_data.items():
+                for file_name, data in subdir_data.items():
                     try:
                         size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name + ".gz"))
                     except EnvironmentError:
                         size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name))
-                    yield (dir_name + subdir_name + file_name, count, size)
+                    yield (dir_name + subdir_name + file_name, data[_REF_COUNT], size)
     def get_counts(self):
         num_refed = 0
         num_unrefed = 0
         ref_total = 0
         for dir_data in self.ref_counter.values():
             for subdir_data in dir_data.values():
-                for count in subdir_data.values():
+                for count, c_size, s_size in subdir_data.values():
                     if count:
                         ref_total += count
                         num_refed += 1
@@ -144,7 +150,8 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         total_bytes = 0
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
-                for file_name, count in subdir_data.items():
+                for file_name, file_data in subdir_data.items():
+                    count, c_size, s_size = file_data
                     if count: continue
                     citem_count += 1
                     file_path = os.path.join(self.base_dir_path, dir_name, subdir_name, file_name)
@@ -237,28 +244,38 @@ def create_new_repo(repo_name, location_dir_path, compressed):
 
 def compress_repository(repo_name):
     from . import utils
+    saved_bytes = 0
     brd = get_repo_mgmt_key(repo_name)
     for entry_name in os.listdir(brd.base_dir_path):
         entry_path = os.path.join(brd.base_dir_path, entry_name)
         if not os.path.isdir(entry_path): continue
-        with open_repo_mgr(brd, True): # don't hog the lock
+        with open_repo_mgr(brd, True) as repo_mgr: # don't hog the lock
             for subdir_name in os.listdir(entry_path):
                 subdir_path = os.path.join(entry_path, subdir_name)
                 if not os.path.isdir(subdir_path): continue
                 for file_name in os.listdir(subdir_path):
                     if not file_name.endswith(".gz"):
-                        utils.compress_file(os.path.join(subdir_path, file_name))
+                        file_data = repo_mgr.ref_counter[entry_name][subdir_name][file_name]
+                        old_size = file_data[_STORED_SIZE]
+                        file_data[_STORED_SIZE] = utils.compress_file(os.path.join(subdir_path, file_name))
+                        saved_bytes += old_size - file_data[_STORED_SIZE]
+    return saved_bytes
 
 def uncompress_repository(repo_name):
     from . import utils
+    extra_bytes = 0
     brd = get_repo_mgmt_key(repo_name)
     for entry_name in os.listdir(brd.base_dir_path):
         entry_path = os.path.join(brd.base_dir_path, entry_name)
         if not os.path.isdir(entry_path): continue
-        with open_repo_mgr(brd, True): # don't hog the lock
+        with open_repo_mgr(brd, True) as repo_mgr: # don't hog the lock
             for subdir_name in os.listdir(entry_path):
                 subdir_path = os.path.join(entry_path, subdir_name)
                 if not os.path.isdir(subdir_path): continue
                 for file_name in os.listdir(subdir_path):
                     if file_name.endswith(".gz"):
-                        utils.uncompress_file(os.path.join(subdir_path, file_name))
+                        file_data = repo_mgr.ref_counter[entry_name][subdir_name][file_name[:-3]]
+                        old_size = file_data[_STORED_SIZE]
+                        file_data[_STORED_SIZE] = utils.uncompress_file(os.path.join(subdir_path, file_name))
+                        extra_bytes += file_data[_STORED_SIZE] - old_size
+    return extra_bytes
