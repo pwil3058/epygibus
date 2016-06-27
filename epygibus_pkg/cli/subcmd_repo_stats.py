@@ -43,20 +43,24 @@ def run_cmd(args):
         sys.exit(-1)
     total_referenced_citems = 0
     total_ref_count = 0
-    total_referenced_size = 0
+    total_referenced_content_size = 0
+    total_referenced_stored_size = 0
     total_unreferenced_citems = 0
-    total_unreferenced_size = 0
+    total_unreferenced_content_size = 0
+    total_unreferenced_stored_size = 0
     with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
-        for content_token, ref_count, size in repo_mgr.iterate_content_tokens():
+        for content_token, ref_count, content_size, stored_size in repo_mgr.iterate_content_tokens():
             if ref_count:
                 total_referenced_citems += 1
                 total_ref_count += ref_count
-                total_referenced_size += size
+                total_referenced_content_size += content_size
+                total_referenced_stored_size += stored_size
             else:
                 total_unreferenced_citems += 1
-                total_unreferenced_size += size
-    sys.stdout.write(_("  Referenced {:,} content items: {:>4,} references: {} total\n").format(total_referenced_citems, total_ref_count, utils.format_bytes(total_referenced_size)))
-    sys.stdout.write(_("Unreferenced {:,} content items: {:>4,} references: {} total\n").format(total_unreferenced_citems, 0, utils.format_bytes(total_unreferenced_size)))
+                total_unreferenced_content_size += content_size
+                total_unreferenced_stored_size += stored_size
+    sys.stdout.write(_("  Referenced {:,} content items: {:>4,} references: {} ({}) total\n").format(total_referenced_citems, total_ref_count, utils.format_bytes(total_referenced_content_size), utils.format_bytes(total_referenced_stored_size)))
+    sys.stdout.write(_("Unreferenced {:,} content items: {:>4,} references: {} ({}) total\n").format(total_unreferenced_citems, 0, utils.format_bytes(total_unreferenced_content_size), utils.format_bytes(total_unreferenced_stored_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

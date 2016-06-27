@@ -43,14 +43,16 @@ def run_cmd(args):
         sys.exit(-1)
     total_citems = 0
     total_ref_count = 0
-    total_size = 0
+    total_content_size = 0
+    total_stored_size = 0
     with repo.open_repo_mgr(repo_mgmt_key, writeable=False) as repo_mgr:
-        for content_token, ref_count, size in repo_mgr.iterate_content_tokens():
+        for content_token, ref_count, content_size, stored_size in repo_mgr.iterate_content_tokens():
             total_citems += 1
             total_ref_count += ref_count
-            total_size += size
-            sys.stdout.write(_("{}: {:>4,}: {}\n").format(content_token, ref_count, utils.format_bytes(size)))
-    sys.stdout.write(_("{:,} content items: {:>4,} references: {} total\n").format(total_citems, total_ref_count, utils.format_bytes(total_size)))
+            total_content_size += content_size
+            total_stored_size += stored_size
+            sys.stdout.write(_("{}: {:>4,}: {} ({})\n").format(content_token, ref_count, utils.format_bytes(content_size), utils.format_bytes(stored_size)))
+    sys.stdout.write(_("{:,} content items: {:>4,} references: {} ({}) total\n").format(total_citems, total_ref_count, utils.format_bytes(total_content_size), utils.format_bytes(total_stored_size)))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
