@@ -126,11 +126,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
                 for file_name, data in subdir_data.items():
-                    try:
-                        size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name + ".gz"))
-                    except EnvironmentError:
-                        size = os.path.getsize(os.path.join(self.base_dir_path, dir_name, subdir_name, file_name))
-                    yield (dir_name + subdir_name + file_name, data[_REF_COUNT], size)
+                    yield (dir_name + subdir_name + file_name, data[_REF_COUNT], data[_CONTENT_SIZE], data[_STORED_SIZE])
     def get_counts(self):
         num_refed = 0
         num_unrefed = 0
@@ -280,3 +276,42 @@ def uncompress_repository(repo_name):
                         file_data[_STORED_SIZE] = utils.uncompress_file(os.path.join(subdir_path, file_name))
                         extra_bytes += file_data[_STORED_SIZE] - old_size
     return extra_bytes
+
+class BRSS(collections.namedtuple("BRSS", ["references", "referenced_items", "referenced_content_bytes", "referenced_stored_bytes", "unreferenced_items", "unreferenced_content_bytes", "unreferenced_stored_bytes"])):
+    @property
+    def total_items(self):
+        return self.referenced_items + self.unreferenced_items
+    @property
+    def total_content_bytes(self):
+        return self.referenced_content_bytes + self.unreferenced_content_bytes
+    @property
+    def total_stored_bytes(self):
+        return self.referenced_stored_bytes + self.unreferenced_stored_bytes
+
+def get_repo_storage_stats(repo_name):
+    repo_mgmt_key = get_repo_mgmt_key(repo_name)
+    total_references = 0
+    total_referenced_items = 0
+    total_referenced_content_bytes = 0
+    total_referenced_stored_bytes = 0
+    total_unreferenced_items = 0
+    total_unreferenced_content_bytes = 0
+    total_unreferenced_stored_bytes = 0
+    with open_repo_mgr(repo_mgmt_key, True) as repo_mgr:
+        for dir_name, dir_data in repo_mgr.ref_counter.items():
+            for subdir_name, subdir_data in dir_data.items():
+                for count, content_bytes, stored_bytes in subdir_data.values():
+                    if count:
+                        total_references += count
+                        total_referenced_items += 1
+                        total_referenced_content_bytes += content_bytes
+                        total_referenced_stored_bytes += stored_bytes
+                    else:
+                        total_unreferenced_items += 1
+                        total_unreferenced_content_bytes += content_bytes
+                        total_unreferenced_stored_bytes += stored_bytes
+    return BRSS(total_references, total_referenced_items, total_referenced_content_bytes, total_referenced_stored_bytes, total_unreferenced_items, total_unreferenced_content_bytes, total_unreferenced_stored_bytes)
+
+def get_repo_storage_stats_list():
+    from . import config
+    return [(repo_name, get_repo_storage_stats(repo_name)) for repo_name in config.get_repo_name_list()]
