@@ -44,10 +44,10 @@ def run_cmd(args):
     stats = None
     with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
         stats = repo_mgr.prune_unreferenced_content()
-    if not stats:
+    if not stats[0]:
         sys.stdout.write(_("Nothing to do.\n"))
     else:
-        sys.stdout.write(_("{:>4,} unreferenced content items removed freeing {}\n").format(stats[0], utils.format_bytes(stats[1])))
+        sys.stdout.write(_("{:>4,} unreferenced content items removed freeing {} of content and {} of storage\n").format(stats[0], utils.format_bytes(stats[1]), utils.format_bytes(stats[2])))
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

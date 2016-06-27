@@ -84,16 +84,16 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             if needs_write:
                 import stat
                 f_in.seek(0)
-                file_path = os.path.join(subdir_path, file_name)
+                out_file_path = os.path.join(subdir_path, file_name)
                 if self.compressed:
-                    file_path += ".gz"
-                    with gzip.open(file_path, "wb") as f_out:
+                    out_file_path += ".gz"
+                    with gzip.open(out_file_path, "wb") as f_out:
                         shutil.copyfileobj(f_in, f_out)
                 else:
-                    with io.open(file_path, "wb") as f_out:
+                    with io.open(out_file_path, "wb") as f_out:
                         shutil.copyfileobj(f_in, f_out)
-                self.ref_counter[dir_name][subdir_name][file_name][_STORED_SIZE] = os.path.getsize(file_path)
-                os.chmod(file_path, stat.S_IRUSR|stat.S_IRGRP)
+                self.ref_counter[dir_name][subdir_name][file_name][_STORED_SIZE] = os.path.getsize(out_file_path)
+                os.chmod(out_file_path, stat.S_IRUSR|stat.S_IRGRP)
             # NB returning content storage stats here has been tried and
             # rejected due to time penalties (3 orders of magnitude) on
             # slow file systems such as cifs mounted network devices
@@ -147,21 +147,22 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
     def prune_unreferenced_content(self, rm_empty_dirs=False, rm_empty_subdirs=True):
         assert self.writeable
         citem_count = 0
-        total_bytes = 0
+        total_content_bytes = 0
+        total_stored_bytes = 0
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
                 for file_name, file_data in subdir_data.items():
-                    count, c_size, s_size = file_data
+                    count, content_size, stored_size = file_data
                     if count: continue
                     citem_count += 1
+                    total_content_bytes += content_size
+                    total_stored_bytes += stored_size
                     file_path = os.path.join(self.base_dir_path, dir_name, subdir_name, file_name)
                     try: # try the default first
-                        total_bytes += os.path.getsize(file_path + ".gz")
                         os.remove(file_path + ".gz")
                     except EnvironmentError as edata:
                         if edata.errno != errno.ENOENT:
                             raise edata
-                        total_bytes += os.path.getsize(file_path)
                         os.remove(file_path)
                     del subdir_data[file_name]
                 if rm_empty_subdirs and len(dir_data[subdir_name]) == 0:
@@ -170,7 +171,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             if rm_empty_dirs and len(self.ref_counter[dir_name]) == 0:
                 del self.ref_counter[dir_name]
                 os.rmdir(os.path.join(self.base_dir_path, dir_name))
-        return (citem_count, total_bytes) #if citem_count else None
+        return (citem_count, total_content_bytes, total_stored_bytes) #if citem_count else None
     def open_contents_read_only(self, content_token, binary=False):
         # NB since this doen't use ref count data it doesn't need locking
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
