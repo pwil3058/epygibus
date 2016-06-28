@@ -147,7 +147,7 @@ class Table(Gtk.VBox):
         columns = self.model.col_indices(labels)
         return self.get_selected_data(columns)
 
-def simple_text_specification(model, *hdrs_and_flds):
+def simple_text_specification(model, *hdrs_flds_xalign):
     specification = tlview.ViewSpec(
         properties={
             "enable-grid-lines" : False,
@@ -156,7 +156,7 @@ def simple_text_specification(model, *hdrs_and_flds):
             "headers-visible" : True,
         },
         selection_mode=Gtk.SelectionMode.SINGLE,
-        columns=[tlview.simple_column(hdr, tlview.fixed_text_cell(model, fld)) for hdr, fld in hdrs_and_flds]
+        columns=[tlview.simple_column(hdr, tlview.fixed_text_cell(model, fld, xalign)) for hdr, fld, xalign in hdrs_flds_xalign]
     )
     return specification
 

@@ -24,7 +24,6 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import GObject
-from gi.repository import Pango
 
 from .. import config
 from .. import repo
@@ -61,7 +60,7 @@ class RepoListView(table.MapManagedTableView):
     REFRESH_EVENTS = 0
     AU_REQ_EVENTS = 0
     UI_DESCR = ""
-    specification = table.simple_text_specification(Model, (_("Name"), "name"), (_("Location"), "base_dir_path"), (_("Compressed?"), "compressed"),)
+    specification = table.simple_text_specification(Model, (_("Name"), "name", 0.0), (_("Location"), "base_dir_path", 0.5), (_("Compressed?"), "compressed", 0.5),)
     def __init__(self, busy_indicator=None, size_req=None):
         table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
         self.set_contents()
@@ -134,26 +133,17 @@ class RepoStatsListView(table.MapManagedTableView):
       </popup>
     </ui>
     """
-    hdrs_and_flds = (
-        (_("Name"), "name", Pango.Alignment.LEFT, 0.0),
-        (_("#Items"), "nitems", Pango.Alignment.RIGHT, 1.0),
-        (_("Content"), "content_bytes", Pango.Alignment.RIGHT, 1.0),
-        (_("Stored"), "stored_bytes", Pango.Alignment.RIGHT, 1.0),
-        (_("References"), "references", Pango.Alignment.RIGHT, 1.0),
-        (_("#Referenced"), "referenced_items", Pango.Alignment.RIGHT, 1.0),
-        (_("Content"), "referenced_content_bytes", Pango.Alignment.RIGHT, 1.0),
-        (_("#Unreferenced"), "unreferenced_items", Pango.Alignment.RIGHT, 1.0),
-        (_("Contents"), "unreferenced_content_bytes", Pango.Alignment.RIGHT, 1.0),
-        (_("Stored"), "unreferenced_stored_bytes", Pango.Alignment.RIGHT, 1.0),)
-    specification = tlview.ViewSpec(
-        properties={
-            "enable-grid-lines" : False,
-            "reorderable" : False,
-            "rules_hint" : False,
-            "headers-visible" : True,
-        },
-        selection_mode=Gtk.SelectionMode.SINGLE,
-        columns=[tlview.simple_column(hdr, tlview.fixed_text_cell(Model, fld, align, xalign)) for hdr, fld, align, xalign in hdrs_and_flds]
+    #hdrs_and_flds = (
+    specification = table.simple_text_specification(Model,
+        (_("#Items"), "nitems", 1.0),
+        (_("Content"), "content_bytes", 1.0),
+        (_("Stored"), "stored_bytes", 1.0),
+        (_("References"), "references", 1.0),
+        (_("#Referenced"), "referenced_items", 1.0),
+        (_("Content"), "referenced_content_bytes", 1.0),
+        (_("#Unreferenced"), "unreferenced_items", 1.0),
+        (_("Contents"), "unreferenced_content_bytes", 1.0),
+        (_("Stored"), "unreferenced_stored_bytes", 1.0),
     )
     def __init__(self, busy_indicator=None, size_req=None):
         table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)

@@ -30,7 +30,6 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import GObject
 from gi.repository import Gdk
-from gi.repository import Pango
 
 class _NamedTreeModelMixin(object):
     # TODO: trim and improve _NamedTreeModelMixin
@@ -173,23 +172,23 @@ def stock_icon_cell(model, fld):
         attributes = {"stock_id" : model.col_index("icon")}
     )
 
-def _text_cell(model, fld, editable, alignment=Pango.Alignment.LEFT, xalign=0.5):
+def _text_cell(model, fld, editable, xalign=0.5):
     return CellSpec(
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererText,
             expand=False,
             start=True
         ),
-        properties={"editable" : editable, "alignment" : alignment, "xalign": xalign},
+        properties={"editable" : editable, "xalign": xalign},
         cell_data_function_spec=None,
         attributes = {"text" : model.col_index(fld)}
     )
 
-def fixed_text_cell(model, fld, alignment=Pango.Alignment.LEFT, xalign=0.5):
-    return _text_cell(model, fld, False, alignment, xalign)
+def fixed_text_cell(model, fld, xalign=0.5):
+    return _text_cell(model, fld, False, xalign)
 
-def editable_text_cell(model, fld, alignment=Pango.Alignment.LEFT, xalign=0.5):
-    return _text_cell(model, fld, True, alignment, xalign)
+def editable_text_cell(model, fld, xalign=0.5):
+    return _text_cell(model, fld, True, xalign)
 
 def mark_up_cell(model, fld):
     return CellSpec(
