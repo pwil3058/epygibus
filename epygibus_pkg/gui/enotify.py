@@ -36,7 +36,7 @@ def new_event_flags_and_mask(count):
     return tuple(flags + [sum(flags)])
 
 def new_event_flag():
-    return _flag_generator.next()
+    return next(_flag_generator)
 
 _NOTIFICATION_CBS = []
 
@@ -89,7 +89,7 @@ def notify_events(events, **kwargs):
                 # TODO: try to be more explicit in naming exception type to catch here
                 # this is done to catch the race between a caller has going away and deleting its notifications
                 if True: # NB: for debug assistance e.g . locating exceptions not due to caller going away
-                    print("WS NOTIFY:", edata, callback, kwargs)
+                    print("WS NOTIFY:\t edata: {}\n\t\t callback: {}\n\t\t kwargs: {}".format(edata, callback, kwargs))
                     raise edata
                 invalid_cbs.append((registered_events, callback))
     for cb_token in invalid_cbs:

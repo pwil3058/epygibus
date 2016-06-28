@@ -30,9 +30,41 @@ from .. import repo
 from .. import utils
 
 from . import actions
+from . import enotify
+from . import auto_update
 from . import table
 from . import icons
 from . import tlview
+
+AC_REPOS_AVAILABLE = actions.ActionCondns.new_flag()
+NE_NEW_REPO = enotify.new_event_flag()
+NE_REPO_STATS_CHANGE = enotify.new_event_flag()
+
+_n_repos = 0
+
+def get_repo_available_condn():
+    if _n_repos:
+        return actions.MaskedCondns(AC_REPOS_AVAILABLE, AC_REPOS_AVAILABLE)
+    else:
+        return actions.MaskedCondns(0, AC_REPOS_AVAILABLE)
+
+def _ne_new_repo_cb(**kwargs):
+    global _n_repos
+    old_n_repos = _n_repos
+    _n_repos = len(config.get_repo_name_list())
+    if old_n_repos != _n_repos:
+        actions.CLASS_INDEP_AGS.update_condns(get_repo_available_condn())
+
+_ne_new_repo_cb()
+
+enotify.add_notification_cb(NE_NEW_REPO, _ne_new_repo_cb)
+
+def _auto_update_cb(events_so_far, _args):
+    if events_so_far & NE_NEW_REPO or len(config.get_repo_name_list()) == _n_repos:
+        return 0
+    return NE_NEW_REPO
+
+auto_update.register_cb(_auto_update_cb)
 
 class RepoTableData(table.TableData):
     def _get_data_text(self, h):
@@ -57,10 +89,10 @@ class RepoListView(table.MapManagedTableView):
             return self.get_value_named(plist_iter, "compressed")
     PopUp = None
     SET_EVENTS = 0
-    REFRESH_EVENTS = 0
-    AU_REQ_EVENTS = 0
+    REFRESH_EVENTS = NE_NEW_REPO
+    AU_REQ_EVENTS = NE_NEW_REPO
     UI_DESCR = ""
-    specification = table.simple_text_specification(Model, (_("Name"), "name", 0.0), (_("Location"), "base_dir_path", 0.5), (_("Compressed?"), "compressed", 0.5),)
+    specification = table.simple_text_specification(Model, (_("Name"), "name", 0.0), (_("Location"), "base_dir_path", 0.0), (_("Compressed?"), "compressed", 0.0),)
     def __init__(self, busy_indicator=None, size_req=None):
         table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
         self.set_contents()
@@ -123,8 +155,8 @@ class RepoStatsListView(table.MapManagedTableView):
                     unreferenced_stored_bytes=GObject.TYPE_STRING)
     PopUp = "/repos_popup"
     SET_EVENTS = 0
-    REFRESH_EVENTS = 0
-    AU_REQ_EVENTS = 0
+    REFRESH_EVENTS = NE_REPO_STATS_CHANGE | NE_NEW_REPO
+    AU_REQ_EVENTS = NE_REPO_STATS_CHANGE
     UI_DESCR = """
     <ui>
       <popup name="repos_STATS_popup">
@@ -135,6 +167,7 @@ class RepoStatsListView(table.MapManagedTableView):
     """
     #hdrs_and_flds = (
     specification = table.simple_text_specification(Model,
+        (_("Name"), "name", 0.0),
         (_("#Items"), "nitems", 1.0),
         (_("Content"), "content_bytes", 1.0),
         (_("Stored"), "stored_bytes", 1.0),
@@ -162,3 +195,6 @@ class RepoStatsListView(table.MapManagedTableView):
         return None if store_iter is None else store.get_tag_name(store_iter)
     def _get_table_db(self):
         return RepoStatsTableData()
+
+class RepoStatsListWidget(table.TableWidget):
+    View = RepoStatsListView

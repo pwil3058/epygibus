@@ -36,9 +36,9 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener):
         vbox = Gtk.VBox()
         label = Gtk.Label()
         label.set_label("Work in progress.  Try again later.")
-        vbox.pack_start(label, False, False, 0)
-        vbox.pack_start(g_repos.RepoListView(), False, False, 0)
-        vbox.pack_start(g_repos.RepoStatsListView(), False, False, 0)
+        vbox.pack_start(label, False, True, 0)
+        vbox.pack_start(g_repos.RepoListView(), False, True, 0)
+        vbox.pack_start(g_repos.RepoStatsListWidget(), True, True, 0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):

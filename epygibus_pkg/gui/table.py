@@ -59,7 +59,7 @@ class Table(Gtk.VBox):
         self.seln = self.view.get_selection()
         if size_req:
             self.view.set_size_request(*size_req)
-        self.pack_start(gutils.wrap_in_scrolled_window(self.view))
+        self.pack_start(gutils.wrap_in_scrolled_window(self.view), True, True, 0)
         self.action_groups = {}
         for key in TABLE_STATES:
             self.action_groups[key] = Gtk.ActionGroup(key)
@@ -237,7 +237,7 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
             start = visible_range[0][0]
             end = visible_range[1][0]
             length = end - start + 1
-            middle_offset = length / 2
+            middle_offset = length // 2
             align = float(middle_offset) / float(length)
             middle = start + middle_offset
             middle_key = self.model.get_value(self.model.get_iter(middle), 0)
@@ -335,12 +335,12 @@ class TableWidget(Gtk.VBox):
     def __init__(self, scroll_bar=True, busy_indicator=None, size_req=None, **kwargs):
         Gtk.VBox.__init__(self)
         self.header = gutils.SplitBar()
-        self.pack_start(self.header, expand=False)
+        self.pack_start(self.header, True, True, 0)
         self.view = self.View(busy_indicator=busy_indicator, size_req=size_req, **kwargs)
         if scroll_bar:
-            self.pack_start(gutils.wrap_in_scrolled_window(self.view))
+            self.pack_start(gutils.wrap_in_scrolled_window(self.view), True, True, 0)
         else:
-            self.pack_start(self.view)
+            self.pack_start(self.view, True, True, 0)
         self.show_all()
     @property
     def ui_manager(self):

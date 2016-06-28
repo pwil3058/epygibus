@@ -25,6 +25,27 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import GObject
 
+class FramedScrollWindow(Gtk.Frame):
+    def __init__(self, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)):
+        Gtk.Frame.__init__(self)
+        self._sw = Gtk.ScrolledWindow()
+        Gtk.Frame.add(self, self._sw)
+    def add(self, widget):
+        self._sw.add(widget)
+    def set_policy(self, hpolicy, vpolicy):
+        return self._sw.set_policy(hpolicy, vpolicy)
+    def get_hscrollbar(self):
+        return self._sw.get_hscrollbar()
+    def get_vscrollbar(self):
+        return self._sw.get_hscrollbar()
+
+def wrap_in_scrolled_window(widget, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC), with_frame=True, label=None):
+    scrw = FramedScrollWindow(label) if with_frame else Gtk.ScrolledWindow()
+    scrw.set_policy(policy[0], policy[1])
+    scrw.add(widget)
+    scrw.show_all()
+    return scrw
+
 class TimeOutController(object):
     ToggleData = collections.namedtuple('ToggleData', ['name', 'label', 'tooltip', 'stock_id'])
     def __init__(self, toggle_data, function=None, is_on=True, interval=10000):
@@ -82,3 +103,11 @@ class MappedManager(object):
         pass
     def unmap_action(self):
         pass
+
+class SplitBar(Gtk.HBox):
+    def __init__(self, expand_lhs=True, expand_rhs=False):
+        Gtk.HBox.__init__(self)
+        self.lhs = Gtk.HBox()
+        self.pack_start(self.lhs, expand_lhs, True, 0)
+        self.rhs = Gtk.HBox()
+        self.pack_end(self.rhs, expand_rhs, True, 0)
