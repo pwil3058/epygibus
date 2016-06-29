@@ -293,6 +293,9 @@ class SnapshotGenerator(object):
     def _include_file(self, subdir_ss, file_name, file_path, repo_mgr):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
+        if file_name in subdir_ss.files: # already included via another "includes" entry
+            # NB multiple inclusion would mess with content management reference counts
+            return
         try: # it's possible content manager got environment error reading file, if so skip it and report
             content_token = repo_mgr.store_contents(file_path)
         except EnvironmentError as edata:
@@ -305,6 +308,7 @@ class SnapshotGenerator(object):
     def _include_file_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
+        # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
         if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
@@ -315,6 +319,7 @@ class SnapshotGenerator(object):
     def _include_subdir_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
+        # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
         if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
             if self.report_skipped_links:
@@ -566,6 +571,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             except EnvironmentError as edata:
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+        # and subdir links
+        orig_curdir = os.getcwd()
+        link_count = 0
+        for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
+            link_count += subdir_link_data.create_link(orig_curdir, stderr)
         # Now copy the files
         hard_links = dict()
         file_count = 0
@@ -595,13 +605,9 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 file_count += 1
                 gross_size += file_data.attributes.st_size
                 net_size += file_data.attributes.st_size
-        orig_curdir = os.getcwd()
-        link_count = 0
+        # and then make the soft links to files
         for file_link_data in self.iterate_file_links(target_dir_path, True):
             link_count += file_link_data.create_link(orig_curdir, stderr)
-        for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
-            link_count += subdir_link_data.create_link(orig_curdir, stderr)
-        # ["dir_count", "file_count", "soft_link_count", "hard_link_count", "gross_bytes", "net_bytes"]
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
     def get_statistics(self):
         from . import repo
