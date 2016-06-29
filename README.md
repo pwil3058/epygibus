@@ -147,7 +147,10 @@ epygibus bu -A <archive name>
 would cause a snapshot to be taken of the file or directory
 identified by `<file/directory path>` and placed in the directory mentioned
 above with the contents of any files being stored separately in the
-`<repository name>` content repository.
+`<repository name>` content repository.  If `<file/directory path>` is a
+symbolic link then both the link and its target will be included in the
+snapshot but within included directories symbolic links are not followed.
+
 By default, the snapshot will be compressed (using gzip) but this
 default behaviour can be altered by giving the `-U` option to the `new`
 command.  As for repositories, existing snapshots can be compressed/uncompressed

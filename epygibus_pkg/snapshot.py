@@ -310,23 +310,29 @@ class SnapshotGenerator(object):
         # let the caller handle OSError exceptions
         # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
-        if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
+        abs_target_path = utils.get_link_abs_path(target_path, file_path)
+        target_valid = os.path.isfile(abs_target_path)
+        if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
-            return
+            return None
         self.file_slink_count += 1
         subdir_ss.file_links[file_name] = (get_attr_tuple(file_path), target_path)
+        return abs_target_path if target_valid else None
     def _include_subdir_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
         # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
-        if self._archive.skip_broken_soft_links and utils.is_broken_link(target_path, file_path):
+        abs_target_path = utils.get_link_abs_path(target_path, file_path)
+        target_valid = os.path.isdir(abs_target_path)
+        if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
-            return
+            return None
         self.subdir_slink_count += 1
         subdir_ss.subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
+        return abs_target_path if target_valid else None
     def _include_dir(self, abs_base_dir_path):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -394,6 +400,8 @@ class SnapshotGenerator(object):
                 repo_mgr.release_contents(self._snapshot.iterate_content_tokens())
             self._snapshot = None
         self._snapshot = Snapshot()
+        abs_dir_link_target_paths = []
+        abs_file_link_target_paths = []
         for item in self._archive.includes:
             abs_item_path = absolute_path(item)
             if os.path.islink(abs_item_path):
@@ -402,9 +410,13 @@ class SnapshotGenerator(object):
                 try:
                     subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
                     if os.path.isdir(abs_item_path):
-                        self._include_subdir_link(subdir_ss, file_name, abs_item_path)
+                        abs_target_path = self._include_subdir_link(subdir_ss, file_name, abs_item_path)
+                        if abs_target_path:
+                            abs_dir_link_target_paths.append(abs_target_path)
                     else:
-                        self._include_file_link(subdir_ss, file_name, abs_item_path)
+                        abs_target_path = self._include_file_link(subdir_ss, file_name, abs_item_path)
+                        if abs_target_path:
+                            abs_file_link_target_paths.append(abs_target_path)
                 except EnvironmentError as edata:
                     self.stderr.write(_("Error: processing link {} failed: {}: Skipping.\n").format(abs_item_path, edata.strerror))
             elif os.path.isfile(abs_item_path):
@@ -432,6 +444,23 @@ class SnapshotGenerator(object):
                     self.stderr.write(_("{0} ({1}): is not a file or directory. Skipped.\n").format(item, abs_item_path))
                 else:
                     self.stderr.write(_("{0} ({1}): not found. Skipped.\n").format(item, abs_item_path))
+        for abs_item_path in abs_dir_link_target_paths:
+            # NB: no point testing for directory existence as mere existence doesn't mean it's fully processed
+            try:
+                self._include_dir(abs_item_path)
+            except EnvironmentError as edata:
+                self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+            start_counts = repo_mgr.get_counts()
+            for abs_item_path in abs_file_link_target_paths:
+                abs_dir_path, file_name = os.path.split(abs_item_path)
+                try:
+                    subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
+                    # _include_file() checks that file isn't already included
+                    self._include_file(subdir_ss, file_name, abs_item_path, repo_mgr)
+                except EnvironmentError as edata:
+                    self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
+            self._adjust_item_stats(start_counts, repo_mgr.get_counts())
         self.elapsed_time = bmark.get_os_times() - start_time
     def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
         assert self._snapshot is not None
