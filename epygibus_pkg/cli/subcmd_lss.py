@@ -62,9 +62,9 @@ def run_cmd(args):
             for name, size, statistics in snapshot.iter_snapshot_list(args.archive_name, args.newest_first):
                 if first:
                     first = False
-                    sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds New Citem Rel Citem   CPU Time Total Time    IO Time\n"))
-                nfiles, nlinks, csize, new_citems, rel_citems, etd = statistics
-                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>9,} {:>10.2f} {:>10.2f} {:>10.2f}\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_citems, rel_citems, *etd))
+                    sys.stdout.write(_("Snapshots:                 Occupies    #Files    #Links        Holds New Citem Time(secs)    Breakdown(CPU/IO)\n"))
+                nfiles, nlinks, csize, new_citems, _spare, etd = statistics
+                sys.stdout.write("  {}: {:>12} {:>9,} {:>9,} {:>12} {:>9,} {:>10.2f}    ({:>6.2f}%/{:>6.2f}%)\n".format(name, utils.format_bytes(size), nfiles, nlinks, utils.format_bytes(csize), new_citems, etd.real_time, etd.percent_cpu, etd.percent_io))
         except excpns.Error as edata:
             sys.stderr.write(str(edata) + "\n")
             sys.exit(-1)

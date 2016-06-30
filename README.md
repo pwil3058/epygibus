@@ -66,6 +66,31 @@ to demonstrate how efficient the back system is. The size returned here
 may be different to its original size as the content repository is at
 liberty to compress content for storage if it is so directed.
 
+## Performance
+
+The following data:
+
+
+        peter:epygibus.git master$ ./epygibus lss -A home_mycloud --bu
+        Snapshots:                 Occupies    #Files    #Links        Holds New Citem Time(secs)    Breakdown(CPU/IO)
+          2016-06-27-06-42-24:     4.372 Mb   112,400        13     3.767 Gb    58,234    3181.18    ( 15.48%/ 84.52%)
+          2016-06-27-08-00-54:     4.376 Mb   112,450        13     3.759 Gb       118      32.34    ( 66.67%/ 33.33%)
+          2016-06-28-08-02-56:     4.379 Mb   112,134        13     3.778 Gb     2,616     143.89    ( 28.63%/ 71.37%)
+          2016-06-29-08-02-21:     4.306 Mb   110,761        11     3.785 Gb         0     111.55    ( 30.46%/ 69.54%)
+        peter:epygibus.git master$ ./epygibus lss -A home_lbu --bu
+        Snapshots:                 Occupies    #Files    #Links        Holds New Citem Time(secs)    Breakdown(CPU/IO)
+          2016-06-27-05-40-15:     4.348 Mb   111,813        13     3.669 Gb    57,667     301.91    ( 97.06%/  2.94%)
+          2016-06-27-08-00-20:     4.352 Mb   111,869        13     3.663 Gb       137      18.83    ( 99.95%/  0.05%)
+          2016-06-28-08-00-31:     4.355 Mb   111,554        13     3.682 Gb     2,616      29.49    ( 99.76%/  0.24%)
+          2016-06-29-08-00-28:     4.280 Mb   110,181        11     3.690 Gb         0      26.43    ( 99.81%/  0.19%)
+
+are the statistics from running back ups of my home directory (approx 110 thousand files and 3.7Gb) to two different devices. The
+first is a Western Digital __wdmycloud__ storage device mounted using CIFS over a network connection and the the second is a locally
+mounted hard disk.  It should be noted that after the first snapshot has been taken the time taken for subsequent snapshots is quite
+short due to the reduced amount of content that needs to be stored after the first snapshot.  It should also be noted that each snapshot
+only occupies about 4.4Mb in addition to the stored content which is shared by all snapshots.  Differences between the number of content items
+and the number of files is due to the high degree of redundancy in my files due to the use of __git__ and __hg__.
+
 ## User Interface
 
 At this point in time, the only available user interface is via the

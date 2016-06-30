@@ -109,6 +109,7 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
     def make(cls, path, f_data):
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1])
 
+# TODO: "nreleased_items" to be ditched for "ncitems" (nothing is released)
 class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
     def __add__(self, other):
         return CreationStats(*[self[i] + other[i] for i in range(len(self))])
@@ -286,8 +287,8 @@ class SnapshotGenerator(object):
         self.created_items = 0
     def _adjust_item_stats(self, start_counts, end_counts):
         # TODO: check the maths here (use a namedtuple)
-        self.created_items = max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
-        self.released_items = max(end_counts[1] - start_counts[1], 0)
+        self.created_items += max(sum(end_counts[:-1]) - sum(start_counts[:-1]), 0)
+        self.released_items += max(end_counts[1] - start_counts[1], 0)
     @property
     def creation_stats(self):
         return CreationStats(self.file_count, self.file_slink_count + self.subdir_slink_count, self.content_count, self.created_items, self.released_items, self.elapsed_time.get_etd())

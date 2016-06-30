@@ -32,6 +32,12 @@ class ETD(collections.namedtuple("ETD", ["cpu_time", "real_time", "io_time"])):
             return (100.0 * self.io_time) / self.real_time
         except ZeroDivisionError:
             return 100.0
+    @property
+    def percent_cpu(self):
+        try:
+            return (100.0 * self.cpu_time) / self.real_time
+        except ZeroDivisionError:
+            return 100.0
 
 class OsTimes(collections.namedtuple("OsTimes", ["utime", "stime", "cutime", "cstime", "rtime"])):
     def __sub__(self, other):
