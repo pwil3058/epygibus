@@ -102,6 +102,8 @@ class RepoListView(table.MapManagedTableView):
     def _get_table_db(self):
         return RepoTableData()
 
+class RepoListWidget(table.TableWidget):
+    View = RepoListView
 
 class RepoStatsRow(collections.namedtuple("RepoSt", ["references", "referenced_items", "referenced_content_bytes", "referenced_stored_bytes", "unreferenced_items", "unreferenced_content_bytes", "unreferenced_stored_bytes"])):
     @property
@@ -174,8 +176,9 @@ class RepoStatsListView(table.MapManagedTableView):
         (_("References"), "references", 1.0),
         (_("#Referenced"), "referenced_items", 1.0),
         (_("Content"), "referenced_content_bytes", 1.0),
+        (_("Stored"), "referenced_stored_bytes", 1.0),
         (_("#Unreferenced"), "unreferenced_items", 1.0),
-        (_("Contents"), "unreferenced_content_bytes", 1.0),
+        (_("Content"), "unreferenced_content_bytes", 1.0),
         (_("Stored"), "unreferenced_stored_bytes", 1.0),
     )
     def __init__(self, busy_indicator=None, size_req=None):

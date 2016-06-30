@@ -108,6 +108,6 @@ class SplitBar(Gtk.HBox):
     def __init__(self, expand_lhs=True, expand_rhs=False):
         Gtk.HBox.__init__(self)
         self.lhs = Gtk.HBox()
-        self.pack_start(self.lhs, expand_lhs, True, 0)
+        self.pack_start(self.lhs, expand=expand_lhs, fill=True, padding=0)
         self.rhs = Gtk.HBox()
-        self.pack_end(self.rhs, expand_rhs, True, 0)
+        self.pack_end(self.rhs, expand=expand_rhs, fill=True, padding=0)

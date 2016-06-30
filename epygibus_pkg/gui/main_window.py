@@ -26,19 +26,21 @@ from . import actions
 from . import enotify
 from . import auto_update
 from . import g_repos
+from . import icons
 
 class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener):
     def __init__(self):
         Gtk.Window.__init__(self)
         actions.CAGandUIManager.__init__(self)
         enotify.Listener.__init__(self)
+        self.set_icon_from_file(icons.APP_ICON_FILE)
         self.connect("delete_event", Gtk.main_quit)
         vbox = Gtk.VBox()
         label = Gtk.Label()
         label.set_label("Work in progress.  Try again later.")
-        vbox.pack_start(label, False, True, 0)
-        vbox.pack_start(g_repos.RepoListView(), False, True, 0)
-        vbox.pack_start(g_repos.RepoStatsListWidget(), True, True, 0)
+        vbox.pack_start(label, expand=False, fill=True, padding=0)
+        vbox.pack_start(g_repos.RepoListView(), expand=False, fill=True, padding=0)
+        vbox.pack_start(g_repos.RepoStatsListWidget(), expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):

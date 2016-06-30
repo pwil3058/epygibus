@@ -241,14 +241,14 @@ class View(Gtk.TreeView):
         cell = cell_renderer_spec.cell_renderer()
         if cell_renderer_spec.expand is not None:
             if cell_renderer_spec.start:
-                column.pack_start(cell, cell_renderer_spec.expand)
+                column.pack_start(cell, expand=cell_renderer_spec.expand)
             else:
-                column.pack_end(cell, cell_renderer_spec.expand)
+                column.pack_end(cell, expand=cell_renderer_spec.expand)
         else:
             if cell_renderer_spec.start:
-                column.pack_start(cell)
+                column.pack_start(cell, expand=True)
             else:
-                column.pack_end(cell)
+                column.pack_end(cell, expand=True)
         return cell
     def _view_add_column(self, col_d):
         col = Gtk.TreeViewColumn(col_d.title)

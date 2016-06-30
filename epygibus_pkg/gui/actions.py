@@ -115,7 +115,7 @@ class ActionHButtonBox(Gtk.HBox):
         Gtk.HBox.__init__(self)
         self.button_list = ActionButtonList(action_group_list, action_name_list, use_underline)
         for button in self.button_list.list:
-            self.pack_start(button, expand, fill, padding)
+            self.pack_start(button, expand=expand, fill=fill, padding=padding)
         return self
 
 class ConditionalActionGroups(object):
@@ -205,7 +205,7 @@ class ConditionalActionGroups(object):
             box = Gtk.VBox()
         for action_name in action_name_list:
             button = self.create_action_button(action_name, use_underline)
-            box.pack_start(button, expand, fill, padding)
+            box.pack_start(button, expand=expand, fill=fill, padding=padding)
         return box
 
 CLASS_INDEP_AGS = ConditionalActionGroups('class_indep')
