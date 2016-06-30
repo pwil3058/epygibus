@@ -192,7 +192,7 @@ As already mentioned, back up snapshots are created using the `bu` sub command.
 The essential signature for this command is:
 
 ```
-epygibus [--stats] [--quiet] [-U|-C] -A <archive_name> [-A <another_archive_name>]
+epygibus bu [--stats] [--quiet] [-U|-C] -A <archive_name> [-A <another_archive_name>]
 ```
 
 and it should be noted that it will accept multiple `-A` arguments to
@@ -238,7 +238,7 @@ epygibus lss [--newest_first] [--build_stats | --storage_stats] -A name
 and without any optional arguments it will list the "names" of the
 snapshots in order of creation (use `--newest_first` to reverse this order).
 The "name" of a snapshot is a 19 character
-date time group (DTG) string indicating the time (UTC/GMT) at which the snapshot
+date time group (DTG) string indicating the local time at which the snapshot
 was made (e.g. "2016-06-14-00-57-11" would be the name of a snapshot taken
 at 57 minutes and 11 seconds after midnight on the 14th June 2016) and
 in conjunction with name of the archive to which it belongs should form

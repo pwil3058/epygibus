@@ -260,6 +260,7 @@ class SnapshotGenerator(object):
         import fnmatch
         from . import repo
         from . import bmark
+        self._use_gmt = False # TODO: make this an option
         self._archive = archive
         self._exclude_dir_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_dir_globs]
         self._exclude_file_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_file_globs]
@@ -465,7 +466,10 @@ class SnapshotGenerator(object):
     def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
         assert self._snapshot is not None
         import time
-        snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
+        if self._use_gmt:
+            snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
+        else:
+            snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.localtime())
         snapshot_file_path = os.path.join(self._archive.snapshot_dir_path, snapshot_file_name)
         if compress is None:
             compress = self._archive.compress_default
