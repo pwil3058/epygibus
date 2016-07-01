@@ -226,6 +226,82 @@ def report_exception_as_error(edata, parent=None):
 
 class CancelOKDialog(Dialog):
     def __init__(self, title=None, parent=None):
+        if not parent:
+            parent = main_window
         flags = Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT
         buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
         Dialog.__init__(self, title, parent, flags, buttons)
+
+class FileChooserDialog(Gtk.FileChooserDialog):
+    def __init__(self, title=None, parent=None, action=Gtk.FileChooserAction.OPEN, buttons=None, backend=None):
+        if not parent:
+            parent = main_window
+        Gtk.FileChooserDialog.__init__(self, title, parent, action, buttons, backend)
+
+def select_directory(prompt, suggestion=None, existing=True, parent=None):
+    if existing:
+        if suggestion and not os.path.exists(suggestion):
+            suggestion = None
+    dialog = FileChooserDialog(prompt, parent, Gtk.FileChooserAction.SELECT_FOLDER,
+                               (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                Gtk.STOCK_OK, Gtk.ResponseType.OK))
+    dialog.set_default_response(Gtk.ResponseType.OK)
+    if suggestion:
+        if os.path.isdir(suggestion):
+            dialog.set_current_folder(suggestion)
+        else:
+            dirname = os.path.dirname(suggestion)
+            if dirname:
+                dialog.set_current_folder(dirname)
+    else:
+        dialog.set_current_folder(os.getcwd())
+    response = dialog.run()
+    if response == Gtk.ResponseType.OK:
+        new_dir_name = os.path.relpath(dialog.get_filename())
+    else:
+        new_dir_name = None
+    dialog.destroy()
+    return new_dir_name
+
+class EnterDirPath(Gtk.HBox):
+    def __init__(self, prompt, suggestion=None, existing=True, parent=None):
+        Gtk.HBox.__init__(self)
+        self._parent = parent
+        self._dir_path = Gtk.Entry()
+        if suggestion:
+            self._dir_path.set_text(suggestion)
+        else:
+            self._dir_path.set_width_chars(48)
+        self._existing = existing
+        p_label = Gtk.Label()
+        p_label.set_markup(prompt)
+        b_button = Gtk.Button.new_with_label(_("Browse"))
+        b_button.connect("clicked", self._browse_cb)
+        self.pack_start(p_label, expand=False, fill=True, padding=0)
+        self.pack_start(self._dir_path, expand=False, fill=True, padding=0)
+        self.pack_start(b_button, expand=False, fill=True, padding=0)
+        self.show_all()
+    @property
+    def dir_path(self):
+        return self._dir_path.get_text()
+    def _browse_cb(self, button=None):
+        suggestion = self._dir_path.get_text()
+        dir_path = select_directory(_("Browse for Directory"), suggestion=suggestion, existing=self._existing, parent=self._parent)
+        if dir_path:
+            self._dir_path.set_text(os.path.abspath(os.path.expanduser(dir_path)))
+
+class EnterDirPathDialog(CancelOKDialog):
+    def __init__(self, title=None, prompt=None, suggestion="", existing=True, parent=None):
+        CancelOKDialog.__init__(self, title, parent)
+        self.entry = EnterDirPath(prompt, suggestion, existing, parent=self)
+        self.get_content_area().add(self.entry)
+        self.show_all()
+    @property
+    def dir_path(self):
+        return self.entry.dir_path
+
+def ask_dir_path(prompt, suggestion=None, existing=True, parent=None):
+    dialog = EnterDirPathDialog(prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
+    dir_path = dialog.dir_path if dialog.run() == Gtk.ResponseType.OK else None
+    dialog.destroy()
+    return dir_path
