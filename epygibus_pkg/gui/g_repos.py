@@ -28,6 +28,7 @@ from gi.repository import GObject
 from .. import config
 from .. import repo
 from .. import utils
+from .. import excpns
 
 from . import actions
 from . import enotify
@@ -35,6 +36,7 @@ from . import auto_update
 from . import table
 from . import icons
 from . import tlview
+from . import dialogue
 
 AC_REPOS_AVAILABLE = actions.ActionCondns.new_flag()
 NE_NEW_REPO = enotify.new_event_flag()
@@ -201,3 +203,61 @@ class RepoStatsListView(table.MapManagedTableView):
 
 class RepoStatsListWidget(table.TableWidget):
     View = RepoStatsListView
+
+class NewRepoWidget(Gtk.VBox):
+    def __init__(self):
+        Gtk.VBox.__init__(self)
+        name_label = Gtk.Label()
+        name_label.set_markup(_("Name:"))
+        self._name = dialogue.ReadTextWidget()
+        location_label = Gtk.Label()
+        location_label.set_markup(_("Location:"))
+        self._location = dialogue.EnterDirPathWidget()
+        self._compress_content = Gtk.CheckButton(_("Compress Stored Content?"))
+        self._compress_content.set_active(True)
+        grid = Gtk.Grid()
+        grid.add(name_label)
+        grid.attach_next_to(self._name, name_label, Gtk.PositionType.RIGHT, 1, 1)
+        grid.attach_next_to(location_label, name_label, Gtk.PositionType.BOTTOM, 1, 1)
+        grid.attach_next_to(self._location, location_label, Gtk.PositionType.RIGHT, 1, 1)
+        self.pack_start(grid, expand=False, fill=False, padding=0)
+        self.pack_start(self._compress_content, expand=False, fill=False, padding=0)
+        self.show_all()
+    def create_repo(self):
+        name = self._name.entry.get_text()
+        if not name:
+            dialogue.alert_user(_("\"Name\" is a required field."))
+            return False
+        location = self._location.dir_path
+        if not location:
+            dialogue.alert_user(_("\"Location\" is a required field."))
+            return False
+        compress = self._compress_content.get_active()
+        try:
+            repo.create_new_repo(name, location, compress)
+        except excpns.Error as edata:
+            dialogue.report_exception_as_error(edata)
+            return False
+        return True
+
+class NewRepoDialog(dialogue.CancelOKDialog):
+    def __init__(self, parent=None):
+        dialogue.CancelOKDialog.__init__(self, title=_("Create New Repo"), parent=parent)
+        self.new_repo_widget = NewRepoWidget()
+        self.get_content_area().add(self.new_repo_widget)
+        self.show_all()
+
+def create_new_repo_acb(_action=None):
+    dialog = NewRepoDialog()
+    while dialog.run() == Gtk.ResponseType.OK:
+        if dialog.new_repo_widget.create_repo():
+            break
+    dialog.destroy()
+
+actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
+    [
+        ("create_new_repo", icons.STOCK_NEW_REPO, _("New Repo"), None,
+         _("Create a new content repository."),
+         create_new_repo_acb
+        ),
+    ])

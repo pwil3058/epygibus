@@ -27,12 +27,22 @@ from . import enotify
 from . import auto_update
 from . import g_repos
 from . import icons
+from . import dialogue
 
-class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener):
+class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
+    UI_DESCR = """
+    <ui>
+        <toolbar name="RepoToolBar">
+            <toolitem action="create_new_repo"/>
+        </toolbar>
+    </ui>
+    """
     def __init__(self):
-        Gtk.Window.__init__(self)
+        Gtk.Window.__init__(self, Gtk.WindowType.TOPLEVEL)
         actions.CAGandUIManager.__init__(self)
         enotify.Listener.__init__(self)
+        dialogue.BusyIndicator.__init__(self)
+        dialogue.init(self)
         self.set_icon_from_file(icons.APP_ICON_FILE)
         self.connect("delete_event", Gtk.main_quit)
         vbox = Gtk.VBox()
@@ -41,6 +51,8 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener):
         vbox.pack_start(label, expand=False, fill=True, padding=0)
         vbox.pack_start(g_repos.RepoListView(), expand=False, fill=True, padding=0)
         vbox.pack_start(g_repos.RepoStatsListWidget(), expand=True, fill=True, padding=0)
+        toolbar = self.ui_manager.get_widget("/RepoToolBar")
+        vbox.pack_start(toolbar, expand=False, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):

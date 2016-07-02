@@ -53,21 +53,22 @@ class BusyIndicator(object):
     def __init__(self, parent=None):
         self.parent_indicator = parent
         self._count = 0
+        self.gdk_window = self.get_window()
     def show_busy(self):
-        if self.parent:
-            self.parent.show_busy()
+        if self.parent_indicator:
+            self.parent_indicator.show_busy()
         self._count += 1
-        if self._count == 1 and self.window:
-            self.window.set_cursor(Gdk.Cursor(Gdk.WATCH))
+        if self._count == 1 and self.gdk_window:
+            self.gdk_window.set_cursor(Gdk.Cursor(Gdk.WATCH))
             while Gtk.events_pending():
                 Gtk.main_iteration()
     def unshow_busy(self):
-        if self.parent:
-            self.parent.unshow_busy()
+        if self.parent_indicator:
+            self.parent_indicator.unshow_busy()
         self._count -= 1
         assert self._count >= 0
-        if self._count == 0 and self.window:
-            self.window.set_cursor(None)
+        if self._count == 0 and self.gdk_window:
+            self.gdk_window.set_cursor(None)
     @property
     def is_busy(self):
         return self._count > 0
@@ -221,8 +222,7 @@ def report_failure(failure, parent=None):
     inform_user(failure.result, parent, Gtk.MessageType.ERROR)
 
 def report_exception_as_error(edata, parent=None):
-    problem_type = Gtk.MessageType.ERROR
-    inform_user(str(edata), parent, problem_type)
+    alert_user(str(edata), parent=parent)
 
 class CancelOKDialog(Dialog):
     def __init__(self, title=None, parent=None):
@@ -231,6 +231,22 @@ class CancelOKDialog(Dialog):
         flags = Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT
         buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
         Dialog.__init__(self, title, parent, flags, buttons)
+
+class ReadTextWidget(Gtk.HBox):
+    def __init__(self, prompt=None, suggestion="", width_chars=32):
+        Gtk.HBox.__init__(self)
+        if prompt:
+            p_label = Gtk.Label()
+            p_label.set_markup(prompt)
+            self.pack_start(p_label, expand=False, fill=True, padding=0)
+        self.entry = Gtk.Entry()
+        if suggestion:
+            self.entry.set_text(suggestion)
+            self.entry.set_width_chars(max(width_chars, len(suggestion)))
+        else:
+            self.entry.set_width_chars(width_chars)
+        self.pack_start(self.entry, expand=False, fill=True, padding=0)
+        self.show_all()
 
 class FileChooserDialog(Gtk.FileChooserDialog):
     def __init__(self, title=None, parent=None, action=Gtk.FileChooserAction.OPEN, buttons=None, backend=None):
@@ -263,37 +279,30 @@ def select_directory(prompt, suggestion=None, existing=True, parent=None):
     dialog.destroy()
     return new_dir_name
 
-class EnterDirPath(Gtk.HBox):
-    def __init__(self, prompt, suggestion=None, existing=True, parent=None):
+class EnterDirPathWidget(Gtk.HBox):
+    def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):
         Gtk.HBox.__init__(self)
         self._parent = parent
-        self._dir_path = Gtk.Entry()
-        if suggestion:
-            self._dir_path.set_text(suggestion)
-        else:
-            self._dir_path.set_width_chars(48)
+        self._dir_path = ReadTextWidget(prompt=prompt, suggestion=suggestion, width_chars=width_chars)
         self._existing = existing
-        p_label = Gtk.Label()
-        p_label.set_markup(prompt)
         b_button = Gtk.Button.new_with_label(_("Browse"))
         b_button.connect("clicked", self._browse_cb)
-        self.pack_start(p_label, expand=False, fill=True, padding=0)
-        self.pack_start(self._dir_path, expand=False, fill=True, padding=0)
-        self.pack_start(b_button, expand=False, fill=True, padding=0)
+        self.pack_start(self._dir_path, expand=True, fill=True, padding=0)
+        self.pack_end(b_button, expand=False, fill=True, padding=0)
         self.show_all()
     @property
     def dir_path(self):
-        return self._dir_path.get_text()
+        return self._dir_path.entry.get_text()
     def _browse_cb(self, button=None):
-        suggestion = self._dir_path.get_text()
+        suggestion = self._dir_path.entry.get_text()
         dir_path = select_directory(_("Browse for Directory"), suggestion=suggestion, existing=self._existing, parent=self._parent)
         if dir_path:
-            self._dir_path.set_text(os.path.abspath(os.path.expanduser(dir_path)))
+            self._dir_path.entry.set_text(os.path.abspath(os.path.expanduser(dir_path)))
 
 class EnterDirPathDialog(CancelOKDialog):
     def __init__(self, title=None, prompt=None, suggestion="", existing=True, parent=None):
         CancelOKDialog.__init__(self, title, parent)
-        self.entry = EnterDirPath(prompt, suggestion, existing, parent=self)
+        self.entry = EnterDirPathWidget(prompt, suggestion, existing, parent=self)
         self.get_content_area().add(self.entry)
         self.show_all()
     @property
@@ -301,7 +310,7 @@ class EnterDirPathDialog(CancelOKDialog):
         return self.entry.dir_path
 
 def ask_dir_path(prompt, suggestion=None, existing=True, parent=None):
-    dialog = EnterDirPathDialog(prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
+    dialog = EnterDirPathDialog(title=_("Enter Directory Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
     dir_path = dialog.dir_path if dialog.run() == Gtk.ResponseType.OK else None
     dialog.destroy()
     return dir_path
