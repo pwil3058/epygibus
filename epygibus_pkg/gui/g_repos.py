@@ -37,10 +37,12 @@ from . import table
 from . import icons
 from . import tlview
 from . import dialogue
+from . import gutils
 
 AC_REPOS_AVAILABLE = actions.ActionCondns.new_flag()
-NE_NEW_REPO = enotify.new_event_flag()
+NE_NEW_REPO, NE_DELETE_REPO, NE_NUM_REPO_CHANGE = enotify.new_event_flags_and_mask(2)
 NE_REPO_STATS_CHANGE = enotify.new_event_flag()
+NE_REPO_SPEC_CHANGE = enotify.new_event_flag()
 
 _n_repos = 0
 
@@ -50,19 +52,19 @@ def get_repo_available_condn():
     else:
         return actions.MaskedCondns(0, AC_REPOS_AVAILABLE)
 
-def _ne_new_repo_cb(**kwargs):
+def _ne_num_repo_change_cb(**kwargs):
     global _n_repos
     old_n_repos = _n_repos
     _n_repos = len(config.get_repo_name_list())
     if old_n_repos != _n_repos:
         actions.CLASS_INDEP_AGS.update_condns(get_repo_available_condn())
 
-_ne_new_repo_cb()
+_ne_num_repo_change_cb()
 
-enotify.add_notification_cb(NE_NEW_REPO, _ne_new_repo_cb)
+enotify.add_notification_cb(NE_NUM_REPO_CHANGE, _ne_num_repo_change_cb)
 
 def _auto_update_cb(events_so_far, _args):
-    if events_so_far & NE_NEW_REPO or len(config.get_repo_name_list()) == _n_repos:
+    if events_so_far & NE_NUM_REPO_CHANGE or len(config.get_repo_name_list()) == _n_repos:
         return 0
     return NE_NEW_REPO
 
@@ -76,7 +78,7 @@ class RepoTableData(table.TableData):
     def _finalize(self, pdt):
         self._repo_spec_list = pdt
     def iter_rows(self):
-        for repo_spec in self._repo_spec_list:
+        for repo_spec in sorted(self._repo_spec_list):
             yield repo_spec
 
 class RepoListView(table.MapManagedTableView):
@@ -91,8 +93,8 @@ class RepoListView(table.MapManagedTableView):
             return self.get_value_named(plist_iter, "compressed")
     PopUp = None
     SET_EVENTS = 0
-    REFRESH_EVENTS = NE_NEW_REPO
-    AU_REQ_EVENTS = NE_NEW_REPO
+    REFRESH_EVENTS = NE_NUM_REPO_CHANGE | NE_REPO_SPEC_CHANGE
+    AU_REQ_EVENTS = NE_REPO_SPEC_CHANGE
     UI_DESCR = ""
     specification = table.simple_text_specification(Model, (_("Name"), "name", 0.0), (_("Location"), "base_dir_path", 0.0), (_("Compressed?"), "compressed", 0.0),)
     def __init__(self, busy_indicator=None, size_req=None):
@@ -130,7 +132,7 @@ class RepoStatsTableData(table.TableData):
     def _finalize(self, pdt):
         self._repo_stats_list = pdt
     def iter_rows(self):
-        for repo_name, repo_stats in self._repo_stats_list:
+        for repo_name, repo_stats in sorted(self._repo_stats_list):
             nitems = NUM_FT.format(repo_stats.total_items)
             content_bytes = utils.format_bytes(repo_stats.total_content_bytes)
             stored_bytes = utils.format_bytes(repo_stats.total_stored_bytes)
@@ -144,7 +146,7 @@ class RepoStatsTableData(table.TableData):
             yield RSRow(repo_name, nitems, content_bytes, stored_bytes, references, referenced_items, referenced_content_bytes, referenced_stored_bytes, unreferenced_items, unreferenced_content_bytes, unreferenced_stored_bytes)
 
 class RepoStatsListView(table.MapManagedTableView):
-    class Model(table.MapManagedTableView.Model):
+    class Model(tlview.NamedListStore):
         Row = RSRow
         types = Row(name=GObject.TYPE_STRING,
                     nitems=GObject.TYPE_STRING,
@@ -157,14 +159,15 @@ class RepoStatsListView(table.MapManagedTableView):
                     unreferenced_items=GObject.TYPE_STRING,
                     unreferenced_content_bytes=GObject.TYPE_STRING,
                     unreferenced_stored_bytes=GObject.TYPE_STRING)
-    PopUp = "/repos_popup"
+    PopUp = "/repos_STATS_popup"
     SET_EVENTS = 0
-    REFRESH_EVENTS = NE_REPO_STATS_CHANGE | NE_NEW_REPO
+    REFRESH_EVENTS = NE_REPO_STATS_CHANGE | NE_NUM_REPO_CHANGE
     AU_REQ_EVENTS = NE_REPO_STATS_CHANGE
     UI_DESCR = """
     <ui>
       <popup name="repos_STATS_popup">
         <menuitem action="show_selected_repo_spec"/>
+        <menuitem action="delete_selected_repo"/>
         <separator/>
       </popup>
     </ui>
@@ -192,12 +195,16 @@ class RepoStatsListView(table.MapManagedTableView):
             [
                 ("show_selected_repo_spec", icons.STOCK_REPO_SHOW, _("Show"), None,
                   _("Show the specification of the selected repo."),
-                  lambda _action=None: None #RepoDiffDialog(repo=self.get_selected_repo()).show()
+                  lambda _action=None: None
+                ),
+                ("delete_selected_repo", icons.STOCK_REPO_DELETE, _("Delete"), None,
+                  _("Delete the selected repository."),
+                  lambda _action=None: do_delete_repo(self.get_selected_repo_name())
                 ),
             ])
-    def get_selected_repo(self):
+    def get_selected_repo_name(self):
         store, store_iter = self.get_selection().get_selected()
-        return None if store_iter is None else store.get_tag_name(store_iter)
+        return None if store_iter is None else store.get_value_named(store_iter, "name")
     def _get_table_db(self):
         return RepoStatsTableData()
 
@@ -235,6 +242,7 @@ class NewRepoWidget(Gtk.VBox):
         compress = self._compress_content.get_active()
         try:
             repo.create_new_repo(name, location, compress)
+            enotify.notify_events(NE_NEW_REPO)
         except excpns.Error as edata:
             dialogue.report_exception_as_error(edata)
             return False
@@ -246,6 +254,23 @@ class NewRepoDialog(dialogue.CancelOKDialog):
         self.new_repo_widget = NewRepoWidget()
         self.get_content_area().add(self.new_repo_widget)
         self.show_all()
+
+class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
+    def __init__(self):
+        gutils.UpdatableComboBoxText.__init__(self)
+        enotify.Listener.__init__(self)
+        self.add_notification_cb(NE_NUM_REPO_CHANGE, self._enotify_cb)
+    def _enotify_cb(self, **kwargs):
+        self.update_contents()
+    def _get_updated_item_list(self):
+        return config.get_repo_name_list()
+
+def do_delete_repo(repo_name):
+    try:
+        repo.delete_repo(repo_name)
+        enotify.notify_events(NE_DELETE_REPO)
+    except Exception as edata:
+        dialogue.report_exception_as_error(edata)
 
 def create_new_repo_acb(_action=None):
     dialog = NewRepoDialog()

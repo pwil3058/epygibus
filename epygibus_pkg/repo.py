@@ -37,7 +37,7 @@ _ld1 = 1
 _ld2 = _ld1 + 2
 _split_content_token = lambda content_token: (content_token[:_ld1], content_token[_ld1:_ld2], content_token[_ld2:])
 
-BlobRepoData = collections.namedtuple("BlobRepoData", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
+RepoMgmtKey = collections.namedtuple("RepoMgmtKey", ["base_dir_path", "ref_counter_path", "lock_file_path", "compressed"])
 
 class CIS(collections.namedtuple("CIS", ["stored_size", "ref_count"])):
     @property
@@ -53,7 +53,7 @@ def get_repo_mgmt_key(repo_name):
     from . import config
     from . import excpns
     repo_spec = config.read_repo_spec(repo_name)
-    return BlobRepoData(repo_spec.base_dir_path, _ref_counter_path(repo_spec.base_dir_path), _lock_file_path(repo_spec.base_dir_path), repo_spec.compressed)
+    return RepoMgmtKey(repo_spec.base_dir_path, _ref_counter_path(repo_spec.base_dir_path), _lock_file_path(repo_spec.base_dir_path), repo_spec.compressed)
 
 _REF_COUNT, _CONTENT_SIZE, _STORED_SIZE = range(3)
 
@@ -240,14 +240,28 @@ def create_new_repo(repo_name, location_dir_path, compressed):
         config.delete_repo_spec(repo_spec.name)
         raise edata
 
+def delete_repo(repo_name):
+    from . import excpns
+    from . import config
+    rmk = get_repo_mgmt_key(repo_name)
+    with open_repo_mgr(rmk, writeable=True) as repo_mgr:
+        refed, _unrefed, _total = repo_mgr.get_counts()
+        if refed:
+            raise excpns.RepositoryInUse(repo_name, refed)
+        config.delete_repo_spec(repo_name)
+        repo_mgr.prune_unreferenced_content(rm_empty_dirs=True, rm_empty_subdirs=True)
+    os.remove(rmk.ref_counter_path)
+    os.remove(rmk.lock_file_path)
+    os.rmdir(rmk.base_dir_path)
+
 def compress_repository(repo_name):
     from . import utils
     saved_bytes = 0
-    brd = get_repo_mgmt_key(repo_name)
-    for entry_name in os.listdir(brd.base_dir_path):
-        entry_path = os.path.join(brd.base_dir_path, entry_name)
+    rmk = get_repo_mgmt_key(repo_name)
+    for entry_name in os.listdir(rmk.base_dir_path):
+        entry_path = os.path.join(rmk.base_dir_path, entry_name)
         if not os.path.isdir(entry_path): continue
-        with open_repo_mgr(brd, True) as repo_mgr: # don't hog the lock
+        with open_repo_mgr(rmk, True) as repo_mgr: # don't hog the lock
             for subdir_name in os.listdir(entry_path):
                 subdir_path = os.path.join(entry_path, subdir_name)
                 if not os.path.isdir(subdir_path): continue
@@ -262,11 +276,11 @@ def compress_repository(repo_name):
 def uncompress_repository(repo_name):
     from . import utils
     extra_bytes = 0
-    brd = get_repo_mgmt_key(repo_name)
-    for entry_name in os.listdir(brd.base_dir_path):
-        entry_path = os.path.join(brd.base_dir_path, entry_name)
+    rmk = get_repo_mgmt_key(repo_name)
+    for entry_name in os.listdir(rmk.base_dir_path):
+        entry_path = os.path.join(rmk.base_dir_path, entry_name)
         if not os.path.isdir(entry_path): continue
-        with open_repo_mgr(brd, True) as repo_mgr: # don't hog the lock
+        with open_repo_mgr(rmk, True) as repo_mgr: # don't hog the lock
             for subdir_name in os.listdir(entry_path):
                 subdir_path = os.path.join(entry_path, subdir_name)
                 if not os.path.isdir(subdir_path): continue

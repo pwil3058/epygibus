@@ -116,6 +116,12 @@ class BlobRepositoryLocationNoPerm(Error):
     def __init__(self, repo_name):
         self.repo_name = repo_name
 
+class RepositoryInUse(Error):
+    STR_TEMPLATE = _("Error: content repository \"{repo_name}\" in use with {num_refed_items} being referenced.")
+    def __init__(self, repo_name, num_refed_items):
+        self.repo_name = repo_name
+        self.num_refed_items = num_refed_items
+
 class EmptyArchive(Error):
     STR_TEMPLATE = _("Error: snapshot archive \"{archive_name}\" is empty.")
     def __init__(self, archive_name):

@@ -111,3 +111,40 @@ class SplitBar(Gtk.HBox):
         self.pack_start(self.lhs, expand=expand_lhs, fill=True, padding=0)
         self.rhs = Gtk.HBox()
         self.pack_end(self.rhs, expand=expand_rhs, fill=True, padding=0)
+
+class UpdatableComboBoxText(Gtk.ComboBoxText):
+    def __init__(self):
+        Gtk.ComboBoxText.__init__(self)
+        self.update_contents()
+        self.show_all()
+    def remove_text_item(self, item):
+        model = self.get_model()
+        for index in range(len(model)):
+            if model[index][0] == item:
+                self.remove(index)
+                return True
+        return False
+    def insert_text_item(self, item):
+        model = self.get_model()
+        if len(model) == 0 or model[-1][0] < item:
+            self.append_text(item)
+            return len(model) - 1
+        index = 0
+        while index < len(model) and model[index][0] < item:
+            index += 1
+        self.insert_text(index, item)
+        return index
+    def set_active_text(self, item):
+        model = self.get_model()
+        index = 0
+        while index < len(model) and model[index][0] != item:
+            index += 1
+        self.set_active(index)
+    def update_contents(self):
+        updated_set = set(self._get_updated_item_list())
+        for gone_away in (set([row[0] for row in self.get_model()]) - updated_set):
+            self.remove_text_item(gone_away)
+        for new_item in (updated_set - set([row[0] for row in self.get_model()])):
+            self.insert_text_item(new_item)
+    def _get_updated_item_list(self):
+        assert False, "_get_updated_item_list() must be defined in child"

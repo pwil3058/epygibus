@@ -32,7 +32,7 @@ from .. import utils
 _flag_generator = utils.create_flag_generator()
 
 def new_event_flags_and_mask(count):
-    flags = [_flag_generator.next() for _i in range(count)]
+    flags = [next(_flag_generator) for _i in range(count)]
     return tuple(flags + [sum(flags)])
 
 def new_event_flag():

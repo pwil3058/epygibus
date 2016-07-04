@@ -51,9 +51,15 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         vbox.pack_start(label, expand=False, fill=True, padding=0)
         vbox.pack_start(g_repos.RepoListView(), expand=False, fill=True, padding=0)
         vbox.pack_start(g_repos.RepoStatsListWidget(), expand=True, fill=True, padding=0)
+        rcb = g_repos.RepoComboBox()
+        rcb.set_active_text("gabba")
+        rcb.connect("changed", self._rcb_changed_cb)
+        vbox.pack_start(rcb, expand=False, fill=True, padding=0)
         toolbar = self.ui_manager.get_widget("/RepoToolBar")
         vbox.pack_start(toolbar, expand=False, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):
         pass
+    def _rcb_changed_cb(self, rcb):
+        print("repo:", rcb.get_active_text())
