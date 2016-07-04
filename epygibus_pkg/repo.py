@@ -220,9 +220,9 @@ def initialize_repo(repo_spec):
         os.makedirs(repo_spec.base_dir_path)
     except EnvironmentError as edata:
         if edata.errno == errno.EEXIST:
-            raise excpns.BlobRepositoryLocationExists(repo_spec.name)
+            raise excpns.RepositoryLocationExists(repo_spec.name)
         elif edata.errno == errno.EPERM or edata.errno == errno.EACCES:
-            raise excpns.BlobRepositoryLocationNoPerm(repo_spec.name)
+            raise excpns.RepositoryLocationNoPerm(repo_spec.name)
         else:
             raise edata
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)

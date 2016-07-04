@@ -749,7 +749,7 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
         config.delete_archive_spec(archive_name)
         if edata.errno == errno.EEXIST:
             raise excpns.SnapshotArchiveLocationExists(archive_name)
-        elif edata.errno == errno.EPERM:
+        elif edata.errno == errno.EPERM or edata.errno == errno.EACCES:
             raise excpns.SnapshotArchiveLocationNoPerm(archive_name)
         else:
             raise edata

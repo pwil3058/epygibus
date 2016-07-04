@@ -111,7 +111,7 @@ def read_repo_spec(repo_name):
         base_dir_path, compressed = _repo_config_lines(repo_name)
     except EnvironmentError as edata:
         if edata.errno == errno.ENOENT:
-            raise excpns.UnknownBlobRepository(repo_name)
+            raise excpns.UnknownRepository(repo_name)
         else:
             raise edata
     return Repo(repo_name, base_dir_path, eval(compressed))
@@ -120,7 +120,7 @@ def write_repo_spec(repo_name, in_dir_path, compressed=True):
     base_dir_path = os.path.join(os.path.abspath(in_dir_path), APP_NAME_D, "repos", os.environ["USER"], repo_name)
     cf_path = _repo_file_path(repo_name)
     if os.path.exists(cf_path):
-        raise excpns.BlobRepositoryExists(repo_name)
+        raise excpns.RepositoryExists(repo_name)
     io.open(cf_path, "w").writelines([tou(p) + os.linesep for p in [base_dir_path, str(compressed)]])
     return Repo(repo_name, base_dir_path, compressed)
 
@@ -129,7 +129,7 @@ def delete_repo_spec(repo_name):
         os.remove(_repo_file_path(repo_name))
     except EnvironmentError as edata:
         if edata.errno == errno.ENOENT:
-            raise excpns.UnknownBlobRepository(repo_name)
+            raise excpns.UnknownRepository(repo_name)
         else:
             raise edata
 
