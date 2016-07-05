@@ -33,9 +33,12 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("""Extract a copy of the nominated file/directory in the
     nominated archive's most recent (or specified) snapshot
     and place it in the current (or specified) directory."""),
+    epilog=cmd.snapshot_dir_explanation,
 )
 
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive to extract the copy of the file/directory from.")))
+XPARSER = PARSER.add_mutually_exclusive_group(required=True)
+cmd.add_cmd_argument(XPARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive to extract the copy of the file/directory from."), required=False))
+cmd.add_cmd_argument(XPARSER, cmd.SNAPSHOT_DIR_ARG(_("the path of the directory containing the snapshot to extract the copy of the file/directory from."), required=False))
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
@@ -89,11 +92,17 @@ DST = _("Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}) 
 def run_cmd(args):
     try:
         if args.file_path:
-            size, etd = snapshot.copy_file_to(args.archive_name, args.file_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            if args.archive_name:
+                size, etd = snapshot.copy_file_to(args.archive_name, args.file_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            else:
+                size, etd = snapshot.exig_copy_file_to(args.snapshot_dir_path, args.file_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
             if args.stats:
                 sys.stdout.write(FST.format(utils.format_bytes(size), etd.real_time, etd.percent_io))
         else:
-            cs, etd = snapshot.copy_subdir_to(args.archive_name, args.dir_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            if args.archive_name:
+                cs, etd = snapshot.copy_subdir_to(args.archive_name, args.dir_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
+            else:
+                cs, etd = snapshot.exig_copy_subdir_to(args.snapshot_dir_path, args.dir_path, args.into_dir_path, seln_fn=lambda l: l[-1-args.back], as_name=args.as_name, overwrite=args.overwrite)
             if args.stats:
                 sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
     except excpns.Error as edata:

@@ -166,16 +166,21 @@ class Snapshot(object):
 
 class SnapshotPlus(object):
     # limit the number of none basic python types to future proof
-    def __init__(self, snapshot, statistics):
+    def __init__(self, snapshot, statistics, repo_mgmt_key):
         self.snapshot = snapshot
         self._statistics = tuple(statistics[0:-1])
         self._time_statistics = tuple(statistics[-1][0:])
+        self._repo_mgmt_key = tuple(repo_mgmt_key[:])
     @property
     def creation_stats(self):
         return CreationStats(*(self._statistics + (self.time_statistics,)))
     @property
     def time_statistics(self):
         return bmark.ETD(*self._time_statistics)
+    @property
+    def repo_mgmt_key(self):
+        from . import repo
+        return repo.RepoMgmtKey(*self._repo_mgmt_key)
     @property
     def subdirs(self):
         return self.snapshot.subdirs
@@ -188,6 +193,9 @@ class SnapshotPlus(object):
     @property
     def file_links(self):
         return self.snapshot.file_links
+    @property
+    def attributesX(self):
+        return self.snapshot.attributes
     def find_dir(self, dir_path):
         return self.snapshot.find_dir(dir_path)
     def find_file(self, file_path, repo_mgmt_key):
@@ -480,7 +488,7 @@ class SnapshotGenerator(object):
         else:
             io_module = io
         with io_module.open(snapshot_file_path, "wb") as fobj:
-            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats), fobj, PICKLE_PROTOCOL)
+            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), fobj, PICKLE_PROTOCOL)
         self._snapshot = None # for refernce count purposes we don't care if the permissions get set
         os.chmod(snapshot_file_path, permissions)
         return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
@@ -507,7 +515,7 @@ class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "sof
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), PathComponentsMixin):
     @property
     def attributes(self):
-        return self.snapshot.attributes
+        return ATTRS_NAMED(*self.snapshot.attributes)
     @property
     def name(self):
         return os.path.basename(self.path)
@@ -679,7 +687,24 @@ def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     except:
         raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
     snapshot = read_snapshot(os.path.join(archive.snapshot_dir_path, snapshot_name))
-    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    try: # WORKAROUND: to handle snapshots without a key
+        repo_mgmt_key = snapshot.repo_mgmt_key
+    except AttributeError:
+        repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    return SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, repo_mgmt_key)
+
+def get_snapshot_fs_exig(snapshot_dir_path, seln_fn=lambda l: l[-1]):
+    from . import repo
+    snapshot_names = _get_snapshot_file_list(snapshot_dir_path)
+    if not snapshot_names:
+        raise excpns.EmptyArchive(archive_name)
+    try:
+        snapshot_name = seln_fn(snapshot_names)
+    except:
+        raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
+    snapshot = read_snapshot(os.path.join(snapshot_dir_path, snapshot_name))
+    repo_mgmt_key = snapshot.repo_mgmt_key
+    archive_name = os.path.basename(snapshot_dir_path)
     return SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, repo_mgmt_key)
 
 def iter_snapshot_fs_list(archive_name, reverse=False):
@@ -689,7 +714,10 @@ def iter_snapshot_fs_list(archive_name, reverse=False):
     snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path, reverse=reverse)
     if not snapshot_names:
         raise excpns.EmptyArchive(archive_name)
-    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    try: # WORKAROUND: to handle snapshots without a key
+        repo_mgmt_key = snapshot.repo_mgmt_key
+    except AttributeError:
+        repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
     for snapshot_name in snapshot_names:
         snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
         snapshot = read_snapshot(snapshot_file_path)
@@ -754,9 +782,7 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
         else:
             raise edata
 
-def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False):
-    start_times = bmark.get_os_times()
-    snapshot_fs = get_snapshot_fs(archive_name, seln_fn)
+def _copy_file_to(snapshot_fs, file_path, into_dir_path, as_name=None, overwrite=False):
     file_data = snapshot_fs.get_file(absolute_path(file_path))
     if as_name:
         if os.path.dirname(as_name):
@@ -765,18 +791,40 @@ def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1]
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(file_path))
     file_data.copy_contents_to(target_path, overwrite=overwrite)
-    return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
+    return file_data.attributes.st_size
 
-def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
+def copy_file_to(archive_name, file_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False):
     start_times = bmark.get_os_times()
-    snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(absolute_path(subdir_path))
+    snapshot_fs = get_snapshot_fs(archive_name, seln_fn)
+    file_size = _copy_file_to(snapshot_fs, file_path, into_dir_path, as_name, overwrite)
+    return (file_size, (bmark.get_os_times() - start_times).get_etd())
+
+def exig_copy_file_to(snapshot_dir_path, file_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False):
+    start_times = bmark.get_os_times()
+    snapshot_fs = get_snapshot_fs_exig(snapshot_dir_path, seln_fn)
+    file_size = _copy_file_to(snapshot_fs, file_path, into_dir_path, as_name, overwrite)
+    return (file_size, (bmark.get_os_times() - start_times).get_etd())
+
+def _copy_subdir_to(snapshot_fs, subdir_path, into_dir_path, as_name=None, overwrite=False, stderr=sys.stderr):
+    snapshot_subdir_ss = snapshot_fs.get_subdir(absolute_path(subdir_path))
     if as_name:
         if os.path.dirname(as_name):
             raise excpns.InvalidArgument(as_name)
         target_path = os.path.join(absolute_path(into_dir_path), as_name)
     else:
         target_path = os.path.join(absolute_path(into_dir_path), os.path.basename(subdir_path.rstrip(os.sep)))
-    copy_stats = snapshot_fs.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+    return snapshot_subdir_ss.copy_contents_to(target_path, overwrite=overwrite, stderr=stderr)
+
+def copy_subdir_to(archive_name, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
+    start_times = bmark.get_os_times()
+    snapshot_fs = get_snapshot_fs(archive_name, seln_fn)
+    copy_stats = _copy_subdir_to(snapshot_fs, subdir_path, into_dir_path, as_name=as_name, overwrite=overwrite, stderr=stderr)
+    return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
+
+def exig_copy_subdir_to(snapshot_dir_path, subdir_path, into_dir_path, seln_fn=lambda l: l[-1], as_name=None, overwrite=False, stderr=sys.stderr):
+    start_times = bmark.get_os_times()
+    snapshot_fs = get_snapshot_fs_exig(snapshot_dir_path, seln_fn)
+    copy_stats = _copy_subdir_to(snapshot_fs, subdir_path, into_dir_path, as_name=as_name, overwrite=overwrite, stderr=stderr)
     return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
 def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
@@ -786,11 +834,25 @@ def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
     file_data.copy_contents_to(abs_file_path, overwrite=True)
     return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
 
+def exig_restore_file(snapshot_dir_path, file_path, seln_fn=lambda l: l[-1]):
+    start_times = bmark.get_os_times()
+    abs_file_path = absolute_path(file_path)
+    file_data = get_snapshot_fs_exig(snapshot_dir_path, seln_fn).get_file(abs_file_path)
+    file_data.copy_contents_to(abs_file_path, overwrite=True)
+    return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
+
 def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
     start_times = bmark.get_os_times()
     abs_subdir_path = absolute_path(subdir_path)
-    snapshot_fs = get_snapshot_fs(archive_name, seln_fn).get_subdir(abs_subdir_path)
-    copy_stats = snapshot_fs.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    snapshot_subdir_ss = get_snapshot_fs(archive_name, seln_fn).get_subdir(abs_subdir_path)
+    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
+
+def exig_restore_subdir(snapshot_dir_path, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
+    start_times = bmark.get_os_times()
+    abs_subdir_path = absolute_path(subdir_path)
+    snapshot_subdir_ss = get_snapshot_fs_exig(snapshot_dir_path, seln_fn).get_subdir(abs_subdir_path)
+    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
     return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
 def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):

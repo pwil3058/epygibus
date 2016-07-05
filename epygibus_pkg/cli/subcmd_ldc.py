@@ -29,10 +29,13 @@ from .. import excpns
 
 PARSER = cmd.SUB_CMD_PARSER.add_parser(
     "ldc",
-    description=_("List list the contents of the named directory in the nominated archive's most recent (or specified) snapshot."),
+    description=_("List the contents of the named directory in the nominated archive's most recent (or specified) snapshot."),
+    epilog=cmd.snapshot_dir_explanation,
 )
 
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose files are to be listed.")))
+XPARSER = PARSER.add_mutually_exclusive_group(required=True)
+cmd.add_cmd_argument(XPARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose files are to be listed."), required=False))
+cmd.add_cmd_argument(XPARSER, cmd.SNAPSHOT_DIR_ARG(required=False))
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
@@ -40,7 +43,10 @@ PARSER.add_argument("in_dir_path")
 
 def run_cmd(args):
     try:
-        snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back]).get_subdir(args.in_dir_path)
+        if args.archive_name:
+            snapshot_fs = snapshot.get_snapshot_fs(args.archive_name, seln_fn=lambda l: l[-1-args.back]).get_subdir(args.in_dir_path)
+        else:
+            snapshot_fs = snapshot.get_snapshot_fs_exig(args.snapshot_dir_path, seln_fn=lambda l: l[-1-args.back]).get_subdir(args.in_dir_path)
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)

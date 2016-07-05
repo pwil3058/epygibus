@@ -33,9 +33,12 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("""Restore the contents of the nominated archive
     most recent (or specified) snapshot (or the nominated file/directory
     in that snapshot)."""),
+    epilog=cmd.snapshot_dir_explanation,
 )
 
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive to be restored (or restored from).")))
+XPARSER = PARSER.add_mutually_exclusive_group(required=True)
+cmd.add_cmd_argument(XPARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive to be restored (or restored from)."), required=False))
+cmd.add_cmd_argument(XPARSER, cmd.SNAPSHOT_DIR_ARG(_("the path of the directory containing the snapshot to be restored (or restored from)."), required=False))
 
 cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG())
 
@@ -74,15 +77,24 @@ DST = _("Restored: {} dirs, {} files, {} symbolic links, {} hard links, {}({}) i
 def run_cmd(args):
     try:
         if args.file_path:
-            size, etd = snapshot.restore_file(args.archive_name, args.file_path, seln_fn=lambda l: l[-1-args.back])
+            if args.archive_name:
+                size, etd = snapshot.restore_file(args.archive_name, args.file_path, seln_fn=lambda l: l[-1-args.back])
+            else:
+                size, etd = snapshot.exig_restore_file(args.snapshot_dir_path, args.file_path, seln_fn=lambda l: l[-1-args.back])
             if args.stats:
                 sys.stdout.write(FST.format(utils.format_bytes(size), etd.real_time, etd.percent_io))
         elif args.dir_path:
-            cs, etd = snapshot.restore_subdir(args.archive_name, args.dir_path, seln_fn=lambda l: l[-1-args.back])
+            if args.archive_name:
+                cs, etd = snapshot.restore_subdir(args.archive_name, args.dir_path, seln_fn=lambda l: l[-1-args.back])
+            else:
+                cs, etd = snapshot.exig_restore_subdir(args.snapshot_dir_path, args.dir_path, seln_fn=lambda l: l[-1-args.back])
             if args.stats:
                 sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
         elif args.all:
-            cs, etd = snapshot.restore_subdir(args.archive_name, os.sep, seln_fn=lambda l: l[-1-args.back])
+            if args.archive_name:
+                cs, etd = snapshot.restore_subdir(args.archive_name, os.sep, seln_fn=lambda l: l[-1-args.back])
+            else:
+                cs, etd = snapshot.exig_restore_subdir(args.snapshot_dir_path, os.sep, seln_fn=lambda l: l[-1-args.back])
             if args.stats:
                 sys.stdout.write(DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes), etd.real_time, etd.percent_io))
     except excpns.Error as edata:

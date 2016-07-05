@@ -61,6 +61,23 @@ ARCHIVE_NAME_ARG = lambda help_msg=_("The name of the archive."), required=True,
     }
 )
 
+snapshot_dir_explanation = _("""
+The --exigency option is not intended for normal use.  It is
+intended for the exigency where the repository and archive specification
+files have been lost due a file system failure.
+""")
+
+SNAPSHOT_DIR_ARG = lambda help_msg=_("The path of the directory containing the archive's snapshot(s)."), required=True, action="store" : _ARG_SPEC(
+    ["--exigency", "-E",],
+    {
+        "help": help_msg,
+        "dest": "snapshot_dir_path",
+        "required": required,
+        "action": action,
+        "metavar": _("snapshot_dir_path"),
+    }
+)
+
 BACK_ISSUE_ARG = lambda default=0 : _ARG_SPEC(
     ["--back",],
     {   "help": _("select the snapshot \"N\" places before the most recent. Use -1 to select oldest. Defaults to {}.").format(default),
