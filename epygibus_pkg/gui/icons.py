@@ -45,4 +45,6 @@ APP_ICON_FILE = os.path.join(os.path.dirname(_libdir), APP_ICON + os.extsep + "p
 
 STOCK_REPO_SHOW = None
 STOCK_NEW_REPO = Gtk.STOCK_NEW
+STOCK_NEW_ARCHIVE = Gtk.STOCK_NEW
 STOCK_REPO_DELETE = Gtk.STOCK_DELETE
+STOCK_INSERT = None

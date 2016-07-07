@@ -35,66 +35,60 @@ from . import gutils
 from . import actions
 from . import enotify
 from . import tlview
-#from . import icons
+from . import icons
 from . import dialogue
 from . import auto_update
 
-ALWAYS_ON = 'table_always_on'
-MODIFIED = 'table_modified'
-NOT_MODIFIED = 'table_not_modified'
-SELECTION = 'table_selection'
-NO_SELECTION = 'table_no_selection'
-UNIQUE_SELECTION = 'table_unique_selection'
+AC_MODIFIED, AC_NOT_MODIFIED, AC_MODIFIED_MASK = actions.ActionCondns.new_flags_and_mask(2)
 
-TABLE_STATES = \
-    [ALWAYS_ON, MODIFIED, NOT_MODIFIED, SELECTION, NO_SELECTION,
-     UNIQUE_SELECTION]
-
-# TODO: modify this code to use the new actions model
-class Table(Gtk.VBox):
-    View = tlview.ListView
-    def __init__(self, size_req=None):
-        Gtk.VBox.__init__(self)
-        self.view = self.View()
-        self.seln = self.view.get_selection()
+class EditableEntriesView(tlview.ListView):
+    Model = tlview.ListView.Model
+    def __init__(self, model=None, size_req=None):
+        tlview.ListView.__init__(self, model)
         if size_req:
-            self.view.set_size_request(*size_req)
-        self.pack_start(gutils.wrap_in_scrolled_window(self.view), expand=True, fill=True, padding=0)
-        self.action_groups = {}
-        for key in TABLE_STATES:
-            self.action_groups[key] = Gtk.ActionGroup(key)
-        self.action_groups[ALWAYS_ON].add_actions(
-            [
-                ('table_add_row', Gtk.STOCK_ADD, _('_Add'), None,
-                 _('Add a new entry to the table'), self._add_row_acb),
-            ])
-        self.action_groups[MODIFIED].add_actions(
-            [
-                ('table_undo_changes', Gtk.STOCK_UNDO, _('_Undo'), None,
-                 _('Undo unapplied changes'), self._undo_changes_acb),
-                ('table_apply_changes', Gtk.STOCK_APPLY, _('_Apply'), None,
-                 _('Apply outstanding changes'), self._apply_changes_acb),
-            ])
-        self.action_groups[SELECTION].add_actions(
-            [
-                ('table_delete_selection', Gtk.STOCK_DELETE, _('_Delete'), None,
-                 _('Delete selected row(s)'), self._delete_selection_acb),
-                ('table_insert_row', icons.STOCK_INSERT, _('_Insert'), None,
-                 _('Insert a new entry before the selected row(s)'), self._insert_row_acb),
-            ])
-        self._modified = False
-        self.model.connect('row-inserted', self._row_inserted_cb)
-        self.seln.connect('changed', self._selection_changed_cb)
-        self.view.register_modification_callback(self._set_modified, True)
-        self.seln.unselect_all()
-        self._selection_changed_cb(self.seln)
+            self.set_size_request(*size_req)
+        self.button_groups = actions.ConditionalButtonGroups(selection=self.get_selection())
+        self.populate_button_groups()
+        self._set_modified(False)
+        self.model.connect("row-inserted", self._row_inserted_cb)
+        self.register_modification_callback(self._set_modified, True)
     @property
     def model(self):
-        return self.view.get_model()
+        return self.get_model()
+    @property
+    def seln(self):
+        return self.get_selection()
+    def populate_button_groups(self):
+        self.button_groups[actions.AC_DONT_CARE].add_buttons(
+            [
+                ("table_add_row", Gtk.Button.new_from_stock(Gtk.STOCK_ADD),
+                 _("Add a new entry to the table"),
+                 self._add_row_acb),
+            ])
+        self.button_groups[AC_MODIFIED].add_buttons(
+            [
+                ("table_undo_changes", Gtk.Button.new_from_stock(Gtk.STOCK_UNDO),
+                 _("Undo unapplied changes"),
+                 self._undo_changes_acb),
+                ("table_apply_changes", Gtk.Button.new_from_stock(Gtk.STOCK_APPLY),
+                 _("Apply outstanding changes"),
+                 self._apply_changes_acb),
+            ])
+        self.button_groups[actions.AC_SELN_MADE].add_buttons(
+            [
+                ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
+                 _("Delete selected row(s)"),
+                 self._delete_selection_acb),
+                ("table_insert_row", Gtk.Button.new_with_label(_("Insert")),
+                 _("Insert a new entry before the selected row(s)"),
+                 self._insert_row_acb),
+            ])
     def _set_modified(self, val):
         self._modified = val
-        self.action_groups[MODIFIED].set_sensitive(val)
-        self.action_groups[NOT_MODIFIED].set_sensitive(not val)
+        if val:
+            self.button_groups.update_condns(actions.MaskedCondns(AC_MODIFIED, AC_MODIFIED_MASK))
+        else:
+            self.button_groups.update_condns(actions.MaskedCondns(AC_NOT_MODIFIED, AC_MODIFIED_MASK))
     def _fetch_contents(self):
         assert False, _("Must be defined in child")
     def set_contents(self):
@@ -106,19 +100,16 @@ class Table(Gtk.VBox):
         assert False, _("Must be defined in child")
     def _row_inserted_cb(self, model, path, model_iter):
         self._set_modified(True)
-    def _selection_changed_cb(self, selection):
-        rows = selection.count_selected_rows()
-        self.action_groups[SELECTION].set_sensitive(rows > 0)
-        self.action_groups[NO_SELECTION].set_sensitive(rows == 0)
-        self.action_groups[UNIQUE_SELECTION].set_sensitive(rows == 1)
     def _undo_changes_acb(self, _action=None):
         self.set_contents()
     def _apply_changes_acb(self, _action=None):
         self.apply_changes()
+    def append_row(self, row, select=False):
+        model_iter = self.model.append(row)
+        if select:
+            self.seln.select_iter(model_iter)
     def _add_row_acb(self, _action=None):
-        model_iter = self.model.append(None)
-        self.view.get_selection().select_iter(model_iter)
-        return
+        self.append_row(None, True)
     def _delete_selection_acb(self, _action=None):
         model, paths = self.seln.get_selected_rows()
         iters = []
@@ -126,13 +117,15 @@ class Table(Gtk.VBox):
             iters.append(model.get_iter(path))
         for model_iter in iters:
             model.remove(model_iter)
-    def _insert_row_acb(self, _action=None):
+    def insert_row(self, row, select=False):
         model, paths = self.seln.get_selected_rows()
         if not paths:
             return
-        model_iter = self.model.insert_before(model.get_iter(paths[0]), None)
-        self.view.get_selection().select_iter(model_iter)
-        return
+        model_iter = self.model.insert_before(model.get_iter(paths[0]), row)
+        if select:
+            self.seln.select_iter(model_iter)
+    def _insert_row_acb(self, _action=None):
+        self.insert_row(None, True)
     def get_selected_data(self, columns=None):
         store, selected_rows = self.seln.get_selected_rows()
         if not columns:
@@ -146,6 +139,18 @@ class Table(Gtk.VBox):
     def get_selected_data_by_label(self, labels):
         columns = self.model.col_indices(labels)
         return self.get_selected_data(columns)
+    def create_button_box(self, button_name_list):
+        return self.button_groups.create_action_button_box(button_name_list)
+
+class EditedEntriesTable(Gtk.VBox):
+    View = EditableEntriesView
+    BUTTONS = ["table_add_row", "table_insert_row", "table_delete_selection", "table_undo_changes", "table_apply_changes"]
+    def __init__(self, size_req=None):
+        Gtk.VBox.__init__(self)
+        self.view = self.View()
+        self.pack_start(gutils.wrap_in_scrolled_window(self.view), expand=True, fill=True, padding=0)
+        self.pack_start(self.view.create_button_box(self.BUTTONS), expand=False, fill=True, padding=0)
+        self.show_all()
 
 def simple_text_specification(model, *hdrs_flds_xalign):
     specification = tlview.ViewSpec(
@@ -185,7 +190,7 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
     def populate_action_groups(self):
         self.action_groups[actions.AC_DONT_CARE].add_actions(
             [
-                ("table_refresh_contents", Gtk.STOCK_REFRESH, _('Refresh'), None,
+                ("table_refresh_contents", Gtk.STOCK_REFRESH, _("Refresh"), None,
                  _("Refresh the table's contents"),
                  lambda _action=None: self.refresh_contents()
                 ),
@@ -210,7 +215,7 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
                 self.seln.unselect_all()
                 return True
         elif event.type == Gdk.EventType.KEY_PRESS:
-            if event.keyval == Gdk.keyval_from_name('Escape'):
+            if event.keyval == Gdk.keyval_from_name("Escape"):
                 self.seln.unselect_all()
                 return True
         return False

@@ -245,7 +245,7 @@ class ReadTextWidget(Gtk.HBox):
             self.entry.set_width_chars(max(width_chars, len(suggestion)))
         else:
             self.entry.set_width_chars(width_chars)
-        self.pack_start(self.entry, expand=False, fill=True, padding=0)
+        self.pack_start(self.entry, expand=True, fill=True, padding=0)
         self.show_all()
 
 class FileChooserDialog(Gtk.FileChooserDialog):
@@ -254,7 +254,39 @@ class FileChooserDialog(Gtk.FileChooserDialog):
             parent = main_window
         Gtk.FileChooserDialog.__init__(self, title, parent, action, buttons, backend)
 
-def select_directory(prompt, suggestion=None, existing=True, parent=None):
+def select_file(prompt, suggestion=None, existing=True, absolute=False, parent=None):
+    if existing:
+        mode = Gtk.FileChooserAction.OPEN
+        if suggestion and not os.path.exists(suggestion):
+            suggestion = None
+    else:
+        mode = Gtk.FileChooserAction.SAVE
+    dialog = FileChooserDialog(prompt, parent, mode,
+                               (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                Gtk.STOCK_OK, Gtk.ResponseType.OK))
+    dialog.set_default_response(Gtk.ResponseType.OK)
+    if suggestion:
+        if os.path.isdir(suggestion):
+            dialog.set_current_folder(suggestion)
+        else:
+            dirname, basename = os.path.split(suggestion)
+            if dirname:
+                dialog.set_current_folder(dirname)
+            else:
+                dialog.set_current_folder(os.getcwd())
+            if basename:
+                dialog.set_current_name(basename)
+    else:
+        dialog.set_current_folder(os.getcwd())
+    response = dialog.run()
+    if response == Gtk.ResponseType.OK:
+        new_file_name = os.path.relpath(dialog.get_filename())
+    else:
+        new_file_name = None
+    dialog.destroy()
+    return os.path.abspath(new_file_name) if absolute else new_file_name
+
+def select_directory(prompt, suggestion=None, existing=True, absolute=False, parent=None):
     if existing:
         if suggestion and not os.path.exists(suggestion):
             suggestion = None
@@ -277,7 +309,7 @@ def select_directory(prompt, suggestion=None, existing=True, parent=None):
     else:
         new_dir_name = None
     dialog.destroy()
-    return new_dir_name
+    return os.path.abspath(new_dir_name) if absolute else new_dir_name
 
 class EnterDirPathWidget(Gtk.HBox):
     def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):

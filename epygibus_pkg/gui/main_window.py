@@ -26,6 +26,7 @@ from . import actions
 from . import enotify
 from . import auto_update
 from . import g_repos
+from . import g_archives
 from . import icons
 from . import dialogue
 
@@ -34,6 +35,7 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
     <ui>
         <toolbar name="RepoToolBar">
             <toolitem action="create_new_repo"/>
+            <toolitem action="create_new_archive"/>
         </toolbar>
     </ui>
     """
@@ -57,9 +59,10 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         vbox.pack_start(rcb, expand=False, fill=True, padding=0)
         toolbar = self.ui_manager.get_widget("/RepoToolBar")
         vbox.pack_start(toolbar, expand=False, fill=True, padding=0)
+        vbox.pack_start(g_archives.IncludesTable(), expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):
         pass
     def _rcb_changed_cb(self, rcb):
-        print("repo:", rcb.get_active_text())
+        pass #print("repo:", rcb.get_active_text())

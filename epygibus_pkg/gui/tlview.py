@@ -303,7 +303,7 @@ class View(Gtk.TreeView):
                 self.get_selection().unselect_all()
                 return True
         elif event.type == Gdk.EventType.KEY_PRESS:
-            if event.keyval == Gtk.gdk.keyval_from_name('Escape'):
+            if event.keyval == Gdk.keyval_from_name('Escape'):
                 self.get_selection().unselect_all()
                 return True
         return False

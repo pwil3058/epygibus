@@ -71,52 +71,99 @@ def get_masked_seln_conditions(seln):
     else:
         return MaskedCondns(AC_SELN_MADE, AC_SELN_MASK)
 
-class ActionButton(Gtk.Button):
-    def __init__(self, action, use_underline=True):
-        label = action.get_property("label")
-        stock_id = action.get_property("stock-id")
-        if label is not None:
-            # Empty (NB not None) label means use image only
-            Gtk.Button.__init__(self, use_underline=use_underline)
-            if stock_id is not None:
-                image = Gtk.Image()
-                image.set_from_stock(stock_id, Gtk.IconSize.BUTTON)
-                self.set_image(image)
-            if label:
-                self.set_label(label)
+class _ButtonGroup(object):
+    def __init__(self, is_sensitive=True, is_visible=True, **kwargs):
+        self._buttons = dict()
+        self._is_visible = is_visible
+        self._is_sensitive = is_sensitive
+    def add_button(self, name, button, tooltip, click_action=None, **kwargs):
+        button.set_visible(self._is_visible)
+        button.set_sensitive(self._is_sensitive)
+        button.set_tooltip_text(tooltip)
+        self._buttons[name] = button
+        if click_action:
+            button.connect("clicked", click_action, **kwargs)
+    def add_buttons(self, button_list):
+        for name, button, tooltip, click_action in button_list:
+            self.add_button(name, button, tooltip, click_action)
+    def set_sensitive(self, value):
+        for button in self._buttons.values():
+            button.set_sensitive(value)
+        self._is_sensitive = value
+    def set_visible(self, value):
+        for button in self._buttons.values():
+            button.set_visible(value)
+        self._is_visible = value
+    def get_button(self, button_name, blowup=False):
+        if blowup:
+            return self._buttons[button_name]
         else:
-            Gtk.Button.__init__(self, stock=stock_id, label=label, use_underline=use_underline)
-        self.set_tooltip_text(action.get_property("tooltip"))
-        action.connect_proxy(self)
+            return self._buttons.get(button_name, None)
+    def __str__(self):
+        ostr = "["
+        first = True
+        for button_name in sorted(self._buttons.keys()):
+            if first:
+                first = False
+            else:
+                ostr += ", "
+            ostr += button_name
+        ostr += "]"
 
-class ActionButtonList:
-    def __init__(self, action_group_list, action_name_list=None, use_underline=True):
-        self.list = []
-        self.dict = {}
-        if action_name_list:
-            for a_name in action_name_list:
-                for a_group in action_group_list:
-                    action = a_group.get_action(a_name)
-                    if action:
-                        button = ActionButton(action, use_underline)
-                        self.list.append(button)
-                        self.dict[a_name] = button
-                        break
+class ConditionalButtonGroups(object):
+    class UnknownButton(Exception): pass
+    def __init__(self, selection=None):
+        self.groups = dict()
+        self.current_condns = 0
+        self.set_selection(selection)
+    def _seln_condns_change_cb(self, seln):
+        self.update_condns(get_masked_seln_conditions(seln))
+    def set_selection(self, seln):
+        if seln is None:
+            return None
+        self.update_condns(get_masked_seln_conditions(seln))
+        return seln.connect('changed', self._seln_condns_change_cb)
+    def __getitem__(self, condns):
+        if condns not in self.groups:
+            self.groups[condns] = _ButtonGroup(is_sensitive=(condns & self.current_condns) == condns)
+        return self.groups[condns]
+    def update_condns(self, changed_condns):
+        """
+        Update the current condition state
+        changed_condns: is a MaskedCondns instance
+        """
+        condns = changed_condns.condns | (self.current_condns & ~changed_condns.mask)
+        for key_condns, group in self.groups.items():
+            if changed_condns.mask & key_condns:
+                group.set_sensitive((key_condns & condns) == key_condns)
+        self.current_condns = condns
+    def set_visibility_for_condns(self, condns, visible):
+        self.groups[condns].set_visible(visible)
+    def get_button(self, button_name):
+        for bgrp in self.groups.values():
+            button = bgrp.get_button(button_name)
+            if button:
+                return button
+        raise self.UnknownButton(button_name)
+    def connect_signal(self, button_name, signal, callback, *args, **kwargs):
+        """
+        Connect the callback to the "activate" signal of the named action
+        """
+        return self.get_button(button_name).connect(signal, callback, *args, **kwargs)
+    def __str__(self):
+        string = 'ConditionalButtonGroup\n'.format(self.name)
+        for condns, group in self.groups.items():
+            string += '\tGroup({0:x}): {2}\n'.format(condns, str(group))
+        return string
+    def create_action_button_box(self, button_name_list, horizontal=True, expand=True, fill=True, padding=0):
+        if horizontal:
+            box = Gtk.HBox()
         else:
-            for a_group in action_group_list:
-                for action in a_group.list_actions():
-                    button = ActionButton(action, use_underline)
-                    self.list.append(button)
-                    self.dict[action.get_name()] = button
-
-class ActionHButtonBox(Gtk.HBox):
-    def __init__(self, action_group_list, action_name_list=None,
-                 use_underline=True, expand=True, fill=True, padding=0):
-        Gtk.HBox.__init__(self)
-        self.button_list = ActionButtonList(action_group_list, action_name_list, use_underline)
-        for button in self.button_list.list:
-            self.pack_start(button, expand=expand, fill=fill, padding=padding)
-        return self
+            box = Gtk.VBox()
+        for button_name in button_name_list:
+            button = self.get_button(button_name)
+            box.pack_start(button, expand=expand, fill=fill, padding=padding)
+        return box
 
 class ConditionalActionGroups(object):
     class UnknownAction(Exception): pass
@@ -193,20 +240,6 @@ class ConditionalActionGroups(object):
             member_names += ']'
             string += '\tGroup({0:x},{1}): {2}\n'.format(condns, name, member_names)
         return string
-    def create_action_button(self, action_name, use_underline=True):
-        action = self.get_action(action_name)
-        return ActionButton(action, use_underline=use_underline)
-    def create_action_button_box(self, action_name_list, use_underline=True,
-                                 horizontal=True,
-                                 expand=True, fill=True, padding=0):
-        if horizontal:
-            box = Gtk.HBox()
-        else:
-            box = Gtk.VBox()
-        for action_name in action_name_list:
-            button = self.create_action_button(action_name, use_underline)
-            box.pack_start(button, expand=expand, fill=fill, padding=padding)
-        return box
 
 CLASS_INDEP_AGS = ConditionalActionGroups('class_indep')
 
