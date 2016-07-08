@@ -68,16 +68,17 @@ def _auto_update_cb(events_so_far, _args):
 
 auto_update.register_cb(_auto_update_cb)
 
-class IncludesModel(table.EditableEntriesView.Model):
+class IncludesModel(tlview.NamedListStore):
     Row = collections.namedtuple("Row", ["included_path"])
     types = Row(included_path=GObject.TYPE_STRING)
 
-class IncludesView(table.EditableEntriesView):
+class IncludesView(tlview.View, actions.CBGUserMixin):
     Model = IncludesModel
     specification = tlview.ViewSpec(
         properties={
             "enable-grid-lines" : True,
             "reorderable" : True,
+            "headers-visible" : False,
         },
         selection_mode=Gtk.SelectionMode.MULTIPLE,
         columns=[
@@ -100,11 +101,9 @@ class IncludesView(table.EditableEntriesView):
         ]
     )
     def __init__(self):
-        table.EditableEntriesView.__init__(self, size_req=(320, 160))
-        self._includes = []
-        self.set_contents()
+        tlview.View.__init__(self, size_req=(320, 160))
+        actions.CBGUserMixin.__init__(self, self.get_selection())
     def populate_button_groups(self):
-        table.EditableEntriesView.populate_button_groups(self)
         self.button_groups[actions.AC_DONT_CARE].add_buttons(
             [
                 ("table_add_file_path", Gtk.Button.new_with_label(_("Add File")),
@@ -116,6 +115,9 @@ class IncludesView(table.EditableEntriesView):
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
             [
+                ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
+                 _("Delete selected row(s)"),
+                 self._delete_selection_acb),
                 ("table_insert_file_path", Gtk.Button.new_with_label(_("Insert File")),
                  _("Insert a new file path before the selected row(s)"),
                  self._insert_file_path_acb),
@@ -123,27 +125,27 @@ class IncludesView(table.EditableEntriesView):
                  _("Insert a new directory path before the selected row(s)"),
                  self._insert_dir_path_acb),
             ])
-    def _fetch_contents(self):
-        return [self.Model.Row(item) for item in self._includes]
-    def apply_changes(self):
-        self._includes = [c.included_path for c in self.get_contents()]
-        self.set_contents()
+    def get_included_paths(self):
+        return [row.included_path for row in self.model.named]
     def _add_file_path_acb(self, _action=None):
         file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
-        self.append_row(self.Model.Row(file_path))
+        self.model.append(self.Model.Row(file_path))
     def _add_dir_path_acb(self, _action=None):
         dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
-        self.append_row(self.Model.Row(dir_path))
+        self.model.append(self.Model.Row(dir_path))
     def _insert_file_path_acb(self, _action=None):
         file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
-        self.insert_row(self.Model.Row(file_path))
+        tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
     def _insert_dir_path_acb(self, _action=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
-        self.insert_row(self.Model.Row(dir_path))
+        tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
+    def _delete_selection_acb(self, _action=None):
+        tlview.delete_selection(self.get_selection())
 
-class IncludesTable(table.EditedEntriesTable):
-    View = IncludesView
-    BUTTONS = ["table_add_dir_path", "table_insert_dir_path", "table_add_file_path", "table_insert_file_path", "table_delete_selection", "table_undo_changes", "table_apply_changes"]
+class IncludesTable(actions.ClientAndButtonsWidget):
+    CLIENT = IncludesView
+    BUTTONS = ["table_add_dir_path", "table_insert_dir_path", "table_add_file_path", "table_insert_file_path", "table_delete_selection"]
+    SCROLLABLE = True
 
 class NewArchiveWidget(Gtk.VBox):
     def __init__(self):
@@ -173,6 +175,14 @@ class NewArchiveWidget(Gtk.VBox):
         grid.attach_next_to(self._location, location_label, Gtk.PositionType.RIGHT, 3, 1)
         self.pack_start(grid, expand=False, fill=False, padding=0)
         self.pack_start(cb_hbox, expand=False, fill=False, padding=0)
+        notebook = Gtk.Notebook()
+        self._includes_table = IncludesTable()
+        notebook.append_page(self._includes_table, Gtk.Label(_("Included Files and Directories")))
+        #self._exclude_dirs_table = DirExcludesTable()
+        #notebook.append_page(self._exclude_dirs_table, Gtk.Label(_("Exclude Directories Matching")))
+        #self._exclude_files_table = FileExcludesTable()
+        #notebook.append_page(self._exclude_files_table, Gtk.Label(_("Exclude Files Matching")))
+        self.pack_start(notebook, expand=True, fill=True, padding=0)
         self.show_all()
     def create_archive(self):
         name = self._name.entry.get_text()
@@ -196,7 +206,7 @@ class NewArchiveDialog(dialogue.CancelOKDialog):
     def __init__(self, parent=None):
         dialogue.CancelOKDialog.__init__(self, title=_("Create New Archive"), parent=parent)
         self.new_archive_widget = NewArchiveWidget()
-        self.get_content_area().add(self.new_archive_widget)
+        self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
         self.show_all()
 
 def create_new_archive_acb(_action=None):

@@ -59,7 +59,6 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         vbox.pack_start(rcb, expand=False, fill=True, padding=0)
         toolbar = self.ui_manager.get_widget("/RepoToolBar")
         vbox.pack_start(toolbar, expand=False, fill=True, padding=0)
-        vbox.pack_start(g_archives.IncludesTable(), expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):
