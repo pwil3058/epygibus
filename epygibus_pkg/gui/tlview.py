@@ -45,6 +45,10 @@ class _NamedTreeModelMixin(object):
     def get_selected_rows(selection):
         model, paths = selection.get_selected_rows()
         return [model.Row(*model[p]) for p in paths]
+    @staticmethod
+    def get_selected_row(selection):
+        model, model_iter = selection.get_selected()
+        return model.Row(*model[tree_iter])
     def get_row(self, model_iter):
         return self.Row(*self[model_iter])
     def get_named(self, model_iter, *labels):
@@ -92,6 +96,28 @@ class NamedTreeStore(Gtk.TreeStore, _NamedTreeModelMixin):
     def __init__(self):
         Gtk.TreeStore.__init__(*[self] + list(self.types))
 
+# Utility functions
+def delete_selection(seln):
+    model, paths = seln.get_selected_rows()
+    model_iters = [model.get_iter(path) for path in paths]
+    for model_iter in model_iters:
+        model.remove(model_iter)
+
+def insert_before_selection(seln, row):
+    model, paths = seln.get_selected_rows()
+    if not paths:
+        return
+    model_iter = model.insert_before(model.get_iter(paths[0]), row)
+    return (model, model_iter)
+
+def insert_after_selection(seln, row):
+    model, paths = seln.get_selected_rows()
+    if not paths:
+        return
+    model_iter = model.insert_after(model.get_iter(paths[-1]), row)
+    return (model, model_iter)
+
+# come in handy classes
 class CellRendererSpin(Gtk.CellRendererSpin):
     """
     A modified version that propagates the SpinButton's "value-changed"
@@ -117,6 +143,7 @@ class CellRendererSpin(Gtk.CellRendererSpin):
         cell.emit('value-changed', path, spinbutton)
 GObject.signal_new('value-changed', CellRendererSpin, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT, GObject.TYPE_PYOBJECT,))
 
+# Views
 class ViewSpec(object):
     __slots__ = ('properties', 'selection_mode', 'columns')
     def __init__(self, properties=None, selection_mode=None, columns=None):
@@ -207,12 +234,14 @@ class View(Gtk.TreeView):
     Model = None
     specification = None
     ColumnAndCells = collections.namedtuple('ColumnAndCells', ['column', 'cells'])
-    def __init__(self, model=None):
+    def __init__(self, model=None, size_req=None):
         if model is None:
             model = self.Model()
         else:
             assert isinstance(model, self.Model)
         Gtk.TreeView.__init__(self, model)
+        if size_req:
+            self.set_size_request(size_req[0], size_req[1])
         for prop_name, prop_val in self.specification.properties.items():
             self.set_property(prop_name, prop_val)
         if self.specification.selection_mode is not None:
