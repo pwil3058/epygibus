@@ -284,7 +284,7 @@ def select_file(prompt, suggestion=None, existing=True, absolute=False, parent=N
     else:
         new_file_name = None
     dialog.destroy()
-    return os.path.abspath(new_file_name) if absolute else new_file_name
+    return os.path.abspath(new_file_name) if (absolute and new_file_name) else new_file_name
 
 def select_directory(prompt, suggestion=None, existing=True, absolute=False, parent=None):
     if existing:
@@ -309,7 +309,7 @@ def select_directory(prompt, suggestion=None, existing=True, absolute=False, par
     else:
         new_dir_name = None
     dialog.destroy()
-    return os.path.abspath(new_dir_name) if absolute else new_dir_name
+    return os.path.abspath(new_dir_name) if (absolute and new_dir_name) else new_dir_name
 
 class EnterDirPathWidget(Gtk.HBox):
     def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):
