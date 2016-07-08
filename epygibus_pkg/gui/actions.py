@@ -165,6 +165,30 @@ class ConditionalButtonGroups(object):
             box.pack_start(button, expand=expand, fill=fill, padding=padding)
         return box
 
+class CBGUserMixin(object):
+    def __init__(self, selection):
+        self.button_groups = ConditionalButtonGroups(self.get_selection())
+        self.populate_button_groups()
+    def populate_button_groups(self):
+        pass
+    def create_button_box(self, button_name_list):
+        return self.button_groups.create_action_button_box(button_name_list)
+
+class ClientAndButtonsWidget(Gtk.VBox):
+    CLIENT = CBGUserMixin
+    BUTTONS = []
+    SCROLLABLE = False
+    def __init__(self, size_req=None):
+        Gtk.VBox.__init__(self)
+        self.client = self.CLIENT()
+        if self.SCROLLABLE:
+            from . import gutils
+            self.pack_start(gutils.wrap_in_scrolled_window(self.client), expand=True, fill=True, padding=0)
+        else:
+            self.pack_start(self.client, expand=True, fill=True, padding=0)
+        self.pack_start(self.client.create_button_box(self.BUTTONS), expand=False, fill=True, padding=0)
+        self.show_all()
+
 class ConditionalActionGroups(object):
     class UnknownAction(Exception): pass
     def __init__(self, name, ui_mgrs=None, selection=None):
