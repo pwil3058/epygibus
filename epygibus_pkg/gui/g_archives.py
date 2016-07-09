@@ -28,6 +28,7 @@ from gi.repository import GObject
 from .. import config
 from .. import utils
 from .. import excpns
+from .. import snapshot
 
 from . import g_repos
 from . import actions
@@ -106,11 +107,11 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
     def populate_button_groups(self):
         self.button_groups[actions.AC_DONT_CARE].add_buttons(
             [
-                ("table_add_file_path", Gtk.Button.new_with_label(_("Add File")),
-                 _("Add a new file path to the includes table"),
+                ("table_add_file_path", Gtk.Button.new_with_label(_("Append File")),
+                 _("Append a new file path to the includes table"),
                  self._add_file_path_acb),
-                ("table_add_dir_path", Gtk.Button.new_with_label(_("Add Directory")),
-                 _("Add a new directory path to the includes table"),
+                ("table_add_dir_path", Gtk.Button.new_with_label(_("Append Directory")),
+                 _("Append a new directory path to the includes table"),
                  self._add_dir_path_acb),
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
@@ -126,19 +127,23 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
                  self._insert_dir_path_acb),
             ])
     def get_included_paths(self):
-        return [row.included_path for row in self.model.named]
+        return [row.included_path for row in self.model.named()]
     def _add_file_path_acb(self, _action=None):
         file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
-        self.model.append(self.Model.Row(file_path))
+        if file_path:
+            self.model.append(self.Model.Row(file_path))
     def _add_dir_path_acb(self, _action=None):
         dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
-        self.model.append(self.Model.Row(dir_path))
+        if dir_path:
+            self.model.append(self.Model.Row(dir_path))
     def _insert_file_path_acb(self, _action=None):
         file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
-        tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
+        if file_path:
+            tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
     def _insert_dir_path_acb(self, _action=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
-        tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
+        if dir_path:
+            tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
     def _delete_selection_acb(self, _action=None):
         tlview.delete_selection(self.get_selection())
 
@@ -146,6 +151,50 @@ class IncludesTable(actions.ClientAndButtonsWidget):
     CLIENT = IncludesView
     BUTTONS = ["table_add_dir_path", "table_insert_dir_path", "table_add_file_path", "table_insert_file_path", "table_delete_selection"]
     SCROLLABLE = True
+    def get_included_paths(self):
+        return self.client.get_included_paths()
+
+class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
+    def __init__(self):
+        Gtk.TextView.__init__(self)
+        actions.CBGUserMixin.__init__(self)
+    def populate_button_groups(self):
+        self.button_groups[actions.AC_DONT_CARE].add_buttons(
+            [
+                ("insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory Path")),
+                 _("Browse for and insert a directory path at the text cursor."),
+                 self._insert_dir_path_acb),
+                ("insert_file_path", Gtk.Button.new_with_label(_("Insert File Path")),
+                 _("Browse for and insert a file path at the text cursor."),
+                 self._insert_file_path_acb),
+            ])
+    def _insert_dir_path_acb(self, _action=None):
+        dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
+        if dir_path:
+            self.get_buffer().insert_at_cursor(dir_path + "\n")
+    def _insert_file_path_acb(self, _action=None):
+        dir_path = dialogue.select_file(_("Select Directory to Insert"), absolute=True)
+        if dir_path:
+            self.get_buffer().insert_at_cursor(dir_path + "\n")
+    def get_lines(self):
+        bfr = self.get_buffer()
+        start = bfr.get_start_iter()
+        end = bfr.get_end_iter()
+        return [line.rstrip() for line in bfr.get_text(start, end, False).splitlines(False)]
+
+class DirExcludesWidget(actions.ClientAndButtonsWidget):
+    CLIENT = ExcludesView
+    BUTTONS = ["insert_dir_path"]
+    SCROLLABLE = True
+    def get_lines(self):
+        return self.client.get_lines()
+
+class FileExcludesWidget(actions.ClientAndButtonsWidget):
+    CLIENT = ExcludesView
+    BUTTONS = ["insert_file_path"]
+    SCROLLABLE = True
+    def get_lines(self):
+        return self.client.get_lines()
 
 class NewArchiveWidget(Gtk.VBox):
     def __init__(self):
@@ -178,24 +227,47 @@ class NewArchiveWidget(Gtk.VBox):
         notebook = Gtk.Notebook()
         self._includes_table = IncludesTable()
         notebook.append_page(self._includes_table, Gtk.Label(_("Included Files and Directories")))
-        #self._exclude_dirs_table = DirExcludesTable()
-        #notebook.append_page(self._exclude_dirs_table, Gtk.Label(_("Exclude Directories Matching")))
-        #self._exclude_files_table = FileExcludesTable()
-        #notebook.append_page(self._exclude_files_table, Gtk.Label(_("Exclude Files Matching")))
+        self._exclude_dirs_text = DirExcludesWidget()
+        notebook.append_page(self._exclude_dirs_text, Gtk.Label(_("Exclude Directories Matching")))
+        self._exclude_files_text = FileExcludesWidget()
+        notebook.append_page(self._exclude_files_text, Gtk.Label(_("Exclude Files Matching")))
         self.pack_start(notebook, expand=True, fill=True, padding=0)
         self.show_all()
     def create_archive(self):
-        name = self._name.entry.get_text()
-        if not name:
+        archive_name = self._name.entry.get_text()
+        if not archive_name:
             dialogue.alert_user(_("\"Name\" is a required field."))
             return False
-        location = self._location.dir_path
-        if not location:
+        location_dir_path = self._location.dir_path
+        if not location_dir_path:
             dialogue.alert_user(_("\"Location\" is a required field."))
             return False
-        compress = self._compress_snapshots.get_active()
         try:
-            #repo.create_new_repo(name, location, compress)
+            repo_spec = self._select_repo.get_selected_repo_spec()
+            if not repo_spec:
+                dialogue.alert_user(_("\"Content Repository\" is a required field."))
+                return False
+        except excpns.UnknownRepository as edata:
+            dialogue.report_exception_as_error(edata)
+            return False
+        includes = self._includes_table.get_included_paths()
+        if not len(includes):
+            dialogue.alert_user(_("\"Included Files and Directories\" is required."))
+            return False
+        compress_default = self._compress_snapshots.get_active()
+        skip_broken_sl = self._skip_broken_slinks.get_active()
+        exclude_dir_globs = self._exclude_dirs_text.get_lines()
+        exclude_file_globs = self._exclude_files_text.get_lines()
+        try:
+            snapshot.create_new_archive(
+                archive_name,
+                location_dir_path,
+                repo_spec,
+                includes,
+                exclude_dir_globs,
+                exclude_file_globs,
+                skip_broken_sl,
+                compress_default)
             enotify.notify_events(NE_NEW_ARCHIVE)
         except excpns.Error as edata:
             dialogue.report_exception_as_error(edata)
@@ -219,7 +291,7 @@ def create_new_archive_acb(_action=None):
 actions.CLASS_INDEP_AGS[g_repos.AC_REPOS_AVAILABLE].add_actions(
     [
         ("create_new_archive", icons.STOCK_NEW_ARCHIVE, _("New Archive"), None,
-         _("Create a new cnapshot archive."),
+         _("Create a new snapshot archive."),
          create_new_archive_acb
         ),
     ])

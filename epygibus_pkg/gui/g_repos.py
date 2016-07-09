@@ -264,6 +264,11 @@ class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
         self.update_contents()
     def _get_updated_item_list(self):
         return config.get_repo_name_list()
+    def get_selected_repo_spec(self):
+        repo_name = self.get_active_text()
+        if repo_name:
+            return config.read_repo_spec(repo_name)
+        return None
 
 def do_delete_repo(repo_name):
     try:

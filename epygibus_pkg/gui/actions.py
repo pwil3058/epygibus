@@ -166,8 +166,8 @@ class ConditionalButtonGroups(object):
         return box
 
 class CBGUserMixin(object):
-    def __init__(self, selection):
-        self.button_groups = ConditionalButtonGroups(self.get_selection())
+    def __init__(self, selection=None):
+        self.button_groups = ConditionalButtonGroups(selection)
         self.populate_button_groups()
     def populate_button_groups(self):
         pass
