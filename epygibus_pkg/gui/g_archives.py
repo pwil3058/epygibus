@@ -42,6 +42,7 @@ from . import gutils
 
 AC_ARCHIVES_AVAILABLE = actions.ActionCondns.new_flag()
 NE_NEW_ARCHIVE, NE_DELETE_ARCHIVE, NE_NUM_ARCHIVE_CHANGE = enotify.new_event_flags_and_mask(2)
+NE_ARCHIVE_SPEC_CHANGE = enotify.new_event_flag()
 
 _n_archives = 0
 
@@ -68,6 +69,74 @@ def _auto_update_cb(events_so_far, _args):
     return NE_NEW_ARCHIVE
 
 auto_update.register_cb(_auto_update_cb)
+
+Archive = collections.namedtuple("Archive", ["name", "repo_name", "snapshot_dir_path", "includes", "exclude_dir_globs", "exclude_file_globs", "skip_broken_soft_links", "compress_default"])
+
+class ArchiveTableData(table.TableData):
+    def _get_data_text(self, h):
+        archive_spec_list = config.get_archive_spec_list()
+        h.update(str(archive_spec_list).encode())
+        return archive_spec_list
+    def _finalize(self, pdt):
+        self._archive_spec_list = pdt
+    def iter_rows(self):
+        for archive_spec in sorted(self._archive_spec_list):
+            yield archive_spec
+
+class ArchiveListModel(table.MapManagedTableView.Model):
+    Row = config.Archive
+    types = Row(
+        name=GObject.TYPE_STRING,
+        repo_name=GObject.TYPE_STRING,
+        snapshot_dir_path=GObject.TYPE_STRING,
+        includes=GObject.TYPE_PYOBJECT,
+        exclude_dir_globs=GObject.TYPE_PYOBJECT,
+        exclude_file_globs=GObject.TYPE_PYOBJECT,
+        skip_broken_soft_links=GObject.TYPE_BOOLEAN,
+        compress_default=GObject.TYPE_BOOLEAN,
+    )
+
+def _archive_list_spec():
+    specification = tlview.ViewSpec(
+        properties={
+            "enable-grid-lines" : False,
+            "reorderable" : False,
+            "rules_hint" : False,
+            "headers-visible" : True,
+        },
+        selection_mode=Gtk.SelectionMode.SINGLE,
+        columns=[
+            tlview.simple_column(_("Name"), tlview.fixed_text_cell(ArchiveListModel, "name", 0.0)),
+            tlview.simple_column(_("Repository"), tlview.fixed_text_cell(ArchiveListModel, "repo_name", 0.0)),
+            tlview.simple_column(_("Compressed"), tlview.fixed_toggle_cell(ArchiveListModel, "compress_default", 0.0)),
+            tlview.simple_column(_("Skip Broken"), tlview.fixed_toggle_cell(ArchiveListModel, "skip_broken_soft_links", 0.0)),
+            tlview.simple_column(_("#Includes"), tlview.transform_data_cell(ArchiveListModel, "includes", lambda x : str(len(x)), xalign=1.0)),
+            tlview.simple_column(_("#Dir Excludes"), tlview.transform_data_cell(ArchiveListModel, "exclude_dir_globs", lambda x : str(len(x)), xalign=1.0)),
+            tlview.simple_column(_("#File_Excludes"), tlview.transform_data_cell(ArchiveListModel, "exclude_file_globs", lambda x : str(len(x)), xalign=1.0)),
+            tlview.simple_column(_("Snapshot Directory"), tlview.fixed_text_cell(ArchiveListModel, "snapshot_dir_path", 0.0)),
+        ]
+    )
+    return specification
+
+class ArchiveListView(table.MapManagedTableView):
+    Model = ArchiveListModel
+    PopUp = None
+    SET_EVENTS = 0
+    REFRESH_EVENTS = NE_NUM_ARCHIVE_CHANGE | NE_ARCHIVE_SPEC_CHANGE
+    AU_REQ_EVENTS = NE_ARCHIVE_SPEC_CHANGE
+    UI_DESCR = ""
+    specification = _archive_list_spec()
+    def __init__(self, busy_indicator=None, size_req=None):
+        table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
+        self.set_contents()
+    def get_selected_archive(self):
+        store, store_iter = self.get_selection().get_selected()
+        return None if store_iter is None else store.get_value_named(store_iter, "name")
+    def _get_table_db(self):
+        return ArchiveTableData()
+
+class ArchiveListWidget(table.TableWidget):
+    View = ArchiveListView
 
 class IncludesModel(tlview.NamedListStore):
     Row = collections.namedtuple("Row", ["included_path"])

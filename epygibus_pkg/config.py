@@ -62,7 +62,6 @@ Archive = collections.namedtuple("Archive", ["name", "repo_name", "snapshot_dir_
 
 def read_archive_spec(archive_name, stderr=sys.stderr):
     try:
-        compress_default = "True"
         repo, p_dir_path, skip, compress_default = [l.rstrip() for l in _archive_config_lines(archive_name)]
         # NB: leave expansion to absolute paths to the snapshot generator
         includes = [f.strip() for f in _includes_file_lines(archive_name)]
@@ -150,3 +149,6 @@ def get_repo_name_list():
 
 def get_repo_spec_list():
     return [read_repo_spec(name) for name in get_repo_name_list()]
+
+def get_archive_spec_list():
+    return [read_archive_spec(name) for name in get_archive_name_list()]

@@ -167,9 +167,11 @@ def simple_column(lbl, *cells):
     )
 
 class CellRendererSpec(object):
-    __slots__ = ('cell_renderer', 'properties', 'expand', 'start')
-    def __init__(self, cell_renderer, expand=None, start=False):
+    __slots__ = ('cell_renderer', 'properties', 'expand', 'start', "signal_handlers")
+    def __init__(self, cell_renderer, properties=None, expand=None, start=False, signal_handlers=None):
         self.cell_renderer = cell_renderer
+        self.properties = properties if properties else {}
+        self.signal_handlers = signal_handlers if signal_handlers else {}
         self.expand = expand
         self.start = start
 
@@ -216,6 +218,44 @@ def fixed_text_cell(model, fld, xalign=0.5):
 
 def editable_text_cell(model, fld, xalign=0.5):
     return _text_cell(model, fld, True, xalign)
+
+def _toggle_cell(model, fld, activatable, toggle_cb=None, xalign=0.5):
+    return CellSpec(
+        cell_renderer_spec=CellRendererSpec(
+            cell_renderer=Gtk.CellRendererToggle,
+            expand=False,
+            start=True,
+            properties={"activatable" : activatable},
+            signal_handlers={"toggled" : toggle_cb} if toggle_cb else None
+        ),
+        properties={},
+        cell_data_function_spec=None,
+        attributes = {"active" : model.col_index(fld)}
+    )
+
+def fixed_toggle_cell(model, fld, xalign=0.5):
+    return _toggle_cell(model, fld, False, None, xalign)
+
+def activatable_toggle_cell(model, fld, toggle_cb, xalign=0.5):
+    return _togg;e_cell(model, fld, True, toggle_cb, xalign)
+
+def _transformer(treeviewcolumn, cell, model, iter, func_and_index):
+    func, index = func_and_index
+    pyobj = model.get_value(iter, index)
+    cell.set_property('text', func(pyobj))
+    return
+
+def transform_data_cell(model, fld, transform_func, xalign=0.5):
+    return CellSpec(
+        cell_renderer_spec=CellRendererSpec(
+            cell_renderer=Gtk.CellRendererText,
+            expand=False,
+            start=True
+        ),
+        properties={"editable" : False, "xalign": xalign},
+        cell_data_function_spec=CellDataFunctionSpec(_transformer, (transform_func, model.col_index(fld))),
+        attributes = {}
+    )
 
 def mark_up_cell(model, fld):
     return CellSpec(
@@ -278,6 +318,10 @@ class View(Gtk.TreeView):
                 column.pack_start(cell, expand=True)
             else:
                 column.pack_end(cell, expand=True)
+        for prop_name, value in cell_renderer_spec.properties.items():
+            cell.set_property(prop_name, value)
+        for signal_name, signal_handler in cell_renderer_spec.signal_handlers.items():
+            cell.connect(signal_name, signal_handler)
         return cell
     def _view_add_column(self, col_d):
         col = Gtk.TreeViewColumn(col_d.title)

@@ -81,28 +81,41 @@ class RepoTableData(table.TableData):
         for repo_spec in sorted(self._repo_spec_list):
             yield repo_spec
 
+class RepoListModel(table.MapManagedTableView.Model):
+    Row = config.Repo
+    types = Row(name=GObject.TYPE_STRING, base_dir_path=GObject.TYPE_STRING, compressed=GObject.TYPE_BOOLEAN,)
+
+def _repo_list_spec():
+    specification = tlview.ViewSpec(
+        properties={
+            "enable-grid-lines" : False,
+            "reorderable" : False,
+            "rules_hint" : False,
+            "headers-visible" : True,
+        },
+        selection_mode=Gtk.SelectionMode.SINGLE,
+        columns=[
+            tlview.simple_column(_("Name"), tlview.fixed_text_cell(RepoListModel, "name", 0.0)),
+            tlview.simple_column(_("Compressed?"), tlview.fixed_toggle_cell(RepoListModel, "compressed", 0.0)),
+            tlview.simple_column(_("Location"), tlview.fixed_text_cell(RepoListModel, "base_dir_path", 0.0)),
+        ]
+    )
+    return specification
+
 class RepoListView(table.MapManagedTableView):
-    class Model(table.MapManagedTableView.Model):
-        Row = config.Repo
-        types = Row(name=GObject.TYPE_STRING, base_dir_path=GObject.TYPE_STRING, compressed=GObject.TYPE_BOOLEAN,)
-        def get_tag_name(self, plist_iter):
-            return self.get_value_named(plist_iter, "name")
-        def get_base_dir_path(self, plist_iter):
-            return self.get_value_named(plist_iter, "base_dir_path")
-        def get_compressed(self, plist_iter):
-            return self.get_value_named(plist_iter, "compressed")
+    Model = RepoListModel
     PopUp = None
     SET_EVENTS = 0
     REFRESH_EVENTS = NE_NUM_REPO_CHANGE | NE_REPO_SPEC_CHANGE
     AU_REQ_EVENTS = NE_REPO_SPEC_CHANGE
     UI_DESCR = ""
-    specification = table.simple_text_specification(Model, (_("Name"), "name", 0.0), (_("Location"), "base_dir_path", 0.0), (_("Compressed?"), "compressed", 0.0),)
+    specification = _repo_list_spec()
     def __init__(self, busy_indicator=None, size_req=None):
         table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
         self.set_contents()
     def get_selected_repo(self):
         store, store_iter = self.get_selection().get_selected()
-        return None if store_iter is None else store.get_tag_name(store_iter)
+        return None if store_iter is None else store.get_value_named(plist_iter, "name")
     def _get_table_db(self):
         return RepoTableData()
 
