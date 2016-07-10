@@ -283,6 +283,28 @@ class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
             return config.read_repo_spec(repo_name)
         return None
 
+class ReposWidget(Gtk.VBox, actions.CAGandUIManager):
+    UI_DESCR = """
+    <ui>
+        <toolbar name="RepoToolBar">
+            <toolitem action="create_new_repo"/>
+        </toolbar>
+    </ui>
+    """
+    def __init__(self):
+        Gtk.VBox.__init__(self)
+        actions.CAGandUIManager.__init__(self)
+        toolbar = self.ui_manager.get_widget("/RepoToolBar")
+        self.pack_start(toolbar, expand=False, fill=True, padding=0)
+        notebook = Gtk.Notebook()
+        self._repo_specs_view = RepoListView()
+        notebook.append_page(gutils.wrap_in_scrolled_window(self._repo_specs_view), Gtk.Label(_("Repository Specifications")))
+        self._repo_stats_view = RepoStatsListView()
+        notebook.append_page(gutils.wrap_in_scrolled_window(self._repo_stats_view), Gtk.Label(_("Repository Statistics")))
+        self.pack_start(notebook, expand=True, fill=True, padding=0)
+    def populate_action_groups(self):
+        pass
+
 def do_delete_repo(repo_name):
     try:
         repo.delete_repo(repo_name)

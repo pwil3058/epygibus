@@ -340,7 +340,7 @@ class TableWidget(Gtk.VBox):
     def __init__(self, scroll_bar=True, busy_indicator=None, size_req=None, **kwargs):
         Gtk.VBox.__init__(self)
         self.header = gutils.SplitBar()
-        self.pack_start(self.header, expand=True, fill=True, padding=0)
+        self.pack_start(self.header, expand=False, fill=True, padding=0)
         self.view = self.View(busy_indicator=busy_indicator, size_req=size_req, **kwargs)
         if scroll_bar:
             self.pack_start(gutils.wrap_in_scrolled_window(self.view), expand=True, fill=True, padding=0)

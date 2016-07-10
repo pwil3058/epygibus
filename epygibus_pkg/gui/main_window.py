@@ -33,10 +33,6 @@ from . import dialogue
 class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
     UI_DESCR = """
     <ui>
-        <toolbar name="RepoToolBar">
-            <toolitem action="create_new_repo"/>
-            <toolitem action="create_new_archive"/>
-        </toolbar>
     </ui>
     """
     def __init__(self):
@@ -51,18 +47,11 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         label = Gtk.Label()
         label.set_label("Work in progress.  Try again later.")
         vbox.pack_start(label, expand=False, fill=True, padding=0)
-        vbox.pack_start(g_repos.RepoListWidget(), expand=False, fill=True, padding=0)
-        vbox.pack_start(g_repos.RepoStatsListWidget(), expand=True, fill=True, padding=0)
-        vbox.pack_start(g_archives.ArchiveListWidget(), expand=True, fill=True, padding=0)
-        rcb = g_repos.RepoComboBox()
-        rcb.set_active_text("gabba")
-        rcb.connect("changed", self._rcb_changed_cb)
-        vbox.pack_start(rcb, expand=False, fill=True, padding=0)
-        toolbar = self.ui_manager.get_widget("/RepoToolBar")
-        vbox.pack_start(toolbar, expand=False, fill=True, padding=0)
+        notebook = Gtk.Notebook()
+        notebook.append_page(g_repos.ReposWidget(), Gtk.Label(_("Content Repositories")))
+        notebook.append_page(g_archives.ArchivesWidget(), Gtk.Label(_("Snapshot Archives")))
+        vbox.pack_start(notebook, expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
     def populate_action_groups(self):
         pass
-    def _rcb_changed_cb(self, rcb):
-        pass #print("repo:", rcb.get_active_text())

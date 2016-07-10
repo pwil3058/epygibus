@@ -350,6 +350,39 @@ class NewArchiveDialog(dialogue.CancelOKDialog):
         self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
         self.show_all()
 
+class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
+    def __init__(self):
+        gutils.UpdatableComboBoxText.__init__(self)
+        enotify.Listener.__init__(self)
+        self.add_notification_cb(NE_NUM_ARCHIVE_CHANGE, self._enotify_cb)
+    def _enotify_cb(self, **kwargs):
+        self.update_contents()
+    def _get_updated_item_list(self):
+        return config.get_archive_name_list()
+    def get_selected_archive_spec(self):
+        archive_name = self.get_active_text()
+        if repo_name:
+            return config.read_archive_spec(archive_name)
+        return None
+
+class ArchivesWidget(Gtk.VBox, actions.CAGandUIManager):
+    UI_DESCR = """
+    <ui>
+        <toolbar name="ArchiveToolBar">
+            <toolitem action="create_new_archive"/>
+        </toolbar>
+    </ui>
+    """
+    def __init__(self):
+        Gtk.VBox.__init__(self)
+        actions.CAGandUIManager.__init__(self)
+        toolbar = self.ui_manager.get_widget("/ArchiveToolBar")
+        self.pack_start(toolbar, expand=False, fill=True, padding=0)
+        self._archive_list_view = ArchiveListView()
+        self.pack_start(gutils.wrap_in_scrolled_window(self._archive_list_view), expand=True, fill=True, padding=0)
+    def populate_action_groups(self):
+        pass
+
 def create_new_archive_acb(_action=None):
     dialog = NewArchiveDialog()
     while dialog.run() == Gtk.ResponseType.OK:
