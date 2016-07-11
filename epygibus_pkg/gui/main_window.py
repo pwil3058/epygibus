@@ -27,12 +27,18 @@ from . import enotify
 from . import auto_update
 from . import g_repos
 from . import g_archives
+from . import g_snapshots
 from . import icons
 from . import dialogue
 
 class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
     UI_DESCR = """
     <ui>
+        <menubar name="epygibus_left_menubar">
+            <menu action="snapshot_exigency_menu">
+              <menuitem action="exig_open_snapshot_file"/>
+            </menu>
+        </menubar>
     </ui>
     """
     def __init__(self):
@@ -47,6 +53,8 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         label = Gtk.Label()
         label.set_label("Work in progress.  Try again later.")
         vbox.pack_start(label, expand=False, fill=True, padding=0)
+        lmenu_bar = self.ui_manager.get_widget('/epygibus_left_menubar')
+        vbox.pack_start(lmenu_bar, expand=False, fill=True, padding=0)
         notebook = Gtk.Notebook()
         notebook.append_page(g_repos.ReposWidget(), Gtk.Label(_("Content Repositories")))
         notebook.append_page(g_archives.ArchivesWidget(), Gtk.Label(_("Snapshot Archives")))

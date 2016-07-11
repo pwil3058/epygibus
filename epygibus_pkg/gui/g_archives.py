@@ -307,7 +307,7 @@ class NewArchiveWidget(Gtk.VBox):
         if not archive_name:
             dialogue.alert_user(_("\"Name\" is a required field."))
             return False
-        location_dir_path = self._location.dir_path
+        location_dir_path = self._location.path
         if not location_dir_path:
             dialogue.alert_user(_("\"Location\" is a required field."))
             return False

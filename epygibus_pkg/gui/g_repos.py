@@ -248,7 +248,7 @@ class NewRepoWidget(Gtk.VBox):
         if not name:
             dialogue.alert_user(_("\"Name\" is a required field."))
             return False
-        location = self._location.dir_path
+        location = self._location.path
         if not location:
             dialogue.alert_user(_("\"Location\" is a required field."))
             return False

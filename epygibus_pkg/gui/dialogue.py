@@ -111,9 +111,8 @@ class AmodalDialog(Dialog, enotify.Listener):
         flags &= ~Gtk.DialogFlags.MODAL
         Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
         enotify.Listener.__init__(self)
-        self.set_type_hint(Gdk.WINDOW_TYPE_HINT_NORMAL)
-        from . import ifce
-    def _change_wd_cb(self, **kwargs):
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+    def _self_destruct_cb(self, **kwargs):
         self.destroy()
 
 class MessageDialog(Dialog):
@@ -311,38 +310,62 @@ def select_directory(prompt, suggestion=None, existing=True, absolute=False, par
     dialog.destroy()
     return os.path.abspath(new_dir_name) if (absolute and new_dir_name) else new_dir_name
 
-class EnterDirPathWidget(Gtk.HBox):
+# TODO: put auto completion into the text entry component
+class _EnterPathWidget(Gtk.HBox):
+    SELECT_FUNC = None
+    SELECT_TITLE = None
     def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):
         Gtk.HBox.__init__(self)
         self._parent = parent
-        self._dir_path = ReadTextWidget(prompt=prompt, suggestion=suggestion, width_chars=width_chars)
+        self._path = ReadTextWidget(prompt=prompt, suggestion=suggestion, width_chars=width_chars)
         self._existing = existing
         b_button = Gtk.Button.new_with_label(_("Browse"))
         b_button.connect("clicked", self._browse_cb)
-        self.pack_start(self._dir_path, expand=True, fill=True, padding=0)
+        self.pack_start(self._path, expand=True, fill=True, padding=0)
         self.pack_end(b_button, expand=False, fill=True, padding=0)
         self.show_all()
     @property
-    def dir_path(self):
-        return self._dir_path.entry.get_text()
+    def path(self):
+        return self._path.entry.get_text()
     def _browse_cb(self, button=None):
-        suggestion = self._dir_path.entry.get_text()
-        dir_path = select_directory(_("Browse for Directory"), suggestion=suggestion, existing=self._existing, parent=self._parent)
-        if dir_path:
-            self._dir_path.entry.set_text(os.path.abspath(os.path.expanduser(dir_path)))
+        suggestion = self._path.entry.get_text()
+        path = self.SELECT_FUNC(self.SELECT_TITLE, suggestion=suggestion, existing=self._existing, parent=self._parent)
+        if path:
+            self._path.entry.set_text(os.path.abspath(os.path.expanduser(path)))
 
-class EnterDirPathDialog(CancelOKDialog):
+class _EnterPathDialog(CancelOKDialog):
+    WIDGET = None
     def __init__(self, title=None, prompt=None, suggestion="", existing=True, parent=None):
         CancelOKDialog.__init__(self, title, parent)
-        self.entry = EnterDirPathWidget(prompt, suggestion, existing, parent=self)
+        self.entry = self.WIDGET(prompt, suggestion, existing, parent=self)
         self.get_content_area().add(self.entry)
         self.show_all()
     @property
-    def dir_path(self):
-        return self.entry.dir_path
+    def path(self):
+        return self.entry.path
+
+class EnterDirPathWidget(_EnterPathWidget):
+    SELECT_FUNC = lambda s, *args, **kwargs: select_directory(*args, **kwargs)
+    SELECT_TITLE = _("Browse for Directory")
+
+class EnterDirPathDialog(_EnterPathDialog):
+    WIDGET = EnterDirPathWidget
+
+class EnterFilePathWidget(_EnterPathWidget):
+    SELECT_FUNC = lambda s, *args, **kwargs: select_file(*args, **kwargs)
+    SELECT_TITLE = _("Browse for File")
+
+class EnterFilePathDialog(_EnterPathDialog):
+    WIDGET = EnterFilePathWidget
 
 def ask_dir_path(prompt, suggestion=None, existing=True, parent=None):
     dialog = EnterDirPathDialog(title=_("Enter Directory Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
-    dir_path = dialog.dir_path if dialog.run() == Gtk.ResponseType.OK else None
+    dir_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
     dialog.destroy()
     return dir_path
+
+def ask_file_path(prompt, suggestion=None, existing=True, parent=None):
+    dialog = EnterFilePathDialog(title=_("Enter File Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
+    file_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
+    dialog.destroy()
+    return file_path

@@ -189,14 +189,14 @@ class CellSpec(object):
         self.cell_data_function_spec = cell_data_function_spec
         self.attributes = attributes if attributes is not None else dict()
 
-def stock_icon_cell(model, fld):
+def stock_icon_cell(model, fld, xalign=0.5):
     return CellSpec(
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererPixbuf,
             expand=False,
             start=True
         ),
-        properties={},
+        properties={"xalign": xalign},
         cell_data_function_spec=None,
         attributes = {"stock_id" : model.col_index("icon")}
     )
@@ -443,3 +443,14 @@ class ListView(View):
 
 class TreeView(View):
     Model = NamedTreeStore
+
+def clear_selection_cb(widget, event):
+    if event.type == Gdk.EventType.BUTTON_PRESS:
+        if event.button == 2:
+            widget.get_selection().unselect_all()
+            return True
+    elif event.type == Gdk.EventType.KEY_PRESS:
+        if event.keyval == Gdk.keyval_from_name("Escape"):
+            widget.get_selection().unselect_all()
+            return True
+    return False

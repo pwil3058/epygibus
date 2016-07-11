@@ -122,6 +122,9 @@ class Snapshot(object):
         self.files = {}
         self.file_links = {}
         self.subdir_links = {}
+    @property
+    def occupancy(self):
+        return len(self.subdirs) + len(self.files) + len(self.subdir_links) + len(self.file_links)
     def _find_or_add_subdir(self, path_parts, index, attributes):
         name = path_parts[index]
         if index == len(path_parts) - 1:
@@ -163,6 +166,20 @@ class Snapshot(object):
         for subdir in self.subdirs.values():
             for content_token in subdir.iterate_content_tokens():
                 yield content_token
+    def find_offset_base_subdir_bits(self, path_bits=None):
+        if self.occupancy > 1:
+            return path_bits if path_bits else []
+        subdir_keys = list(self.subdirs.keys())
+        if subdir_keys:
+            assert len(subdir_keys) == 1
+            subdir_name = subdir_keys[0]
+            if path_bits:
+                path_bits.append(subdir_name)
+            else:
+                path_bits = [subdir_name]
+            return self.subdirs[subdir_name].find_offset_base_subdir_bits(path_bits)
+        # this would be the case where the snapshot holds a single file
+        return path_bits if path_bits else []
 
 class SnapshotPlus(object):
     # limit the number of none basic python types to future proof
@@ -206,6 +223,8 @@ class SnapshotPlus(object):
         return self.snapshot.find_file_link(file_path)
     def iterate_content_tokens(self):
         return self.snapshot.iterate_content_tokens()
+    def find_offset_base_subdir_bits(self):
+        return self.snapshot.find_offset_base_subdir_bits([os.sep])
 
 def read_snapshot(snapshot_file_path):
     if snapshot_file_path.endswith(".gz"):
@@ -213,7 +232,13 @@ def read_snapshot(snapshot_file_path):
         fobj = gzip.open(snapshot_file_path, "rb")
     else:
         fobj = io.open(snapshot_file_path, "rb")
-    return pickle.load(fobj)
+    try:
+        snapshot_plus = pickle.load(fobj)
+    except:
+        raise excpns.InvalidSnapshotFile(snapshot_file_path)
+    if not isinstance(snapshot_plus, SnapshotPlus):
+        raise excpns.InvalidSnapshotFile(snapshot_file_path)
+    return snapshot_plus
 
 # NB: make sure that these two are in concert
 _SNAPSHOT_FILE_NAME_TEMPLATE = "%Y-%m-%d-%H-%M-%S.pkl"
@@ -519,6 +544,20 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     @property
     def name(self):
         return os.path.basename(self.path)
+    @property
+    def subdirs(self):
+        return self.snapshot.subdirs
+    @property
+    def subdir_links(self):
+        return self.snapshot.subdir_links
+    @property
+    def files(self):
+        return self.snapshot.files
+    @property
+    def file_links(self):
+        return self.snapshot.file_links
+    def get_offset_base_subdir_path(self):
+        return os.path.join(*self.snapshot.find_offset_base_subdir_bits())
     def get_file(self, file_path):
         abs_file_path = absolute_path(file_path)
         try:
@@ -674,6 +713,14 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         for link_data in self.iterate_subdir_links(recurse=True):
             n_links += 1
         return SSFSStats(n_files, n_links, n_bytes, len(ck_set), n_stored_bytes, n_share_bytes)
+
+def get_snapshot_fs_fm_file(snapshot_file_path):
+    snapshot_file_name = os.path.basename(snapshot_file_path)
+    snapshot_dir_path = os.path.dirname(snapshot_file_path)
+    archive_name = os.path.basename(snapshot_dir_path)
+    snapshot = read_snapshot(snapshot_file_path)
+    repo_mgmt_key = snapshot.repo_mgmt_key
+    return SnapshotFS(os.sep, archive_name, ss_root(snapshot_file_name), snapshot, repo_mgmt_key)
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config

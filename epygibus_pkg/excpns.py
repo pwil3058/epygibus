@@ -149,3 +149,8 @@ class SnapshotNotCompressed(Error):
     def __init__(self, archive_name, snapshot_name):
         self.archive_name = archive_name
         self.snapshot_name = snapshot_name
+
+class InvalidSnapshotFile(Error):
+    STR_TEMPLATE = _("Error: file \"{file_path}\" is not a valid snapshot file.")
+    def __init__(self, file_path):
+        self.file_path = file_path
