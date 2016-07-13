@@ -178,42 +178,42 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
             [
                 ("table_add_file_path", Gtk.Button.new_with_label(_("Append File")),
                  _("Append a new file path to the includes table"),
-                 self._add_file_path_acb),
+                 self._add_file_path_bcb),
                 ("table_add_dir_path", Gtk.Button.new_with_label(_("Append Directory")),
                  _("Append a new directory path to the includes table"),
-                 self._add_dir_path_acb),
+                 self._add_dir_path_bcb),
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
             [
                 ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
                  _("Delete selected row(s)"),
-                 self._delete_selection_acb),
+                 self._delete_selection_bcb),
                 ("table_insert_file_path", Gtk.Button.new_with_label(_("Insert File")),
                  _("Insert a new file path before the selected row(s)"),
-                 self._insert_file_path_acb),
+                 self._insert_file_path_bcb),
                 ("table_insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory")),
                  _("Insert a new directory path before the selected row(s)"),
-                 self._insert_dir_path_acb),
+                 self._insert_dir_path_bcb),
             ])
     def get_included_paths(self):
         return [row.included_path for row in self.model.named()]
-    def _add_file_path_acb(self, _action=None):
+    def _add_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
         if file_path:
             self.model.append(self.Model.Row(file_path))
-    def _add_dir_path_acb(self, _action=None):
+    def _add_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
         if dir_path:
             self.model.append(self.Model.Row(dir_path))
-    def _insert_file_path_acb(self, _action=None):
+    def _insert_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
         if file_path:
             tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
-    def _insert_dir_path_acb(self, _action=None):
+    def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
-    def _delete_selection_acb(self, _action=None):
+    def _delete_selection_bcb(self, _button=None):
         tlview.delete_selection(self.get_selection())
 
 class IncludesTable(actions.ClientAndButtonsWidget):
@@ -232,16 +232,16 @@ class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
             [
                 ("insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory Path")),
                  _("Browse for and insert a directory path at the text cursor."),
-                 self._insert_dir_path_acb),
+                 self._insert_dir_path_bcb),
                 ("insert_file_path", Gtk.Button.new_with_label(_("Insert File Path")),
                  _("Browse for and insert a file path at the text cursor."),
-                 self._insert_file_path_acb),
+                 self._insert_file_path_bcb),
             ])
-    def _insert_dir_path_acb(self, _action=None):
+    def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             self.get_buffer().insert_at_cursor(dir_path + "\n")
-    def _insert_file_path_acb(self, _action=None):
+    def _insert_file_path_bcb(self, _button=None):
         dir_path = dialogue.select_file(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             self.get_buffer().insert_at_cursor(dir_path + "\n")

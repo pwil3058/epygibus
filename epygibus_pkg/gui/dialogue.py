@@ -19,6 +19,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
+from contextlib import contextmanager
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -106,7 +107,7 @@ class Dialog(Gtk.Dialog, BusyIndicator):
     def alert_user(self, msg):
         alert_user(msg, parent=self)
 
-class AmodalDialog(Dialog, enotify.Listener):
+class ListenerDialog(Dialog, enotify.Listener):
     def __init__(self, title=None, parent=None, flags=0, buttons=None):
         flags &= ~Gtk.DialogFlags.MODAL
         Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
@@ -223,11 +224,49 @@ def report_failure(failure, parent=None):
 def report_exception_as_error(edata, parent=None):
     alert_user(str(edata), parent=parent)
 
+class UndecoratedMessage(Gtk.Dialog):
+    def __init__(self, message, parent=None):
+        Gtk.Dialog.__init__(self, "", main_window if not parent else parent, 0)
+        self.set_decorated(False)
+        label = Gtk.Label()
+        label.set_markup("<big><b>" + message + "</b></big>")
+        self.get_content_area().add(label)
+        self.show_all()
+
+@contextmanager
+def comforting_message(message, spinner=False, parent=None):
+    # TODO: Fix this mess and get going need to know how to force mapping of window
+    dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
+    dialog.set_decorated(False)
+    dialog.set_destroy_with_parent(True)
+    dialog.set_urgency_hint(True)
+    label = Gtk.Label()
+    label.set_can_focus(True)
+    label.set_markup("<big><b>" + message + "</b></big>")
+    dialog.add(label)
+    dialog.show_all()
+    dialog.show()
+    dialog.set_keep_above(True)
+    dialog.present()
+    dialog.set_focus(label)
+    while Gtk.events_pending(): Gtk.main_iteration()
+    dialog.get_window().process_all_updates()
+    dialog.get_window().show()
+    #Gdk.window_process_all_updates()
+    while not dialog.get_window().is_visible():
+        dialog.get_window().show()
+    Gtk.main_iteration()
+    try:
+        yield dialog
+    finally:
+        dialog.destroy()
+        pass
+
 class CancelOKDialog(Dialog):
     def __init__(self, title=None, parent=None):
         if not parent:
             parent = main_window
-        flags = Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT
+        flags = Gtk.DialogFlags.DESTROY_WITH_PARENT
         buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
         Dialog.__init__(self, title, parent, flags, buttons)
 
@@ -246,6 +285,16 @@ class ReadTextWidget(Gtk.HBox):
             self.entry.set_width_chars(width_chars)
         self.pack_start(self.entry, expand=True, fill=True, padding=0)
         self.show_all()
+    def _do_pulse(self):
+        self.entry.progress_pulse()
+        return True
+    def start_busy_pulse(self):
+        self.entry.set_progress_pulse_step(0.2)
+        self._timeout_id = GObject.timeout_add(100, self._do_pulse, priority=GObject.PRIORITY_HIGH)
+    def stop_busy_pulse(self):
+        GObject.source_remove(self._timeout_id)
+        self._timeout_id = None
+        self.entry.set_progress_pulse_step(0)
 
 class FileChooserDialog(Gtk.FileChooserDialog):
     def __init__(self, title=None, parent=None, action=Gtk.FileChooserAction.OPEN, buttons=None, backend=None):
@@ -332,6 +381,10 @@ class _EnterPathWidget(Gtk.HBox):
         path = self.SELECT_FUNC(self.SELECT_TITLE, suggestion=suggestion, existing=self._existing, parent=self._parent)
         if path:
             self._path.entry.set_text(os.path.abspath(os.path.expanduser(path)))
+    def start_busy_pulse(self):
+        self._path.start_busy_pulse()
+    def stop_busy_pulse(self):
+        self._path.stop_busy_pulse()
 
 class _EnterPathDialog(CancelOKDialog):
     WIDGET = None
@@ -343,6 +396,12 @@ class _EnterPathDialog(CancelOKDialog):
     @property
     def path(self):
         return self.entry.path
+    def start_busy_pulse(self):
+        ok_button = self.get_widget_for_response(Gtk.ResponseType.OK)
+        ok_button.set_label("Wait...")
+        self.entry.start_busy_pulse()
+    def stop_busy_pulse(self):
+        self.entry.stop_busy_pulse()
 
 class EnterDirPathWidget(_EnterPathWidget):
     SELECT_FUNC = lambda s, *args, **kwargs: select_directory(*args, **kwargs)

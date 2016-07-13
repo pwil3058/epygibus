@@ -19,6 +19,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import collections
+import os
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -32,6 +33,9 @@ from . import actions
 from . import dialogue
 from . import tlview
 from . import icons
+from . import gutils
+
+AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
 DVRow = collections.namedtuple("DVRow", ["name", "icon", "is_dir", "is_link"])
 
@@ -54,14 +58,12 @@ def dv_specification():
         ]
     )
 
-class DirectoryView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicatorUser):
+class DirectoryView(tlview.ListView):
     PopUp = None
     Model = DVModel
     specification = dv_specification()
-    def __init__(self, snapshot_fs, offset_dir_path, busy_indicator=None, size_req=None):
+    def __init__(self, snapshot_fs, offset_dir_path, size_req=None):
         tlview.ListView.__init__(self)
-        dialogue.BusyIndicatorUser.__init__(self, busy_indicator)
-        actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup=self.PopUp)
         if size_req:
             self.set_size_request(size_req[0], size_req[1])
         self.connect("button_press_event", tlview.clear_selection_cb)
@@ -72,6 +74,9 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndic
     def populate_action_groups(self):
         pass
     def _set_contents(self):
+        if self._snapshot_fs is None:
+            self.model.clear()
+            return
         offset_subdir_fs = self._snapshot_fs.get_subdir(self._offset_dir_path)
         real_dirs = [DVRow(key, icons.STOCK_DIR, True, False) for key in offset_subdir_fs.subdirs.keys()]
         dir_links = [DVRow(key, icons.STOCK_DIR_LINK, True, True) for key in offset_subdir_fs.subdir_links.keys()]
@@ -82,30 +87,88 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndic
             self.model.append(dr)
         for fr in sorted(real_files + file_links):
             self.model.append(fr)
-
-class ExigSnapshotDialog(dialogue.AmodalDialog):
-    def __init__(self, snapshot_fs, parent=None):
-        title = _("Snapshot Exigency: {}:{}").format(snapshot_fs.archive_name, snapshot_fs.snapshot_name)
-        dialogue.AmodalDialog.__init__(self, title=title, parent=parent, flags=0, buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE))
-        self.connect("response", self._response_cb)
+    def change_offset_dir_path(self, new_offset_dir_path):
+        self._offset_dir_path = new_offset_dir_path
+        self._set_contents()
+    def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
+        assert (snapshot_fs and offset_dir_path) or (not snapshot_fs and not offset_dir_path)
         self._snapshot_fs = snapshot_fs
-        self._base_offset_dir_path = snapshot_fs.get_offset_base_subdir_path()
+        self._offset_dir_path = offset_dir_path
+        self._set_contents()
+
+class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMixin, dialogue.BusyIndicatorUser):
+    def __init__(self, snapshot_fs, busy_indicator=None, parent=None):
+        Gtk.VBox.__init__(self)
+        self._snapshot_fs = snapshot_fs
+        self._base_offset_dir_path = snapshot_fs.get_offset_base_subdir_path() if snapshot_fs else None
         self._current_offset_dir_path = self._base_offset_dir_path
         self._dir_view = DirectoryView(self._snapshot_fs, self._current_offset_dir_path)
-        self.get_content_area().pack_start(self._dir_view, expand=True, fill=True, padding=0)
+        actions.CAGandUIManager.__init__(self, self._dir_view.get_selection())
+        actions.CBGUserMixin.__init__(self, self._dir_view.get_selection())
+        dialogue.BusyIndicatorUser.__init__(self, busy_indicator=busy_indicator)
+        up_button = self.button_groups.get_button("snapshot_dir_go_up")
+        self._current_dir_path_label = Gtk.Label()
+        self._current_dir_path_label.set_xalign(0.0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(up_button, expand=False, fill=False, padding=0)
+        hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
+        self._dir_view.connect("row_activated", self._double_click_cb)
+        self._update_above_base_offset_status()
         self.show_all()
-    def _response_cb(self, dialog, response_id):
-        self.destroy()
+    def populate_action_groups(self):
+        pass
+    def populate_button_groups(self):
+        self.button_groups[AC_ABOVE_BASE_OFFSET].add_buttons(
+            [
+                ("snapshot_dir_go_up", Gtk.Button.new_from_icon_name(Gtk.STOCK_GO_UP, Gtk.IconSize.BUTTON),
+                 _("Change displayed directory to parent of current displayed directory."),
+                 self._change_dir_up_bcb),
+            ])
+    def _double_click_cb(self, tree_view, tree_path, tree_view_column):
+        model = tree_view.get_model()
+        row = model.get_row(model.get_iter(tree_path))
+        if row.is_dir:
+            self._current_offset_dir_path = os.path.join(self._current_offset_dir_path, row.name)
+            tree_view.change_offset_dir_path(self._current_offset_dir_path)
+            self._update_above_base_offset_status()
+    def _change_dir_up_bcb(self, _button=None):
+        if self._current_offset_dir_path == self._base_offset_dir_path:
+            return
+        self._current_offset_dir_path = os.path.dirname(self._current_offset_dir_path)
+        self._dir_view.change_offset_dir_path(self._current_offset_dir_path)
+        self._update_above_base_offset_status()
+    def _update_above_base_offset_status(self):
+        self._current_dir_path_label.set_text(str(self._current_offset_dir_path))
+        if self._current_offset_dir_path == self._base_offset_dir_path:
+            condns =actions.MaskedCondns(0, AC_ABOVE_BASE_OFFSET)
+        else:
+            condns =actions.MaskedCondns(AC_ABOVE_BASE_OFFSET, AC_ABOVE_BASE_OFFSET)
+        self.button_groups.update_condns(condns)
+        self.action_groups.update_condns(condns)
+
+class ExigSnapshotDialog(Gtk.Window):
+    def __init__(self, snapshot_fs, parent=None):
+        title = _("Snapshot Exigency: {}:{}").format(snapshot_fs.archive_name, snapshot_fs.snapshot_name)
+        Gtk.Window.__init__(self, title=title, type=Gtk.WindowType.TOPLEVEL)
+        self._ss_mgr = SnapshotManagerWidget(snapshot_fs, parent=parent)
+        self.add(self._ss_mgr)
+        self.show_all()
 
 def exig_open_snapshot_file_acb(_action=None):
+#    dialog = dialogue.EnterFilePathDialog(title=_("Enter File Path"), prompt=_("Snapshot File Path:"), existing=True)
+#    snapshot_file_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
     snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
     if snapshot_file_path:
-        try:
-            snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
-        except (excpns.Error, IOError) as edata:
-            dialogue.report_exception_as_error(edata)
-            return
-        ExigSnapshotDialog(snapshot_fs).show()
+        with dialogue.comforting_message("Unpickling..."):
+            try:
+                snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
+            except (excpns.Error, IOError) as edata:
+                dialogue.report_exception_as_error(edata)
+                return
+            ExigSnapshotDialog(snapshot_fs).show()
+    #dialog.destroy()
 
 actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     [
