@@ -239,7 +239,6 @@ def comforting_message(message, spinner=False, parent=None):
     dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
     dialog.set_decorated(False)
     dialog.set_destroy_with_parent(True)
-    dialog.set_urgency_hint(True)
     label = Gtk.Label()
     label.set_can_focus(True)
     label.set_markup("<big><b>" + message + "</b></big>")
@@ -248,14 +247,11 @@ def comforting_message(message, spinner=False, parent=None):
     dialog.show()
     dialog.set_keep_above(True)
     dialog.present()
-    dialog.set_focus(label)
-    while Gtk.events_pending(): Gtk.main_iteration()
-    dialog.get_window().process_all_updates()
-    dialog.get_window().show()
-    #Gdk.window_process_all_updates()
-    while not dialog.get_window().is_visible():
-        dialog.get_window().show()
-    Gtk.main_iteration()
+    try:
+        os.sched_yield()
+    except:
+        import time
+        time.sleep(1)
     try:
         yield dialog
     finally:

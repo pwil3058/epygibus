@@ -278,7 +278,7 @@ class View(Gtk.TreeView):
         if model is None:
             model = self.Model()
         else:
-            assert isinstance(model, self.Model)
+            assert isinstance(model, self.Model) or isinstance(model.get_model(), self.Model)
         Gtk.TreeView.__init__(self, model)
         if size_req:
             self.set_size_request(size_req[0], size_req[1])
@@ -350,12 +350,12 @@ class View(Gtk.TreeView):
                 cell.connect('toggled', self._cell_toggled_cb, attr_index)
     @property
     def model(self):
-        return self.get_model()
+        return  self.get_model()
     @model.setter
     def model(self, new_model):
         self.set_model(new_model)
     def set_model(self, model):
-        assert model is None or isinstance(model, self.Model)
+        assert model is None or isinstance(model, self.Model) or isinstance(model.get_model(), self.Model)
         old_model = self.get_model()
         for sig_cb_id in self._change_cb_ids:
             old_model.disconnect(sig_cb_id)

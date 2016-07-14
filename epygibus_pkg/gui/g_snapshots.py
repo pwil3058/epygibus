@@ -42,6 +42,29 @@ DVRow = collections.namedtuple("DVRow", ["name", "icon", "is_dir", "is_link"])
 class DVModel(tlview.NamedListStore):
     Row = DVRow
     types = DVRow(name=GObject.TYPE_STRING, icon=GObject.TYPE_STRING, is_dir=GObject.TYPE_BOOLEAN, is_link=GObject.TYPE_BOOLEAN)
+    def __init__(self, snapshot_fs=None, offset_dir_path=None):
+        tlview.NamedListStore.__init__(self)
+        self.set_snapshot_fs(snapshot_fs, offset_dir_path)
+    def _set_contents(self):
+        if self._snapshot_fs is None:
+            self.clear()
+            return
+        offset_subdir_fs = self._snapshot_fs.get_subdir(self._offset_dir_path)
+        real_dirs = [DVRow(key, icons.STOCK_DIR, True, False) for key in offset_subdir_fs.subdirs.keys()]
+        dir_links = [DVRow(key, icons.STOCK_DIR_LINK, True, True) for key in offset_subdir_fs.subdir_links.keys()]
+        real_files = [DVRow(key, icons.STOCK_FILE, False, False) for key in offset_subdir_fs.files.keys()]
+        file_links = [DVRow(key, icons.STOCK_FILE_LINK, False, True) for key in offset_subdir_fs.file_links.keys()]
+        self.clear()
+        self.append_contents(sorted(real_dirs + dir_links))
+        self.append_contents(sorted(real_files + file_links))
+    def change_offset_dir_path(self, new_offset_dir_path):
+        self._offset_dir_path = new_offset_dir_path
+        self._set_contents()
+    def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
+        assert (snapshot_fs and offset_dir_path) or (not snapshot_fs and not offset_dir_path)
+        self._snapshot_fs = snapshot_fs
+        self._offset_dir_path = offset_dir_path
+        self._set_contents()
 
 def dv_specification():
     return tlview.ViewSpec(
@@ -63,38 +86,20 @@ class DirectoryView(tlview.ListView):
     Model = DVModel
     specification = dv_specification()
     def __init__(self, snapshot_fs, offset_dir_path, size_req=None):
-        tlview.ListView.__init__(self)
-        if size_req:
-            self.set_size_request(size_req[0], size_req[1])
+        self._dv_model = self.Model(snapshot_fs, offset_dir_path)
+        self.show_hidden_toggle = Gtk.CheckButton(_("Show Hidden"))
+        show_hidden_filter = self._dv_model.filter_new()
+        show_hidden_filter.set_visible_func(self._show_hidden_visibility_func, self.show_hidden_toggle)
+        self.show_hidden_toggle.connect("toggled", lambda _widget: show_hidden_filter.refilter())
+        tlview.ListView.__init__(self, model=show_hidden_filter, size_req=size_req)
         self.connect("button_press_event", tlview.clear_selection_cb)
         self.connect("key_press_event", tlview.clear_selection_cb)
-        self._snapshot_fs = snapshot_fs
-        self._offset_dir_path = offset_dir_path
-        self._set_contents()
-    def populate_action_groups(self):
-        pass
-    def _set_contents(self):
-        if self._snapshot_fs is None:
-            self.model.clear()
-            return
-        offset_subdir_fs = self._snapshot_fs.get_subdir(self._offset_dir_path)
-        real_dirs = [DVRow(key, icons.STOCK_DIR, True, False) for key in offset_subdir_fs.subdirs.keys()]
-        dir_links = [DVRow(key, icons.STOCK_DIR_LINK, True, True) for key in offset_subdir_fs.subdir_links.keys()]
-        real_files = [DVRow(key, icons.STOCK_FILE, False, False) for key in offset_subdir_fs.files.keys()]
-        file_links = [DVRow(key, icons.STOCK_FILE_LINK, False, True) for key in offset_subdir_fs.file_links.keys()]
-        self.model.clear()
-        for dr in sorted(real_dirs + dir_links):
-            self.model.append(dr)
-        for fr in sorted(real_files + file_links):
-            self.model.append(fr)
+    def _show_hidden_visibility_func(self, model, model_iter, toggle):
+        return toggle.get_active() or not model.get_value_named(model_iter, "name").startswith(".")
     def change_offset_dir_path(self, new_offset_dir_path):
-        self._offset_dir_path = new_offset_dir_path
-        self._set_contents()
+        self._dv_model.change_offset_dir_path(new_offset_dir_path)
     def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
-        assert (snapshot_fs and offset_dir_path) or (not snapshot_fs and not offset_dir_path)
-        self._snapshot_fs = snapshot_fs
-        self._offset_dir_path = offset_dir_path
-        self._set_contents()
+        self._dv_model.set_snapshot_fs(snapshot_fs, offset_dir_path)
 
 class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMixin, dialogue.BusyIndicatorUser):
     def __init__(self, snapshot_fs, busy_indicator=None, parent=None):
@@ -114,12 +119,20 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
         self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
+        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden"])
+        self.pack_start(bbox, expand=False, fill=True, padding=0)
         self._dir_view.connect("row_activated", self._double_click_cb)
         self._update_above_base_offset_status()
         self.show_all()
     def populate_action_groups(self):
         pass
     def populate_button_groups(self):
+        self.button_groups[actions.AC_DONT_CARE].add_buttons(
+            [
+                ("snapshot_dir_show_hidden", self._dir_view.show_hidden_toggle,
+                 _("Show/hide hidden files and directories."),
+                 self._change_dir_up_bcb),
+            ])
         self.button_groups[AC_ABOVE_BASE_OFFSET].add_buttons(
             [
                 ("snapshot_dir_go_up", Gtk.Button.new_from_icon_name(Gtk.STOCK_GO_UP, Gtk.IconSize.BUTTON),
@@ -127,7 +140,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
                  self._change_dir_up_bcb),
             ])
     def _double_click_cb(self, tree_view, tree_path, tree_view_column):
-        model = tree_view.get_model()
+        model = tree_view.get_model().get_model()
         row = model.get_row(model.get_iter(tree_path))
         if row.is_dir:
             self._current_offset_dir_path = os.path.join(self._current_offset_dir_path, row.name)
@@ -157,8 +170,6 @@ class ExigSnapshotDialog(Gtk.Window):
         self.show_all()
 
 def exig_open_snapshot_file_acb(_action=None):
-#    dialog = dialogue.EnterFilePathDialog(title=_("Enter File Path"), prompt=_("Snapshot File Path:"), existing=True)
-#    snapshot_file_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
     snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
     if snapshot_file_path:
         with dialogue.comforting_message("Unpickling..."):
@@ -168,7 +179,6 @@ def exig_open_snapshot_file_acb(_action=None):
                 dialogue.report_exception_as_error(edata)
                 return
             ExigSnapshotDialog(snapshot_fs).show()
-    #dialog.destroy()
 
 actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     [
