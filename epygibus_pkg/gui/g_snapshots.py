@@ -37,6 +37,74 @@ from . import gutils
 
 AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
+class _ExtractionWidget(Gtk.VBox):
+    def __init__(self, parent=None):
+        Gtk.VBox.__init__(self)
+        self._target_dir = dialogue.EnterDirPathWidget(prompt=_("Target Directory"), suggestion=os.getcwd(), parent=parent)
+        self._start_button = Gtk.Button.new_with_label(_("Start"))
+        self.close_button = Gtk.Button.new_with_label(_("Close"))
+        self.close_button.set_sensitive(False)
+        self.cancel_button = Gtk.Button.new_with_label(_("Cancel"))
+        self._overwrite_button = Gtk.CheckButton.new_with_label(_("Overwrite"))
+        self._progress_indicator = gutils.ProgessThingy()
+        self._stderr_file = gutils.PretendWOFile()
+        self._start_button.connect("clicked", self._start_button_bcb)
+    def _start_button_bcb(self, _button):
+        self.cancel_button.set_sensitive(False)
+        self._target_dir.set_sensitive(False)
+        self._overwrite_button.set_sensitive(False)
+        self._start_button.set_sensitive(False)
+        try:
+            self._do_extraction()
+            self.close_button.set_sensitive(True)
+        except excpns.Error as edata:
+            self._stderr_file.write(str(edata) + "\n")
+            dialogue.report_exception_as_error(edata)
+            self.cancel_button.set_sensitive(True)
+            self._target_dir.set_sensitive(True)
+            self._overwrite_button.set_sensitive(True)
+            self._start_button.set_sensitive(True)
+    def _do_extraction(self):
+        assert False, _("_do_extraction() must be defined in child.")
+
+class _ExtractionDialog(Gtk.Window):
+    WIDGET = None
+    def __init__(self, **kwargs):
+        Gtk.Window.__init__(self)
+        kwargs["parent"] = self
+        widget = self.WIDGET(**kwargs)
+        widget.close_button.connect("clicked", lambda _button: self.destroy())
+        widget.cancel_button.connect("clicked", lambda _button: self.destroy())
+        self.add(widget)
+        self.show_all()
+
+class DirExtractionWidget(_ExtractionWidget):
+    DST = _("Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
+    def __init__(self, snapshot_fs, parent=None):
+        self._snapshot_fs = snapshot_fs
+        _ExtractionWidget.__init__(self, parent=parent)
+        self.pack_start(self._target_dir, expand=False, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self._overwrite_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self._start_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(self._progress_indicator, expand=False, fill=True, padding=0)
+        self.pack_start(self._stderr_file, expand=True, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self.cancel_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self.close_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.show_all()
+    def _do_extraction(self):
+        from .. import utils
+        target_dir_path = os.path.abspath(self._target_dir.path)
+        overwrite = self._overwrite_button.get_active()
+        cs = self._snapshot_fs.copy_contents_to(target_dir_path, overwrite=overwrite, stderr=self._stderr_file, progress_indicator=self._progress_indicator)
+        self._stderr_file.write(self.DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
+
+class DirExtractionDialog(_ExtractionDialog):
+    WIDGET = DirExtractionWidget
+
 DVRow = collections.namedtuple("DVRow", ["name", "icon", "is_dir", "is_link"])
 
 class DVModel(tlview.NamedListStore):
@@ -119,7 +187,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
         self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
-        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden"])
+        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir"])
         self.pack_start(bbox, expand=False, fill=True, padding=0)
         self._dir_view.connect("row_activated", self._double_click_cb)
         self._update_above_base_offset_status()
@@ -131,7 +199,10 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
             [
                 ("snapshot_dir_show_hidden", self._dir_view.show_hidden_toggle,
                  _("Show/hide hidden files and directories."),
-                 self._change_dir_up_bcb),
+                 None),
+                ("snapshot_extract_current_dir", Gtk.Button.new_with_label(_("Extract")),
+                 _("Extract this directory's files and directories to a nominated directory."),
+                 self._extract_this_dir_bcb),
             ])
         self.button_groups[AC_ABOVE_BASE_OFFSET].add_buttons(
             [
@@ -160,6 +231,10 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
             condns =actions.MaskedCondns(AC_ABOVE_BASE_OFFSET, AC_ABOVE_BASE_OFFSET)
         self.button_groups.update_condns(condns)
         self.action_groups.update_condns(condns)
+    def _extract_this_dir_bcb(self, _button):
+        dir_snapshot_fs = self._snapshot_fs.get_subdir(self._current_offset_dir_path)
+        dialog = DirExtractionDialog(snapshot_fs=dir_snapshot_fs)
+        dialog.show()
 
 class ExigSnapshotDialog(Gtk.Window):
     def __init__(self, snapshot_fs, parent=None):
@@ -172,13 +247,12 @@ class ExigSnapshotDialog(Gtk.Window):
 def exig_open_snapshot_file_acb(_action=None):
     snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
     if snapshot_file_path:
-        with dialogue.comforting_message("Unpickling..."):
-            try:
-                snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
-            except (excpns.Error, IOError) as edata:
-                dialogue.report_exception_as_error(edata)
-                return
-            ExigSnapshotDialog(snapshot_fs).show()
+        try:
+            snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
+        except (excpns.Error, IOError) as edata:
+            dialogue.report_exception_as_error(edata)
+            return
+        ExigSnapshotDialog(snapshot_fs).show()
 
 actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     [

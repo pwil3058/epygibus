@@ -61,8 +61,7 @@ class BusyIndicator(object):
         self._count += 1
         if self._count == 1 and self.gdk_window:
             self.gdk_window.set_cursor(Gdk.Cursor(Gdk.WATCH))
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            gutils.yield_to_pending_events()
     def unshow_busy(self):
         if self.parent_indicator:
             self.parent_indicator.unshow_busy()
@@ -364,14 +363,17 @@ class _EnterPathWidget(Gtk.HBox):
         self._parent = parent
         self._path = ReadTextWidget(prompt=prompt, suggestion=suggestion, width_chars=width_chars)
         self._existing = existing
-        b_button = Gtk.Button.new_with_label(_("Browse"))
-        b_button.connect("clicked", self._browse_cb)
+        self.b_button = Gtk.Button.new_with_label(_("Browse"))
+        self.b_button.connect("clicked", self._browse_cb)
         self.pack_start(self._path, expand=True, fill=True, padding=0)
-        self.pack_end(b_button, expand=False, fill=True, padding=0)
+        self.pack_end(self.b_button, expand=False, fill=True, padding=0)
         self.show_all()
     @property
     def path(self):
         return self._path.entry.get_text()
+    def set_sensitive(self, sensitive):
+        self._path.entry.set_editable(sensitive)
+        self.b_button.set_sensitive(sensitive)
     def _browse_cb(self, button=None):
         suggestion = self._path.entry.get_text()
         path = self.SELECT_FUNC(self.SELECT_TITLE, suggestion=suggestion, existing=self._existing, parent=self._parent)

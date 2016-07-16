@@ -125,6 +125,13 @@ class Snapshot(object):
     @property
     def occupancy(self):
         return len(self.subdirs) + len(self.files) + len(self.subdir_links) + len(self.file_links)
+    @property
+    def nfiles(self):
+        # NB this doesn't have to be 100% accurate (just used for progress indicator)
+        count = len(self.files) + len(self.file_links)
+        for subdir in self.subdirs.values():
+            count += subdir.nfiles
+        return count
     def _find_or_add_subdir(self, path_parts, index, attributes):
         name = path_parts[index]
         if index == len(path_parts) - 1:
@@ -188,6 +195,9 @@ class SnapshotPlus(object):
         self._statistics = tuple(statistics[0:-1])
         self._time_statistics = tuple(statistics[-1][0:])
         self._repo_mgmt_key = tuple(repo_mgmt_key[:])
+    @property
+    def nfiles(self):
+        return self.snapshot.nfiles
     @property
     def creation_stats(self):
         return CreationStats(*(self._statistics + (self.time_statistics,)))
@@ -537,6 +547,14 @@ class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "sof
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
+class DummyProgessThingy(object):
+    def set_expected_total(self, total):
+        pass
+    def increment_count(self, by=1):
+        pass
+    def finished(self):
+        pass
+
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), PathComponentsMixin):
     @property
     def attributes(self):
@@ -615,7 +633,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield slink
-    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr):
+    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
         from . import repo
         # Create the target directory if necessary
         create_dir = True
@@ -658,12 +676,14 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
             link_count += subdir_link_data.create_link(orig_curdir, stderr)
         # Now copy the files
+        progress_indicator.set_expected_total(self.snapshot.nfiles)
         hard_links = dict()
         file_count = 0
         gross_size = 0
         net_size = 0
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
+                progress_indicator.increment_count()
                 if file_data.is_hard_linked:
                     if file_data.attributes.st_ino in hard_links:
                         try:
@@ -688,7 +708,9 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 net_size += file_data.attributes.st_size
         # and then make the soft links to files
         for file_link_data in self.iterate_file_links(target_dir_path, True):
+            progress_indicator.increment_count()
             link_count += file_link_data.create_link(orig_curdir, stderr)
+        progress_indicator.finished()
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
     def get_statistics(self):
         from . import repo

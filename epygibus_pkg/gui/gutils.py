@@ -148,3 +148,44 @@ class UpdatableComboBoxText(Gtk.ComboBoxText):
             self.insert_text_item(new_item)
     def _get_updated_item_list(self):
         assert False, "_get_updated_item_list() must be defined in child"
+
+def yield_to_pending_events():
+    while True:
+        Gtk.main_iteration()
+        if not Gtk.events_pending():
+            break
+
+class ProgessThingy(Gtk.ProgressBar):
+    def set_expected_total(self, total):
+        nsteps = min(100, max(total, 1))
+        self._numerator = 0.0
+        self._denominator = max(float(total), 1.0)
+        self._step = self._denominator / float(nsteps)
+        self._next_kick = self._step
+        self.set_fraction(0.0)
+    def increment_count(self, by=1):
+        self._numerator += by
+        if self._numerator > self._next_kick:
+            self.set_fraction(min(self._numerator / self._denominator, 1.0))
+            self._next_kick += self._step
+            yield_to_pending_events()
+    def finished(self):
+        self.set_fraction(1.0)
+
+class PretendWOFile(Gtk.ScrolledWindow):
+    def __init__(self):
+        Gtk.ScrolledWindow.__init__(self)
+        self.set_hexpand(True)
+        self.set_vexpand(True)
+        self._view = Gtk.TextView()
+        self.add(self._view)
+        self.show_all()
+    def write(self, text):
+        bufr = self._view.get_buffer()
+        bufr.insert(bufr.get_end_iter(), text)
+    def write_lines(self, lines):
+        # take advantage of default "insert-text" handler's updating the iterator
+        bufr = self._view.get_buffer()
+        bufr_iter = bufr.get_end_iter()
+        for line in lines:
+            bufr.insert(bufr_iter, line)
