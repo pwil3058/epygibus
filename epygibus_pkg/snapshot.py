@@ -25,6 +25,7 @@ import errno
 import sys
 import re
 import io
+import time
 
 from .w2and3 import pickle, PICKLE_PROTOCOL
 
@@ -55,17 +56,31 @@ class PathComponentsMixin:
     def dir_path(self):
         return os.path.dirname(self.path)
 
+_MOVEASIDE_FILE_SUFFIX_TEMPLATE = ".ema.%Y-%m-%d-%H-%M-%S"
+def move_aside_file_path(file_path):
+    return file_path + time.strftime(_MOVEASIDE_FILE_SUFFIX_TEMPLATE, time.localtime())
+
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), PathComponentsMixin):
     def open_read_only(self, binary=False):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             return repo_mgr.open_contents_read_only(self.content_token, binary=binary)
+    def move_target_aside(self, repo_mgr, target_file_path, overwrite=False):
+        attributes = self.attributes
+        if os.path.exists(target_file_path):
+            if os.path.isfile(target_file_path):
+                if repo_mgr.check_contents(target_file_path, self.content_token):
+                    return None # Nothing to do
+                attributes = ATTRS_NAMED(*get_attr_tuple(target_file_path))
+            if not overwrite: # move it out of the way
+                os.rename(target_file_path, move_aside_file_path(target_file_path))
+        return attributes
     def copy_contents_to(self, target_file_path, overwrite=False):
         from . import repo
-        if not overwrite and os.path.isfile(target_file_path):
-            raise excpns.FileOverwriteError(target_file_path)
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
-            repo_mgr.copy_contents_to(self.content_token, target_file_path, self.attributes)
+            attributes = self.move_target_aside(repo_mgr, target_file_path, overwrite)
+            if attributes is not None: # contents of target are the same as ours
+                repo_mgr.copy_contents_to(self.content_token, target_file_path, attributes)
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -78,7 +93,25 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1], repo_mgmt_key)
 
 class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), PathComponentsMixin):
-    def create_link(self, orig_curdir, stderr):
+    @property
+    def tgt_abs_path(self):
+        return utils.calc_link_tgt_abs_path(self.tgt_path, self.path)
+    def create_link(self, orig_curdir, stderr, overwrite=False):
+        attributes = self.attributes
+        if os.path.exists(self.path):
+            if os.path.islink(self.path):
+                attributes = ATTRS_NAMED(*get_attr_tuple(self.path))
+                if self.tgt_abs_path == utils.get_link_tgt_abs_path(self.path):
+                    return 0 # nothing to do
+            if not overwrite:
+                try:
+                    os.rename(self.path, move_aside_file_path(self.path))
+                except EnvironmentError as edata:
+                    # Don't overwrite but report problem
+                    stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
+                    return 0
+        return self._create_link(orig_curdir, stderr, attributes)
+    def _create_link(self, orig_curdir, stderr, attributes):
         try:
             #if the file exists we have to remove it or get stat.EEXIST error
             if os.path.islink(self.path) or os.path.isfile(self.path):
@@ -95,11 +128,11 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
             else:
                 os.symlink(self.tgt_path, self.path)
             try:
-                os.lchmod(self.path, self.attributes.st_mode)
+                os.lchmod(self.path, attributes.st_mode)
             except AttributeError:
                 # NB: some systems don't support lchmod())
-                os.chmod(self.path, self.attributes.st_mode)
-            os.lchown(self.path, self.attributes.st_uid, self.attributes.st_gid)
+                os.chmod(self.path, attributes.st_mode)
+            os.lchown(self.path, attributes.st_uid, attributes.st_gid)
             return 1
         except EnvironmentError as edata:
             # report the error and move on (we have permission to wreak havoc)
@@ -355,7 +388,7 @@ class SnapshotGenerator(object):
         # let the caller handle OSError exceptions
         # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
-        abs_target_path = utils.get_link_abs_path(target_path, file_path)
+        abs_target_path = utils.calc_link_tgt_abs_path(target_path, file_path)
         target_valid = os.path.isfile(abs_target_path)
         if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
@@ -369,7 +402,7 @@ class SnapshotGenerator(object):
         # let the caller handle OSError exceptions
         # NB don't check for previous inclusion as no harm done
         target_path = os.readlink(file_path)
-        abs_target_path = utils.get_link_abs_path(target_path, file_path)
+        abs_target_path = utils.calc_link_tgt_abs_path(target_path, file_path)
         target_valid = os.path.isdir(abs_target_path)
         if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
@@ -636,33 +669,29 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
         from . import repo
         # Create the target directory if necessary
-        create_dir = True
         dir_count = 0
-        if os.path.exists(target_dir_path):
-            if os.path.isdir(target_dir_path):
-                create_dir = False
-                if not overwrite:
-                    ow_items = [f for f in self.iterate_files(target_dir_path, True) if os.path.exists(f.path)]
-                    ow_items += [f for f in self.iterate_file_links(target_dir_path, True) if os.path.exists(f.path)]
-                    ow_items += [f for f in self.iterate_subdir_links(target_dir_path, True) if os.path.exists(f.path)]
-                    if ow_items:
-                        raise excpns.SubdirOverwriteError(target_dir_path, len(ow_items))
-            elif overwrite:
+        processed_dir_count = 1
+        if os.path.exists(target_dir_path) and not os.path.isdir(target_dir_path):
+            if overwrite:
                 # remove the file to make way for the directory
                 os.remove(target_dir_path)
             else:
-                raise excpns.FileOverwriteError(target_dir_path)
-        if create_dir:
+                os.rename(target_dir_path, move_aside_file_path(target_dir_path))
+        if not os.path.isdir(target_dir_path):
             os.mkdir(target_dir_path, self.attributes.st_mode)
             os.lchown(target_dir_path, self.attributes.st_uid, self.attributes.st_gid)
             dir_count += 1
         # Now create the subdirs
         for subdir in self.iterate_subdirs(target_dir_path, True):
+            processed_dir_count += 1
             try:
                 if os.path.isdir(subdir.path):
                     continue
                 elif os.path.exists(subdir.path):
-                    os.remove(subdir.path)
+                    if overwrite:
+                        os.remove(subdir.path)
+                    else:
+                        os.rename(subdir.path, move_aside_file_path(subdir.path))
                 os.mkdir(subdir.path, subdir.attributes.st_mode)
                 dir_count += 1
                 os.lchown(subdir.path, subdir.attributes.st_uid, subdir.attributes.st_gid)
@@ -673,43 +702,54 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
         # and subdir links
         orig_curdir = os.getcwd()
         link_count = 0
+        processed_link_count = 0
         for subdir_link_data in self.iterate_subdir_links(target_dir_path, True):
-            link_count += subdir_link_data.create_link(orig_curdir, stderr)
+            processed_link_count += 1
+            link_count += subdir_link_data.create_link(orig_curdir, stderr, overwrite)
         # Now copy the files
         progress_indicator.set_expected_total(self.snapshot.nfiles)
         hard_links = dict()
+        processed_file_count = 0
+        processed_gross_size = 0
+        processed_net_size = 0
         file_count = 0
         gross_size = 0
         net_size = 0
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             for file_data in self.iterate_files(target_dir_path, True):
                 progress_indicator.increment_count()
-                if file_data.is_hard_linked:
-                    if file_data.attributes.st_ino in hard_links:
-                        try:
-                            os.link(hard_links[file_data.attributes.st_ino].path, file_data.path)
-                            file_count += 1
-                            gross_size += file_data.attributes.st_size
-                        except EnvironmentError as edata:
-                            # report the error and move on (we have permission to wreak havoc)
-                            stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.attributes.st_ino].path, edata.strerror))
+                processed_file_count += 1
+                processed_gross_size += file_data.attributes.st_size
+                processed_net_size += file_data.attributes.st_size
+                attributes = file_data.move_target_aside(repo_mgr, file_data.path, overwrite)
+                if attributes is not None:
+                    if file_data.is_hard_linked:
+                        if file_data.attributes.st_ino in hard_links:
+                            try:
+                                os.link(hard_links[file_data.attributes.st_ino].path, file_data.path)
+                                file_count += 1
+                                gross_size += file_data.attributes.st_size
+                            except EnvironmentError as edata:
+                                # report the error and move on (we have permission to wreak havoc)
+                                stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.attributes.st_ino].path, edata.strerror))
+                            continue
+                        else:
+                            hard_links[file_data.attributes.st_ino] = file_data
+                    try:
+                        repo_mgr.copy_contents_to(file_data.content_token, file_data.path, file_data.attributes)
+                    except excpns.CopyFileFailed as edata:
+                        stderr.write(str(edata) + "\n")
                         continue
-                    else:
-                        hard_links[file_data.attributes.st_ino] = file_data
-                try:
-                    repo_mgr.copy_contents_to(file_data.content_token, file_data.path, file_data.attributes)
-                except excpns.CopyFileFailed as edata:
-                    stderr.write(str(edata) + "\n")
-                    continue
-                except excpns.SetAttributesFailed as edata:
-                    stderr.write(str(edata) + "\n")
-                file_count += 1
-                gross_size += file_data.attributes.st_size
-                net_size += file_data.attributes.st_size
+                    except excpns.SetAttributesFailed as edata:
+                        stderr.write(str(edata) + "\n")
+                    file_count += 1
+                    gross_size += file_data.attributes.st_size
+                    net_size += file_data.attributes.st_size
         # and then make the soft links to files
         for file_link_data in self.iterate_file_links(target_dir_path, True):
             progress_indicator.increment_count()
-            link_count += file_link_data.create_link(orig_curdir, stderr)
+            processed_link_count += 1
+            link_count += file_link_data.create_link(orig_curdir, stderr, overwrite)
         progress_indicator.finished()
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
     def get_statistics(self):
@@ -896,32 +936,32 @@ def exig_copy_subdir_to(snapshot_dir_path, subdir_path, into_dir_path, seln_fn=l
     copy_stats = _copy_subdir_to(snapshot_fs, subdir_path, into_dir_path, as_name=as_name, overwrite=overwrite, stderr=stderr)
     return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
-def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1]):
+def restore_file(archive_name, file_path, seln_fn=lambda l: l[-1], overwrite=False):
     start_times = bmark.get_os_times()
     abs_file_path = absolute_path(file_path)
     file_data = get_snapshot_fs(archive_name, seln_fn).get_file(abs_file_path)
-    file_data.copy_contents_to(abs_file_path, overwrite=True)
+    file_data.copy_contents_to(abs_file_path, overwrite=overwrite)
     return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
 
-def exig_restore_file(snapshot_dir_path, file_path, seln_fn=lambda l: l[-1]):
+def exig_restore_file(snapshot_dir_path, file_path, seln_fn=lambda l: l[-1], overwrite=False):
     start_times = bmark.get_os_times()
     abs_file_path = absolute_path(file_path)
     file_data = get_snapshot_fs_exig(snapshot_dir_path, seln_fn).get_file(abs_file_path)
-    file_data.copy_contents_to(abs_file_path, overwrite=True)
+    file_data.copy_contents_to(abs_file_path, overwrite=overwrite)
     return (file_data.attributes.st_size, (bmark.get_os_times() - start_times).get_etd())
 
-def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
+def restore_subdir(archive_name, subdir_path, seln_fn=lambda l: l[-1], overwrite=False, stderr=sys.stderr):
     start_times = bmark.get_os_times()
     abs_subdir_path = absolute_path(subdir_path)
     snapshot_subdir_ss = get_snapshot_fs(archive_name, seln_fn).get_subdir(abs_subdir_path)
-    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=overwrite, stderr=stderr)
     return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
-def exig_restore_subdir(snapshot_dir_path, subdir_path, seln_fn=lambda l: l[-1], stderr=sys.stderr):
+def exig_restore_subdir(snapshot_dir_path, subdir_path, seln_fn=lambda l: l[-1], overwrite=False, stderr=sys.stderr):
     start_times = bmark.get_os_times()
     abs_subdir_path = absolute_path(subdir_path)
     snapshot_subdir_ss = get_snapshot_fs_exig(snapshot_dir_path, seln_fn).get_subdir(abs_subdir_path)
-    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=True, stderr=stderr)
+    copy_stats = snapshot_subdir_ss.copy_contents_to(abs_subdir_path, overwrite=overwrite, stderr=stderr)
     return (copy_stats, (bmark.get_os_times() - start_times).get_etd())
 
 def get_snapshot_file_path(archive_name, seln_fn=lambda l: l[-1]):

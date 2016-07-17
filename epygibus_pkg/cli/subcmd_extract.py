@@ -73,11 +73,7 @@ PARSER.add_argument(
     metavar = _("name"),
 )
 
-PARSER.add_argument(
-    "--overwrite",
-    help = _("overwrite the file/directory if it already exists."),
-    action = "store_true",
-)
+cmd.add_cmd_argument(PARSER, cmd.OVERWRITE_ARG())
 
 PARSER.add_argument(
     "--stats",

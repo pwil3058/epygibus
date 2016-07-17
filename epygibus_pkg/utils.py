@@ -56,14 +56,17 @@ def uncompress_file(file_path):
 def is_rel_path(path):
     return not os.path.isabs(os.path.expanduser(path))
 
-def get_link_abs_path(link_path, file_path):
-    e_path = os.path.expanduser(link_path)
+def calc_link_tgt_abs_path(link_tgt_path, link_file_path):
+    e_path = os.path.expanduser(link_tgt_path)
     if os.path.isabs(e_path):
         return e_path
-    return os.path.abspath(os.path.join(os.path.dirname(file_path), link_path))
+    return os.path.abspath(os.path.join(os.path.dirname(link_file_path), link_tgt_path))
 
-def is_broken_link(link_path, file_path):
-    return not os.path.exists(get_link_abs_path(link_path, file_path))
+def get_link_tgt_abs_path(link_file_path):
+    return calc_link_tgt_abs_path(os.readlink(link_file_path), link_file_path)
+
+def is_broken_link(link_tgt_path, link_file_path):
+    return not os.path.exists(calc_link_tgt_abs_path(link_tgt_path, link_file_path))
 
 def create_flag_generator():
     """

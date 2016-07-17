@@ -101,4 +101,11 @@ UNCOMPRESSED_ARG = lambda help_msg=_("store data uncompressed."): _ARG_SPEC(
     }
 )
 
+OVERWRITE_ARG = lambda help_msg=_("overwrite a file/directory if it already exists instead of moving it aside."): _ARG_SPEC(
+    ["--overwrite"],
+    {   "help": help_msg,
+        "action": "store_true",
+    }
+)
+
 SUB_CMD_PARSER = PARSER.add_subparsers(title=_("commands"))

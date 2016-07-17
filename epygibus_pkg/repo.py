@@ -98,6 +98,10 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             # rejected due to time penalties (3 orders of magnitude) on
             # slow file systems such as cifs mounted network devices
         return content_token
+    def check_contents(self, file_path, content_token):
+        with io.open(file_path, "rb") as f_in:
+            file_content_token = hashlib.sha1(f_in.read()).hexdigest()
+        return content_token == file_content_token
     def _content_stored_size(self, *token_parts):
         file_path = os.path.join(self.base_dir_path, *token_parts)
         if self.compressed: # try compressed first
