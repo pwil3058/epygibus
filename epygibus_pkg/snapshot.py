@@ -106,7 +106,7 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
             if not overwrite:
                 try:
                     os.rename(self.path, move_aside_file_path(self.path))
-                except EnvironmentError as edata:
+                except OSError as edata:
                     # Don't overwrite but report problem
                     stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
                     return 0
@@ -134,7 +134,7 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
                 os.chmod(self.path, attributes.st_mode)
             os.lchown(self.path, attributes.st_uid, attributes.st_gid)
             return 1
-        except EnvironmentError as edata:
+        except OSError as edata:
             # report the error and move on (we have permission to wreak havoc)
             stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
             return 0
@@ -376,7 +376,7 @@ class SnapshotGenerator(object):
             return
         try: # it's possible content manager got environment error reading file, if so skip it and report
             content_token = repo_mgr.store_contents(file_path)
-        except EnvironmentError as edata:
+        except OSError as edata:
             self.stderr.write(_("Error: saving \"{}\" content failed: {}. Skipping.\n").format(file_path, edata.strerror))
             return
         file_attrs = get_attr_tuple(file_path)
@@ -495,7 +495,7 @@ class SnapshotGenerator(object):
                         abs_target_path = self._include_file_link(subdir_ss, file_name, abs_item_path)
                         if abs_target_path:
                             abs_file_link_target_paths.append(abs_target_path)
-                except EnvironmentError as edata:
+                except OSError as edata:
                     self.stderr.write(_("Error: processing link {} failed: {}: Skipping.\n").format(abs_item_path, edata.strerror))
             elif os.path.isfile(abs_item_path):
                 abs_dir_path, file_name = os.path.split(abs_item_path)
@@ -505,12 +505,12 @@ class SnapshotGenerator(object):
                         start_counts = repo_mgr.get_counts()
                         self._include_file(subdir_ss, file_name, abs_item_path, repo_mgr)
                         self._adjust_item_stats(start_counts, repo_mgr.get_counts())
-                except EnvironmentError as edata:
+                except OSError as edata:
                     self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
             elif os.path.isdir(abs_item_path):
                 try:
                     self._include_dir(abs_item_path)
-                except EnvironmentError as edata:
+                except OSError as edata:
                     self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
             elif item == abs_item_path:
                 if os.path.exists(abs_item_path):
@@ -526,7 +526,7 @@ class SnapshotGenerator(object):
             # NB: no point testing for directory existence as mere existence doesn't mean it's fully processed
             try:
                 self._include_dir(abs_item_path)
-            except EnvironmentError as edata:
+            except OSError as edata:
                 self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             start_counts = repo_mgr.get_counts()
@@ -536,7 +536,7 @@ class SnapshotGenerator(object):
                     subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
                     # _include_file() checks that file isn't already included
                     self._include_file(subdir_ss, file_name, abs_item_path, repo_mgr)
-                except EnvironmentError as edata:
+                except OSError as edata:
                     self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
             self._adjust_item_stats(start_counts, repo_mgr.get_counts())
         self.elapsed_time = bmark.get_os_times() - start_time
@@ -696,7 +696,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 dir_count += 1
                 os.lchown(subdir.path, subdir.attributes.st_uid, subdir.attributes.st_gid)
                 dir_count += 1
-            except EnvironmentError as edata:
+            except OSError as edata:
                 # report the error and move on (we have permission to wreak havoc)
                 stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         # and subdir links
@@ -729,7 +729,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                                 os.link(hard_links[file_data.attributes.st_ino].path, file_data.path)
                                 file_count += 1
                                 gross_size += file_data.attributes.st_size
-                            except EnvironmentError as edata:
+                            except OSError as edata:
                                 # report the error and move on (we have permission to wreak havoc)
                                 stderr.write(_("Error: hard linking \"{}\" to \"{}\": {}\n").format(file_data.path, hard_links[file_data.attributes.st_ino].path, edata.strerror))
                             continue
@@ -882,14 +882,12 @@ def create_new_archive(archive_name, location_dir_path, repo_spec, includes, exc
     )
     try:
         os.makedirs(base_dir_path)
-    except EnvironmentError as edata:
+    except FileExistsError:
         config.delete_archive_spec(archive_name)
-        if edata.errno == errno.EEXIST:
-            raise excpns.SnapshotArchiveLocationExists(archive_name)
-        elif edata.errno == errno.EPERM or edata.errno == errno.EACCES:
-            raise excpns.SnapshotArchiveLocationNoPerm(archive_name)
-        else:
-            raise edata
+        raise excpns.SnapshotArchiveLocationExists(archive_name)
+    except PermissionError:
+        config.delete_archive_spec(archive_name)
+        raise excpns.SnapshotArchiveLocationNoPerm(archive_name)
 
 def _copy_file_to(snapshot_fs, file_path, into_dir_path, as_name=None, overwrite=False):
     file_data = snapshot_fs.get_file(absolute_path(file_path))

@@ -21,7 +21,6 @@ from __future__ import unicode_literals
 import os
 import sys
 import collections
-import errno
 import io
 
 from . import APP_NAME
@@ -61,11 +60,8 @@ def read_archive_spec(archive_name, stderr=sys.stderr):
         includes = [f.strip() for f in _includes_file_lines(archive_name)]
         dir_excludes_globs = [glob.rstrip() for glob in _exclude_dir_lines(archive_name)]
         file_excludes_globs = [glob.rstrip() for glob in _exclude_file_lines(archive_name)]
-    except IOError as edata:
-        if edata.errno == errno.ENOENT:
-            raise excpns.UnknownSnapshotArchive(archive_name)
-        else:
-            raise edata
+    except FileNotFoundError:
+        raise excpns.UnknownSnapshotArchive(archive_name)
     return Archive(archive_name, repo, p_dir_path, includes, dir_excludes_globs, file_excludes_globs, eval(skip), eval(compress_default))
 
 def write_archive_spec(archive_name, location_dir_path, repo_name, includes, exclude_dir_globs, exclude_file_globs, skip_broken_sl=True, compress_default=True):
@@ -76,11 +72,8 @@ def write_archive_spec(archive_name, location_dir_path, repo_name, includes, exc
         io.open(_archive_includes_path(archive_name), "w").writelines([i + os.linesep for i in includes])
         io.open(_archive_exclude_dirs_path(archive_name), "w").writelines([x + os.linesep for x in exclude_dir_globs])
         io.open(_archive_exclude_files_path(archive_name), "w").writelines([x + os.linesep for x in exclude_file_globs])
-    except OSError as edata:
-        if edata.errno == errno.EEXIST:
-            raise excpns.SnapshotArchiveExists(archive_name)
-        else:
-            raise edata
+    except FileExistsError:
+        raise excpns.SnapshotArchiveExists(archive_name)
     return base_dir_path
 
 def delete_archive_spec(archive_name):
@@ -90,11 +83,8 @@ def delete_archive_spec(archive_name):
         os.remove(_archive_exclude_dirs_path(archive_name))
         os.remove(_archive_exclude_files_path(archive_name))
         os.rmdir(_archive_dir_path(archive_name))
-    except IOError as edata:
-        if edata.errno == errno.ENOENT:
-            raise excpns.UnknownSnapshotArchive(archive_name)
-        else:
-            raise edata
+    except FileNotFoundError:
+        raise excpns.UnknownSnapshotArchive(archive_name)
 
 Repo = collections.namedtuple("Repo", ["name", "base_dir_path", "compressed"])
 
@@ -102,11 +92,8 @@ def read_repo_spec(repo_name):
     from . import excpns
     try:
         base_dir_path, compressed = _repo_config_lines(repo_name)
-    except EnvironmentError as edata:
-        if edata.errno == errno.ENOENT:
-            raise excpns.UnknownRepository(repo_name)
-        else:
-            raise edata
+    except FileNotFoundError:
+        raise excpns.UnknownRepository(repo_name)
     return Repo(repo_name, base_dir_path, eval(compressed))
 
 def write_repo_spec(repo_name, in_dir_path, compressed=True):
@@ -120,11 +107,8 @@ def write_repo_spec(repo_name, in_dir_path, compressed=True):
 def delete_repo_spec(repo_name):
     try:
         os.remove(_repo_file_path(repo_name))
-    except EnvironmentError as edata:
-        if edata.errno == errno.ENOENT:
-            raise excpns.UnknownRepository(repo_name)
-        else:
-            raise edata
+    except FileNotFoundError:
+        raise excpns.UnknownRepository(repo_name)
 
 def get_includes_file_path(archive_name):
     return _archive_includes_path(archive_name)

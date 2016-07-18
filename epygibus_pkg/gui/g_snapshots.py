@@ -249,7 +249,7 @@ def exig_open_snapshot_file_acb(_action=None):
     if snapshot_file_path:
         try:
             snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
-        except (excpns.Error, IOError) as edata:
+        except (excpns.Error, OSError) as edata:
             dialogue.report_exception_as_error(edata)
             return
         ExigSnapshotDialog(snapshot_fs).show()

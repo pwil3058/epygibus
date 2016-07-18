@@ -19,7 +19,6 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
-import errno
 import sys
 
 from . import cmd
@@ -70,7 +69,7 @@ def run_cmd(args):
             file_path = config.get_exclude_files_file_path(args.archive_name)
         editor = os.environ.get("EDITOR", "vi")
         os.execlp(editor, editor, file_path)
-    except EnvironmentError as edata:
+    except OSError as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
     return 0

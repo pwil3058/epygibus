@@ -102,7 +102,7 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-1)
-    except EnvironmentError as edata:
+    except OSError as edata:
         sys.stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
         sys.exit(-1)
     return 0

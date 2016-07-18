@@ -20,7 +20,6 @@ from __future__ import unicode_literals
 
 import hashlib
 from contextlib import contextmanager
-import errno
 import gzip
 import os
 import collections
@@ -107,12 +106,12 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         if self.compressed: # try compressed first
             try: # but allow for the case that they've been uncompressed
                 return os.path.getsize(file_path + ".gz")
-            except EnvironmentError:
+            except FileNotFoundError:
                 return os.path.getsize(file_path)
         else: # try uncompressed first
             try: # but allow for the case that they've been compressed
                 return os.path.getsize(file_path)
-            except EnvironmentError:
+            except FileNotFoundError:
                 return os.path.getsize(file_path + ".gz")
     def get_content_storage_stats(self, content_token):
         dir_name, subdir_name, file_name = _split_content_token(content_token)
@@ -160,9 +159,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                     file_path = os.path.join(self.base_dir_path, dir_name, subdir_name, file_name)
                     try: # try the default first
                         os.remove(file_path + ".gz")
-                    except EnvironmentError as edata:
-                        if edata.errno != errno.ENOENT:
-                            raise edata
+                    except FileNotFoundError:
                         os.remove(file_path)
                     del subdir_data[file_name]
                 if rm_empty_subdirs and len(dir_data[subdir_name]) == 0:
@@ -177,9 +174,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
             return gzip.open(file_path + ".gz", "rb" if binary else "rt")
-        except EnvironmentError as edata:
-            if edata.errno != errno.ENOENT:
-                raise edata
+        except FileNotFoundError:
             return io.open(file_path, "rb" if binary else "r")
     def copy_contents_to(self, content_token, target_file_path, attributes):
         from . import excpns
@@ -189,18 +184,16 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 try: # try compressed first as that is the default
                     with gzip.open(file_path + ".gz", "rb") as f_in:
                         shutil.copyfileobj(f_in, f_out)
-                except EnvironmentError as edata:
-                    if edata.errno != errno.ENOENT:
-                        raise edata
+                except FileNotFoundError:
                     with io.open(file_path, "rb") as f_in:
                         shutil.copyfileobj(f_in, f_out)
-        except EnvironmentError as edata:
+        except OSError as edata:
             raise excpns.CopyFileFailed(target_file_path, os.strerror(edata.errno))
         try:
             os.chmod(target_file_path, attributes.st_mode)
             os.utime(target_file_path, (attributes.st_atime, attributes.st_mtime))
             os.chown(target_file_path, attributes.st_uid, attributes.st_gid)
-        except EnvironmentError as edata:
+        except OSError as edata:
             raise excpns.SetAttributesFailed(target_file_path, os.strerror(edata.errno))
 
 @contextmanager
@@ -222,13 +215,10 @@ def initialize_repo(repo_spec):
     from . import excpns
     try:
         os.makedirs(repo_spec.base_dir_path)
-    except EnvironmentError as edata:
-        if edata.errno == errno.EEXIST:
-            raise excpns.RepositoryLocationExists(repo_spec.name)
-        elif edata.errno == errno.EPERM or edata.errno == errno.EACCES:
-            raise excpns.RepositoryLocationNoPerm(repo_spec.name)
-        else:
-            raise edata
+    except FileExistsError:
+        raise excpns.RepositoryLocationExists(repo_spec.name)
+    except PermissionError:
+        raise excpns.RepositoryLocationNoPerm(repo_spec.name)
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
     pickle.dump(dict(), io.open(ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
@@ -240,7 +230,7 @@ def create_new_repo(repo_name, location_dir_path, compressed):
     repo_spec = config.write_repo_spec(repo_name, location_dir_path, compressed)
     try:
         initialize_repo(repo_spec)
-    except (EnvironmentError, excpns.Error) as edata:
+    except (OSError, excpns.Error) as edata:
         config.delete_repo_spec(repo_spec.name)
         raise edata
 
