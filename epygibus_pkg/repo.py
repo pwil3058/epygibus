@@ -27,7 +27,7 @@ import collections
 import io
 import shutil
 
-from .w2and3 import pickle, PICKLE_PROTOCOL
+import pickle
 
 _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
@@ -176,7 +176,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         # NB since this doen't use ref count data it doesn't need locking
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
-            return gzip.open(file_path + ".gz", "rb" if binary else "r")
+            return gzip.open(file_path + ".gz", "rb" if binary else "rt")
         except EnvironmentError as edata:
             if edata.errno != errno.ENOENT:
                 raise edata
@@ -215,7 +215,7 @@ def open_repo_mgr(repo_mgmt_key, writeable=False):
         finally:
             if writeable:
                 with io.open(repo_mgmt_key.ref_counter_path, "wb") as ref_out:
-                    pickle.dump(ref_counter, ref_out, PICKLE_PROTOCOL)
+                    pickle.dump(ref_counter, ref_out, pickle.HIGHEST_PROTOCOL)
             fcntl.lockf(fobj, fcntl.LOCK_UN)
 
 def initialize_repo(repo_spec):
@@ -230,7 +230,7 @@ def initialize_repo(repo_spec):
         else:
             raise edata
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
-    pickle.dump(dict(), io.open(ref_counter_path, "wb"), PICKLE_PROTOCOL)
+    pickle.dump(dict(), io.open(ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
     io.open(lock_file_path, "wb").write(b"content_repo_lock")
 

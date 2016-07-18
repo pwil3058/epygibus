@@ -27,7 +27,7 @@ import re
 import io
 import time
 
-from .w2and3 import pickle, PICKLE_PROTOCOL
+import pickle
 
 from . import excpns
 from . import bmark
@@ -556,7 +556,7 @@ class SnapshotGenerator(object):
         else:
             io_module = io
         with io_module.open(snapshot_file_path, "wb") as fobj:
-            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), fobj, PICKLE_PROTOCOL)
+            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), fobj, pickle.HIGHEST_PROTOCOL)
         self._snapshot = None # for refernce count purposes we don't care if the permissions get set
         os.chmod(snapshot_file_path, permissions)
         return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))

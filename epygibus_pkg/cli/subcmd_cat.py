@@ -48,14 +48,9 @@ def run_cmd(args):
     except excpns.Error as edata:
         sys.stderr.write(str(edata) + "\n")
         sys.exit(-2)
-    contents = file_data.open_read_only().read()
+    contents = file_data.open_read_only(binary=False).read()
     for line in contents.splitlines(True):
-        # WORKAROUND: Cope with Python 2.7.x/3.4.x I/O differences
-        # NB: whether this fires depends on whether io or gzip opened the file so don't try simpler fix.
-        try:
-            sys.stdout.write(line)
-        except TypeError:
-            sys.stdout.write(line.decode())
+        sys.stdout.write(line)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)
