@@ -66,6 +66,7 @@ def _auto_update_cb(events_so_far, _args):
 auto_update.register_cb(_auto_update_cb)
 
 class RepoTableData(table.TableData):
+    __g_type_name__ = "RepoTableData"
     def _get_data_text(self, h):
         repo_spec_list = config.get_repo_spec_list()
         h.update(str(repo_spec_list).encode())
@@ -77,6 +78,7 @@ class RepoTableData(table.TableData):
             yield repo_spec
 
 class RepoListModel(table.MapManagedTableView.Model):
+    __g_type_name__ = "RepoListModel"
     Row = config.Repo
     types = Row(name=GObject.TYPE_STRING, base_dir_path=GObject.TYPE_STRING, compressed=GObject.TYPE_BOOLEAN,)
 
@@ -98,6 +100,7 @@ def _repo_list_spec():
     return specification
 
 class RepoListView(table.MapManagedTableView):
+    __g_type_name__ = "RepoListView"
     Model = RepoListModel
     PopUp = None
     SET_EVENTS = 0
@@ -115,6 +118,7 @@ class RepoListView(table.MapManagedTableView):
         return RepoTableData()
 
 class RepoListWidget(table.TableWidget):
+    __g_type_name__ = "RepoListWidget"
     View = RepoListView
 
 class RepoStatsRow(collections.namedtuple("RepoSt", ["references", "referenced_items", "referenced_content_bytes", "referenced_stored_bytes", "unreferenced_items", "unreferenced_content_bytes", "unreferenced_stored_bytes"])):
@@ -154,6 +158,7 @@ class RepoStatsTableData(table.TableData):
             yield RSRow(repo_name, nitems, content_bytes, stored_bytes, references, referenced_items, referenced_content_bytes, referenced_stored_bytes, unreferenced_items, unreferenced_content_bytes, unreferenced_stored_bytes)
 
 class RepoStatsListView(table.MapManagedTableView):
+    __g_type_name__ = "RepoStatsListView"
     class Model(tlview.NamedListStore):
         Row = RSRow
         types = Row(name=GObject.TYPE_STRING,
@@ -180,7 +185,6 @@ class RepoStatsListView(table.MapManagedTableView):
       </popup>
     </ui>
     """
-    #hdrs_and_flds = (
     specification = table.simple_text_specification(Model,
         (_("Name"), "name", 0.0),
         (_("#Items"), "nitems", 1.0),
@@ -217,9 +221,11 @@ class RepoStatsListView(table.MapManagedTableView):
         return RepoStatsTableData()
 
 class RepoStatsListWidget(table.TableWidget):
+    __g_type_name__ = "RepoStatsListWidget"
     View = RepoStatsListView
 
 class NewRepoWidget(Gtk.VBox):
+    __g_type_name__ = "NewRepoWidget"
     def __init__(self):
         Gtk.VBox.__init__(self)
         name_label = Gtk.Label()
@@ -257,6 +263,7 @@ class NewRepoWidget(Gtk.VBox):
         return True
 
 class NewRepoDialog(dialogue.CancelOKDialog):
+    __g_type_name__ = "NewRepoDialog"
     def __init__(self, parent=None):
         dialogue.CancelOKDialog.__init__(self, title=_("Create New Repo"), parent=parent)
         self.new_repo_widget = NewRepoWidget()
@@ -264,6 +271,7 @@ class NewRepoDialog(dialogue.CancelOKDialog):
         self.show_all()
 
 class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
+    __g_type_name__ = "RepoComboBox"
     def __init__(self):
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
@@ -279,6 +287,7 @@ class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
         return None
 
 class ReposWidget(Gtk.VBox, actions.CAGandUIManager):
+    __g_type_name__ = "ReposWidget"
     UI_DESCR = """
     <ui>
         <toolbar name="RepoToolBar">

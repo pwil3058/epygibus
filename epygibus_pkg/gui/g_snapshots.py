@@ -33,6 +33,7 @@ from . import gutils
 AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
 class _ExtractionWidget(Gtk.VBox):
+    __g_type_name__ = "_ExtractionWidget"
     def __init__(self, parent=None):
         Gtk.VBox.__init__(self)
         self._target_dir = dialogue.EnterDirPathWidget(prompt=_("Target Directory"), suggestion=os.getcwd(), parent=parent)
@@ -63,6 +64,7 @@ class _ExtractionWidget(Gtk.VBox):
         assert False, _("_do_extraction() must be defined in child.")
 
 class _ExtractionDialog(Gtk.Window):
+    __g_type_name__ = "_ExtractionDialog"
     WIDGET = None
     def __init__(self, **kwargs):
         Gtk.Window.__init__(self)
@@ -74,6 +76,7 @@ class _ExtractionDialog(Gtk.Window):
         self.show_all()
 
 class DirExtractionWidget(_ExtractionWidget):
+    __g_type_name__ = "DirExtractionWidget"
     DST = _("Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
     def __init__(self, snapshot_fs, parent=None):
         self._snapshot_fs = snapshot_fs
@@ -98,11 +101,13 @@ class DirExtractionWidget(_ExtractionWidget):
         self._stderr_file.write(self.DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
 
 class DirExtractionDialog(_ExtractionDialog):
+    __g_type_name__ = "DirExtractionDialog"
     WIDGET = DirExtractionWidget
 
 DVRow = collections.namedtuple("DVRow", ["name", "icon", "is_dir", "is_link"])
 
 class DVModel(tlview.NamedListStore):
+    __g_type_name__ = "DVModel"
     Row = DVRow
     types = DVRow(name=GObject.TYPE_STRING, icon=GObject.TYPE_STRING, is_dir=GObject.TYPE_BOOLEAN, is_link=GObject.TYPE_BOOLEAN)
     def __init__(self, snapshot_fs=None, offset_dir_path=None):
@@ -145,6 +150,7 @@ def dv_specification():
     )
 
 class DirectoryView(tlview.ListView):
+    __g_type_name__ = "DirectoryView"
     PopUp = None
     Model = DVModel
     specification = dv_specification()
@@ -165,6 +171,7 @@ class DirectoryView(tlview.ListView):
         self._dv_model.set_snapshot_fs(snapshot_fs, offset_dir_path)
 
 class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMixin, dialogue.BusyIndicatorUser):
+    __g_type_name__ = "SnapshotManagerWidget"
     def __init__(self, snapshot_fs, busy_indicator=None, parent=None):
         Gtk.VBox.__init__(self)
         self._snapshot_fs = snapshot_fs
@@ -232,6 +239,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         dialog.show()
 
 class ExigSnapshotDialog(Gtk.Window):
+    __g_type_name__ = "ExigSnapshotDialog"
     def __init__(self, snapshot_fs, parent=None):
         title = _("Snapshot Exigency: {}:{}").format(snapshot_fs.archive_name, snapshot_fs.snapshot_name)
         Gtk.Window.__init__(self, title=title, type=Gtk.WindowType.TOPLEVEL)

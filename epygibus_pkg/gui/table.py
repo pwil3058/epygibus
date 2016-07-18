@@ -36,6 +36,7 @@ from . import auto_update
 AC_MODIFIED, AC_NOT_MODIFIED, AC_MODIFIED_MASK = actions.ActionCondns.new_flags_and_mask(2)
 
 class EditableEntriesView(tlview.ListView):
+    __g_type_name__ = "EditableEntriesView"
     Model = tlview.ListView.Model
     def __init__(self, model=None, size_req=None):
         tlview.ListView.__init__(self, model)
@@ -137,6 +138,7 @@ class EditableEntriesView(tlview.ListView):
         return self.button_groups.create_action_button_box(button_name_list)
 
 class EditedEntriesTable(Gtk.VBox):
+    __g_type_name__ = "EditedEntriesTable"
     View = EditableEntriesView
     BUTTONS = ["table_add_row", "table_insert_row", "table_delete_selection", "table_undo_changes", "table_apply_changes"]
     def __init__(self, size_req=None):
@@ -160,6 +162,7 @@ def simple_text_specification(model, *hdrs_flds_xalign):
     return specification
 
 class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicatorUser, auto_update.AutoUpdater, enotify.Listener):
+    __g_type_name__ = "TableView"
     PopUp = None
     SET_EVENTS = 0
     REFRESH_EVENTS = 0
@@ -295,6 +298,7 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
         return True
 
 class MapManagedTableView(TableView, gutils.MappedManager):
+    __g_type_name__ = "MapManagedTableView"
     _NEEDS_RESET = 123
     def __init__(self, busy_indicator=None, size_req=None):
         TableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
@@ -330,6 +334,7 @@ class MapManagedTableView(TableView, gutils.MappedManager):
             self._needs_refresh = True
 
 class TableWidget(Gtk.VBox):
+    __g_type_name__ = "TableWidget"
     View = TableView
     def __init__(self, scroll_bar=True, busy_indicator=None, size_req=None, **kwargs):
         Gtk.VBox.__init__(self)

@@ -21,6 +21,7 @@ from gi.repository import Gtk
 from gi.repository import GObject
 
 class FramedScrollWindow(Gtk.Frame):
+    __g_type_name__ = "FramedScrollWindow"
     def __init__(self, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)):
         Gtk.Frame.__init__(self)
         self._sw = Gtk.ScrolledWindow()
@@ -100,6 +101,7 @@ class MappedManager:
         pass
 
 class SplitBar(Gtk.HBox):
+    __g_type_name__ = "SplitBar"
     def __init__(self, expand_lhs=True, expand_rhs=False):
         Gtk.HBox.__init__(self)
         self.lhs = Gtk.HBox()
@@ -108,6 +110,7 @@ class SplitBar(Gtk.HBox):
         self.pack_end(self.rhs, expand=expand_rhs, fill=True, padding=0)
 
 class UpdatableComboBoxText(Gtk.ComboBoxText):
+    __g_type_name__ = "UpdatableComboBoxText"
     def __init__(self):
         Gtk.ComboBoxText.__init__(self)
         self.update_contents()
@@ -151,6 +154,7 @@ def yield_to_pending_events():
             break
 
 class ProgessThingy(Gtk.ProgressBar):
+    __g_type_name__ = "ProgessThingy"
     def set_expected_total(self, total):
         nsteps = min(100, max(total, 1))
         self._numerator = 0.0
@@ -168,6 +172,7 @@ class ProgessThingy(Gtk.ProgressBar):
         self.set_fraction(1.0)
 
 class PretendWOFile(Gtk.ScrolledWindow):
+    __g_type_name__ = "PretendWOFile"
     def __init__(self):
         Gtk.ScrolledWindow.__init__(self)
         self.set_hexpand(True)

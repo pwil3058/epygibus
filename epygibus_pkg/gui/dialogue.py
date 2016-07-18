@@ -84,7 +84,8 @@ class BusyIndicatorUser:
     def set_busy_indicator(self, busy_indicator=None):
         self._busy_indicator = busy_indicator
 
-class Dialog(Gtk.Dialog, BusyIndicator):
+class BusyDialog(Gtk.Dialog, BusyIndicator):
+    __g_type_name__ = "BusyDialog"
     def __init__(self, title=None, parent=None, flags=0, buttons=None):
         if not parent:
             parent = main_window
@@ -101,16 +102,18 @@ class Dialog(Gtk.Dialog, BusyIndicator):
     def alert_user(self, msg):
         alert_user(msg, parent=self)
 
-class ListenerDialog(Dialog, enotify.Listener):
+class ListenerDialog(BusyDialog, enotify.Listener):
+    __g_type_name__ = "ListenerDialog"
     def __init__(self, title=None, parent=None, flags=0, buttons=None):
         flags &= ~Gtk.DialogFlags.MODAL
-        Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
+        BusyDialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
         enotify.Listener.__init__(self)
         self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
     def _self_destruct_cb(self, **kwargs):
         self.destroy()
 
-class MessageDialog(Dialog):
+class MessageDialog(BusyDialog):
+    __g_type_name__ = "MessageDialog"
     icons = {
         Gtk.MessageType.INFO: Gtk.STOCK_DIALOG_INFO,
         Gtk.MessageType.WARNING: Gtk.STOCK_DIALOG_WARNING,
@@ -126,7 +129,7 @@ class MessageDialog(Dialog):
     def __init__(self, parent=None, flags=Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT, type=Gtk.MessageType.INFO, buttons=None, message=None, explanation=None):
         if not parent:
             parent = main_window
-        Dialog.__init__(self, title=APP_NAME + ": {0}".format(self.labels[type]), parent=parent, flags=flags, buttons=buttons)
+        BusyDialog.__init__(self, title=APP_NAME + ": {0}".format(self.labels[type]), parent=parent, flags=flags, buttons=buttons)
         self.set_property("skip-taskbar-hint", True)
         hbox = Gtk.HBox()
         icon = Gtk.Image()
@@ -146,11 +149,12 @@ class MessageDialog(Dialog):
         self.show_all()
         self.set_resizable(True)
 
-class QuestionDialog(Dialog):
+class QuestionDialog(BusyDialog):
+    __g_type_name__ = "QuestionDialog"
     def __init__(self, title=None, parent=None, flags=0, buttons=None, question="", explanation=""):
         if title is None:
             title = APP_NAME
-        Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
+        BusyDialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
         self.set_property("skip-taskbar-hint", True)
         hbox = Gtk.HBox()
         self.vbox.add(hbox)
@@ -219,6 +223,7 @@ def report_exception_as_error(edata, parent=None):
     alert_user(str(edata), parent=parent)
 
 class UndecoratedMessage(Gtk.Dialog):
+    __g_type_name__ = "UndecoratedMessage"
     def __init__(self, message, parent=None):
         Gtk.Dialog.__init__(self, "", main_window if not parent else parent, 0)
         self.set_decorated(False)
@@ -252,15 +257,17 @@ def comforting_message(message, spinner=False, parent=None):
         dialog.destroy()
         pass
 
-class CancelOKDialog(Dialog):
+class CancelOKDialog(BusyDialog):
+    __g_type_name__ = "CancelOKDialog"
     def __init__(self, title=None, parent=None):
         if not parent:
             parent = main_window
         flags = Gtk.DialogFlags.DESTROY_WITH_PARENT
         buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        Dialog.__init__(self, title, parent, flags, buttons)
+        BusyDialog.__init__(self, title, parent, flags, buttons)
 
 class ReadTextWidget(Gtk.HBox):
+    __g_type_name__ = "ReadTextWidget"
     def __init__(self, prompt=None, suggestion="", width_chars=32):
         Gtk.HBox.__init__(self)
         if prompt:
@@ -287,6 +294,7 @@ class ReadTextWidget(Gtk.HBox):
         self.entry.set_progress_pulse_step(0)
 
 class FileChooserDialog(Gtk.FileChooserDialog):
+    __g_type_name__ = "FileChooserDialog"
     def __init__(self, title=None, parent=None, action=Gtk.FileChooserAction.OPEN, buttons=None, backend=None):
         if not parent:
             parent = main_window
@@ -351,6 +359,7 @@ def select_directory(prompt, suggestion=None, existing=True, absolute=False, par
 
 # TODO: put auto completion into the text entry component
 class _EnterPathWidget(Gtk.HBox):
+    __g_type_name__ = "_EnterPathWidget"
     SELECT_FUNC = None
     SELECT_TITLE = None
     def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):
@@ -380,6 +389,7 @@ class _EnterPathWidget(Gtk.HBox):
         self._path.stop_busy_pulse()
 
 class _EnterPathDialog(CancelOKDialog):
+    __g_type_name__ = "_EnterPathDialog"
     WIDGET = None
     def __init__(self, title=None, prompt=None, suggestion="", existing=True, parent=None):
         CancelOKDialog.__init__(self, title, parent)
@@ -397,17 +407,21 @@ class _EnterPathDialog(CancelOKDialog):
         self.entry.stop_busy_pulse()
 
 class EnterDirPathWidget(_EnterPathWidget):
+    __g_type_name__ = "EnterDirPathWidget"
     SELECT_FUNC = lambda s, *args, **kwargs: select_directory(*args, **kwargs)
     SELECT_TITLE = _("Browse for Directory")
 
 class EnterDirPathDialog(_EnterPathDialog):
+    __g_type_name__ = "EnterDirPathDialog"
     WIDGET = EnterDirPathWidget
 
 class EnterFilePathWidget(_EnterPathWidget):
+    __g_type_name__ = "EnterFilePathWidget"
     SELECT_FUNC = lambda s, *args, **kwargs: select_file(*args, **kwargs)
     SELECT_TITLE = _("Browse for File")
 
 class EnterFilePathDialog(_EnterPathDialog):
+    __g_type_name__ = "EnterFilePathDialog"
     WIDGET = EnterFilePathWidget
 
 def ask_dir_path(prompt, suggestion=None, existing=True, parent=None):

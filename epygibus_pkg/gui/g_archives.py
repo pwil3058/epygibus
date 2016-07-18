@@ -79,6 +79,7 @@ class ArchiveTableData(table.TableData):
             yield archive_spec
 
 class ArchiveListModel(table.MapManagedTableView.Model):
+    __g_type_name__ = "ArchiveListModel"
     Row = config.Archive
     types = Row(
         name=GObject.TYPE_STRING,
@@ -114,6 +115,7 @@ def _archive_list_spec():
     return specification
 
 class ArchiveListView(table.MapManagedTableView):
+    __g_type_name__ = "ArchiveListView"
     Model = ArchiveListModel
     PopUp = None
     SET_EVENTS = 0
@@ -131,13 +133,16 @@ class ArchiveListView(table.MapManagedTableView):
         return ArchiveTableData()
 
 class ArchiveListWidget(table.TableWidget):
+    __g_type_name__ = "ArchiveListWidget"
     View = ArchiveListView
 
 class IncludesModel(tlview.NamedListStore):
+    __g_type_name__ = "IncludesModel"
     Row = collections.namedtuple("Row", ["included_path"])
     types = Row(included_path=GObject.TYPE_STRING)
 
 class IncludesView(tlview.View, actions.CBGUserMixin):
+    __g_type_name__ = "IncludesView"
     Model = IncludesModel
     specification = tlview.ViewSpec(
         properties={
@@ -212,6 +217,7 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
         tlview.delete_selection(self.get_selection())
 
 class IncludesTable(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "IncludesTable"
     CLIENT = IncludesView
     BUTTONS = ["table_add_dir_path", "table_insert_dir_path", "table_add_file_path", "table_insert_file_path", "table_delete_selection"]
     SCROLLABLE = True
@@ -219,6 +225,7 @@ class IncludesTable(actions.ClientAndButtonsWidget):
         return self.client.get_included_paths()
 
 class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
+    __g_type_name__ = "ExcludesView"
     def __init__(self):
         Gtk.TextView.__init__(self)
         actions.CBGUserMixin.__init__(self)
@@ -247,6 +254,7 @@ class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
         return [line.rstrip() for line in bfr.get_text(start, end, False).splitlines(False)]
 
 class DirExcludesWidget(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "DirExcludesWidget"
     CLIENT = ExcludesView
     BUTTONS = ["insert_dir_path"]
     SCROLLABLE = True
@@ -254,6 +262,7 @@ class DirExcludesWidget(actions.ClientAndButtonsWidget):
         return self.client.get_lines()
 
 class FileExcludesWidget(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "FileExcludesWidget"
     CLIENT = ExcludesView
     BUTTONS = ["insert_file_path"]
     SCROLLABLE = True
@@ -261,6 +270,7 @@ class FileExcludesWidget(actions.ClientAndButtonsWidget):
         return self.client.get_lines()
 
 class NewArchiveWidget(Gtk.VBox):
+    __g_type_name__ = "NewArchiveWidget"
     def __init__(self):
         Gtk.VBox.__init__(self)
         name_label = Gtk.Label()
@@ -339,6 +349,7 @@ class NewArchiveWidget(Gtk.VBox):
         return True
 
 class NewArchiveDialog(dialogue.CancelOKDialog):
+    __g_type_name__ = "NewArchiveDialog"
     def __init__(self, parent=None):
         dialogue.CancelOKDialog.__init__(self, title=_("Create New Archive"), parent=parent)
         self.new_archive_widget = NewArchiveWidget()
@@ -346,6 +357,7 @@ class NewArchiveDialog(dialogue.CancelOKDialog):
         self.show_all()
 
 class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
+    __g_type_name__ = "ArchiveComboBox"
     def __init__(self):
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
@@ -361,6 +373,7 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
         return None
 
 class ArchivesWidget(Gtk.VBox, actions.CAGandUIManager):
+    __g_type_name__ = "ArchivesWidget"
     UI_DESCR = """
     <ui>
         <toolbar name="ArchiveToolBar">

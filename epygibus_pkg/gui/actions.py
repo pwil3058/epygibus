@@ -169,6 +169,7 @@ class CBGUserMixin:
         return self.button_groups.create_action_button_box(button_name_list)
 
 class ClientAndButtonsWidget(Gtk.VBox):
+    __g_type_name__ = "ClientAndButtonsWidget"
     CLIENT = CBGUserMixin
     BUTTONS = []
     SCROLLABLE = False
@@ -262,6 +263,7 @@ class ConditionalActionGroups:
 CLASS_INDEP_AGS = ConditionalActionGroups('class_indep')
 
 class UIManager(Gtk.UIManager):
+    __g_type_name__ = "UIManager"
     # TODO: check to see if this workaround is still necessary
     def __init__(self):
         Gtk.UIManager.__init__(self)

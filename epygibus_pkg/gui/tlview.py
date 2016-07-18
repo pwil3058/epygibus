@@ -77,6 +77,7 @@ class _NamedTreeModelMixin:
         return None
 
 class NamedListStore(Gtk.ListStore, _NamedTreeModelMixin):
+    __g_type_name__ = "NamedListStore"
     def __init__(self):
         Gtk.ListStore.__init__(*[self] + list(self.types))
     def append_contents(self, rows):
@@ -88,6 +89,7 @@ class NamedListStore(Gtk.ListStore, _NamedTreeModelMixin):
             self.append(row)
 
 class NamedTreeStore(Gtk.TreeStore, _NamedTreeModelMixin):
+    __g_type_name__ = "NamedTreeStore"
     def __init__(self):
         Gtk.TreeStore.__init__(*[self] + list(self.types))
 
@@ -114,6 +116,7 @@ def insert_after_selection(seln, row):
 
 # come in handy classes
 class CellRendererSpin(Gtk.CellRendererSpin):
+    __g_type_name__ = "CellRendererSpin"
     """
     A modified version that propagates the SpinButton's "value-changed"
     signal.  Makes the behaviour more like a SpinButton.
@@ -265,6 +268,7 @@ def mark_up_cell(model, fld):
     )
 
 class View(Gtk.TreeView):
+    __g_type_name__ = "View"
     # TODO: bust View() up into a number of "mix ins" for more flexibility
     Model = None
     specification = None
@@ -434,9 +438,11 @@ class View(Gtk.TreeView):
         column.set_sort_order(self.sort_order)
 
 class ListView(View):
+    __g_type_name__ = "ListView"
     Model = NamedListStore
 
 class TreeView(View):
+    __g_type_name__ = "TreeView"
     Model = NamedTreeStore
 
 def clear_selection_cb(widget, event):

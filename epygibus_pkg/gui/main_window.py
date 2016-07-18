@@ -27,6 +27,7 @@ from . import icons
 from . import dialogue
 
 class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
+    __g_type_name__ = "MainWindow"
     UI_DESCR = """
     <ui>
         <menubar name="epygibus_left_menubar">
