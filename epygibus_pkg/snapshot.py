@@ -141,7 +141,7 @@ class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft
     def __add__(self, other):
         return CreationStats(*[self[i] + other[i] for i in range(len(self))])
 
-class Snapshot(object):
+class Snapshot:
     def __init__(self, parent=None, attributes=None):
         self.parent = parent
         self.attributes = attributes
@@ -215,7 +215,7 @@ class Snapshot(object):
         # this would be the case where the snapshot holds a single file
         return path_bits if path_bits else []
 
-class SnapshotPlus(object):
+class SnapshotPlus:
     # limit the number of none basic python types to future proof
     def __init__(self, snapshot, statistics, repo_mgmt_key):
         self.snapshot = snapshot
@@ -320,7 +320,7 @@ def read_most_recent_snapshot(snapshot_dir_path):
 def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
     return sorted([f for f in os.listdir(snapshot_dir_path) if _SNAPSHOT_FILE_NAME_CRE.match(f)], reverse=reverse)
 
-class SnapshotGenerator(object):
+class SnapshotGenerator:
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
     def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
@@ -570,7 +570,7 @@ class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "sof
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
-class DummyProgessThingy(object):
+class DummyProgessThingy:
     def set_expected_total(self, total):
         pass
     def increment_count(self, by=1):

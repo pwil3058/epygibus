@@ -26,7 +26,7 @@ from gi.repository import Gtk
 from gi.repository import GObject
 from gi.repository import Gdk
 
-class _NamedTreeModelMixin(object):
+class _NamedTreeModelMixin:
     # TODO: trim and improve _NamedTreeModelMixin
     Row = None # this is a namedtuple type
     types = None # this is an instance of Row defining column types
@@ -139,14 +139,14 @@ class CellRendererSpin(Gtk.CellRendererSpin):
 GObject.signal_new('value-changed', CellRendererSpin, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT, GObject.TYPE_PYOBJECT,))
 
 # Views
-class ViewSpec(object):
+class ViewSpec:
     __slots__ = ('properties', 'selection_mode', 'columns')
     def __init__(self, properties=None, selection_mode=None, columns=None):
         self.properties = properties if properties is not None else dict()
         self.selection_mode = selection_mode
         self.columns = columns if columns is not None else list()
 
-class ColumnSpec(object):
+class ColumnSpec:
     __slots__ = ('title', 'properties', 'cells', 'sort_key_function')
     def __init__(self, title, properties=None, cells=None, sort_key_function=None):
         self.title = title
@@ -161,7 +161,7 @@ def simple_column(lbl, *cells):
         cells=cells,
     )
 
-class CellRendererSpec(object):
+class CellRendererSpec:
     __slots__ = ('cell_renderer', 'properties', 'expand', 'start', "signal_handlers")
     def __init__(self, cell_renderer, properties=None, expand=None, start=False, signal_handlers=None):
         self.cell_renderer = cell_renderer
@@ -170,13 +170,13 @@ class CellRendererSpec(object):
         self.expand = expand
         self.start = start
 
-class CellDataFunctionSpec(object):
+class CellDataFunctionSpec:
     __slots__ = ('function', 'user_data')
     def __init__(self, function, user_data=None):
         self.function = function
         self.user_data = user_data
 
-class CellSpec(object):
+class CellSpec:
     __slots__ = ('cell_renderer_spec', 'properties', 'cell_data_function_spec', 'attributes')
     def __init__(self, cell_renderer_spec, properties=None, cell_data_function_spec=None, attributes=None):
         self.cell_renderer_spec = cell_renderer_spec

@@ -41,7 +41,7 @@ def wrap_in_scrolled_window(widget, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.Policy
     scrw.show_all()
     return scrw
 
-class TimeOutController(object):
+class TimeOutController:
     ToggleData = collections.namedtuple('ToggleData', ['name', 'label', 'tooltip', 'stock_id'])
     def __init__(self, toggle_data, function=None, is_on=True, interval=10000):
         self._interval = abs(interval)
@@ -83,7 +83,7 @@ class TimeOutController(object):
     def get_interval(self):
         return self._interval
 
-class MappedManager(object):
+class MappedManager:
     def __init__(self):
         self.is_mapped = False
         self.connect("map", self._map_cb)

@@ -354,7 +354,7 @@ class TableWidget(Gtk.VBox):
     def unselect_all(self):
         self.seln.unselect_all()
 
-class TableData(object):
+class TableData:
     def __init__(self, **kwargs):
         self._kwargs = kwargs
         h = hashlib.sha1()

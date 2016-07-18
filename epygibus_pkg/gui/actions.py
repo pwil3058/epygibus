@@ -31,7 +31,7 @@ class MaskedCondns(collections.namedtuple('MaskedCondns', ['condns', 'mask'])):
     def __or__(self, other):
         return MaskedCondns(self.condns | other.condns, self.mask | other.mask)
 
-class ActionCondns(object):
+class ActionCondns:
     from .. import utils
     _flag_generator = utils.create_flag_generator()
     @staticmethod
@@ -66,7 +66,7 @@ def get_masked_seln_conditions(seln):
     else:
         return MaskedCondns(AC_SELN_MADE, AC_SELN_MASK)
 
-class _ButtonGroup(object):
+class _ButtonGroup:
     def __init__(self, is_sensitive=True, is_visible=True, **kwargs):
         self._buttons = dict()
         self._is_visible = is_visible
@@ -105,7 +105,7 @@ class _ButtonGroup(object):
             ostr += button_name
         ostr += "]"
 
-class ConditionalButtonGroups(object):
+class ConditionalButtonGroups:
     class UnknownButton(Exception): pass
     def __init__(self, selection=None):
         self.groups = dict()
@@ -160,7 +160,7 @@ class ConditionalButtonGroups(object):
             box.pack_start(button, expand=expand, fill=fill, padding=padding)
         return box
 
-class CBGUserMixin(object):
+class CBGUserMixin:
     def __init__(self, selection=None):
         self.button_groups = ConditionalButtonGroups(selection)
         self.populate_button_groups()
@@ -184,7 +184,7 @@ class ClientAndButtonsWidget(Gtk.VBox):
         self.pack_start(self.client.create_button_box(self.BUTTONS), expand=False, fill=True, padding=0)
         self.show_all()
 
-class ConditionalActionGroups(object):
+class ConditionalActionGroups:
     class UnknownAction(Exception): pass
     def __init__(self, name, ui_mgrs=None, selection=None):
         self.groups = dict()

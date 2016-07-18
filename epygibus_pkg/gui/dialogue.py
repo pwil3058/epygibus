@@ -45,7 +45,7 @@ def init(window):
     global main_window
     main_window = window
 
-class BusyIndicator(object):
+class BusyIndicator:
     def __init__(self, parent=None):
         self.parent_indicator = parent
         self._count = 0
@@ -68,7 +68,7 @@ class BusyIndicator(object):
     def is_busy(self):
         return self._count > 0
 
-class BusyIndicatorUser(object):
+class BusyIndicatorUser:
     def __init__(self, busy_indicator=None):
         self._busy_indicator = busy_indicator
     def show_busy(self):
