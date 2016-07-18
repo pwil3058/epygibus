@@ -18,10 +18,6 @@ Provide mechanism for notifying components of events that require them
 to update their displayed/cached data
 """
 
-import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import GObject
-
 from .. import utils
 
 _flag_generator = utils.create_flag_generator()
@@ -91,13 +87,12 @@ def notify_events(events, **kwargs):
         del_notification_cb(cb_token)
 
 
-class Listener(GObject.GObject):
-    """A base class for transient GTK object classes that wish to register
+class Listener:
+    """A mixin for transient GTK object classes that wish to register
     event callbacks so that their callbacks are deleted when they are
     destroyed.
     """
     def __init__(self):
-        GObject.GObject.__init__(self)
         self._listener_cbs = []
         self.connect('destroy', self._listener_destroy_cb)
 

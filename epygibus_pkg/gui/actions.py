@@ -22,7 +22,6 @@ import collections
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
-from gi.repository import GObject
 from gi.repository import Gdk
 
 class MaskedCondns(collections.namedtuple('MaskedCondns', ['condns', 'mask'])):
@@ -273,11 +272,10 @@ class UIManager(Gtk.UIManager):
         if isinstance(widget, Gtk.MenuItem) and tooltip:
             widget.set_tooltip_text(tooltip)
 
-class CAGandUIManager(GObject.GObject):
-    '''This is a "mix in" class and needs to be merged with a Gtk.Window() descendant'''
+class CAGandUIManager:
+    '''This is a "mix in" class and needs to be merged with a Gtk.Widget() descendant'''
     UI_DESCR = '''<ui></ui>'''
     def __init__(self, selection=None, popup=None):
-        GObject.GObject.__init__(self)
         self.ui_manager = UIManager()
         CLASS_INDEP_AGS.add_ui_mgr(self.ui_manager)
         name = '{0}:{1:x}'.format(self.__class__.__name__, self.__hash__())

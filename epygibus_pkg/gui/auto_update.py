@@ -16,7 +16,6 @@
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
-from gi.repository import GObject
 
 from . import gutils
 from . import actions
@@ -96,13 +95,12 @@ actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     ]
 )
 
-class AutoUpdater(GObject.GObject):
+class AutoUpdater:
     """A base class for transient GTK object classes that wish to register
     auto update callbacks so that their callbacks are deleted when they are
     destroyed.
     """
     def __init__(self):
-        GObject.GObject.__init__(self)
         self._auto_updater_cbs = []
         self.connect("destroy", self._auto_updater_destroy_cb)
 
