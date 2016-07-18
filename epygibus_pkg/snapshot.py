@@ -24,9 +24,8 @@ import stat
 import errno
 import sys
 import re
-import io
 import time
-
+import gzip
 import pickle
 
 from . import excpns
@@ -270,15 +269,12 @@ class SnapshotPlus(object):
         return self.snapshot.find_offset_base_subdir_bits([os.sep])
 
 def read_snapshot(snapshot_file_path):
-    if snapshot_file_path.endswith(".gz"):
-        import gzip
-        fobj = gzip.open(snapshot_file_path, "rb")
-    else:
-        fobj = io.open(snapshot_file_path, "rb")
-    try:
-        snapshot_plus = pickle.load(fobj)
-    except:
-        raise excpns.InvalidSnapshotFile(snapshot_file_path)
+    OPEN = gzip.open if snapshot_file_path.endswith(".gz") else open
+    with OPEN(snapshot_file_path, "rb") as f_obj:
+        try:
+            snapshot_plus = pickle.load(f_obj)
+        except:
+            raise excpns.InvalidSnapshotFile(snapshot_file_path)
     if not isinstance(snapshot_plus, SnapshotPlus):
         raise excpns.InvalidSnapshotFile(snapshot_file_path)
     return snapshot_plus
@@ -548,16 +544,15 @@ class SnapshotGenerator(object):
         else:
             snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.localtime())
         snapshot_file_path = os.path.join(self._archive.snapshot_dir_path, snapshot_file_name)
-        if compress is None:
-            compress = self._archive.compress_default
+        compress = self._archive.compress_default if compress is None else compress
         if compress:
-            import gzip as io_module
+            OPEN = gzip.open
             snapshot_file_path += ".gz"
         else:
-            io_module = io
-        with io_module.open(snapshot_file_path, "wb") as fobj:
-            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), fobj, pickle.HIGHEST_PROTOCOL)
-        self._snapshot = None # for refernce count purposes we don't care if the permissions get set
+            OPEN = open
+        with OPEN(snapshot_file_path, "wb") as f_obj:
+            pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), f_obj, pickle.HIGHEST_PROTOCOL)
+        self._snapshot = None # for reference count purposes we don't care if the permissions get set
         os.chmod(snapshot_file_path, permissions)
         return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 

@@ -23,7 +23,6 @@ from contextlib import contextmanager
 import gzip
 import os
 import collections
-import io
 import shutil
 
 import pickle
@@ -59,7 +58,7 @@ _REF_COUNT, _CONTENT_SIZE, _STORED_SIZE = range(3)
 class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_path", "writeable", "compressed"])):
     def store_contents(self, file_path):
         assert self.writeable
-        with io.open(file_path, "rb") as f_in:
+        with open(file_path, "rb") as f_in:
             content_token = hashlib.sha1(f_in.read()).hexdigest()
             dir_name, subdir_name, file_name = _split_content_token(content_token)
             dir_path = os.path.join(self.base_dir_path, dir_name)
@@ -86,11 +85,11 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                 out_file_path = os.path.join(subdir_path, file_name)
                 if self.compressed:
                     out_file_path += ".gz"
-                    with gzip.open(out_file_path, "wb") as f_out:
-                        shutil.copyfileobj(f_in, f_out)
+                    OPEN = gzip.open
                 else:
-                    with io.open(out_file_path, "wb") as f_out:
-                        shutil.copyfileobj(f_in, f_out)
+                    OPEN = open
+                with OPEN(out_file_path, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
                 self.ref_counter[dir_name][subdir_name][file_name][_STORED_SIZE] = os.path.getsize(out_file_path)
                 os.chmod(out_file_path, stat.S_IRUSR|stat.S_IRGRP)
             # NB returning content storage stats here has been tried and
@@ -98,7 +97,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             # slow file systems such as cifs mounted network devices
         return content_token
     def check_contents(self, file_path, content_token):
-        with io.open(file_path, "rb") as f_in:
+        with open(file_path, "rb") as f_in:
             file_content_token = hashlib.sha1(f_in.read()).hexdigest()
         return content_token == file_content_token
     def _content_stored_size(self, *token_parts):
@@ -171,21 +170,22 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         return (citem_count, total_content_bytes, total_stored_bytes) #if citem_count else None
     def open_contents_read_only(self, content_token, binary=False):
         # NB since this doen't use ref count data it doesn't need locking
+        # TODO: make this a context manager
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
             return gzip.open(file_path + ".gz", "rb" if binary else "rt")
         except FileNotFoundError:
-            return io.open(file_path, "rb" if binary else "r")
+            return open(file_path, "rb" if binary else "r")
     def copy_contents_to(self, content_token, target_file_path, attributes):
         from . import excpns
         file_path = os.path.join(self.base_dir_path, *_split_content_token(content_token))
         try:
-            with io.open(target_file_path, "wb") as f_out:
+            with open(target_file_path, "wb") as f_out:
                 try: # try compressed first as that is the default
                     with gzip.open(file_path + ".gz", "rb") as f_in:
                         shutil.copyfileobj(f_in, f_out)
                 except FileNotFoundError:
-                    with io.open(file_path, "rb") as f_in:
+                    with open(file_path, "rb") as f_in:
                         shutil.copyfileobj(f_in, f_out)
         except OSError as edata:
             raise excpns.CopyFileFailed(target_file_path, os.strerror(edata.errno))
@@ -199,17 +199,17 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
 @contextmanager
 def open_repo_mgr(repo_mgmt_key, writeable=False):
     import fcntl
-    with io.open(repo_mgmt_key.lock_file_path, "wb" if writeable else "rb") as fobj:
-        fcntl.lockf(fobj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
-        with io.open(repo_mgmt_key.ref_counter_path, "rb") as ref_in:
+    with open(repo_mgmt_key.lock_file_path, "wb" if writeable else "rb") as f_obj:
+        fcntl.lockf(f_obj, fcntl.LOCK_EX if writeable else fcntl.LOCK_SH)
+        with open(repo_mgmt_key.ref_counter_path, "rb") as ref_in:
             ref_counter = pickle.load(ref_in)
         try:
             yield _BlobRepo(ref_counter, repo_mgmt_key.base_dir_path, writeable, compressed=repo_mgmt_key.compressed)
         finally:
             if writeable:
-                with io.open(repo_mgmt_key.ref_counter_path, "wb") as ref_out:
+                with open(repo_mgmt_key.ref_counter_path, "wb") as ref_out:
                     pickle.dump(ref_counter, ref_out, pickle.HIGHEST_PROTOCOL)
-            fcntl.lockf(fobj, fcntl.LOCK_UN)
+            fcntl.lockf(f_obj, fcntl.LOCK_UN)
 
 def initialize_repo(repo_spec):
     from . import excpns
@@ -220,9 +220,11 @@ def initialize_repo(repo_spec):
     except PermissionError:
         raise excpns.RepositoryLocationNoPerm(repo_spec.name)
     ref_counter_path = _ref_counter_path(repo_spec.base_dir_path)
-    pickle.dump(dict(), io.open(ref_counter_path, "wb"), pickle.HIGHEST_PROTOCOL)
+    with open(ref_counter_path, "wb") as f_obj:
+        pickle.dump(dict(), f_obj, pickle.HIGHEST_PROTOCOL)
     lock_file_path = _lock_file_path(repo_spec.base_dir_path)
-    io.open(lock_file_path, "wb").write(b"content_repo_lock")
+    with open(lock_file_path, "wb") as f_obj:
+        f_obj.write(b"content_repo_lock")
 
 def create_new_repo(repo_name, location_dir_path, compressed):
     from . import config
