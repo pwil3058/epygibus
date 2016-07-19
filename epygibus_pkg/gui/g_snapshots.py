@@ -213,8 +213,10 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
                  self._change_dir_up_bcb),
             ])
     def _double_click_cb(self, tree_view, tree_path, tree_view_column):
-        model = tree_view.get_model().get_model()
-        row = model.get_row(model.get_iter(tree_path))
+        # TODO: build capability to work with filters into tlview
+        model = tree_view.get_model()
+        named_model = model.get_model()
+        row = named_model.Row(*model[tree_path])
         if row.is_dir:
             self._current_offset_dir_path = os.path.join(self._current_offset_dir_path, row.name)
             tree_view.change_offset_dir_path(self._current_offset_dir_path)
