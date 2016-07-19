@@ -49,12 +49,17 @@ class PathComponentsMixin:
     @property
     def dir_path(self):
         return os.path.dirname(self.path)
+    @property
+    def is_hidden(self):
+        return os.path.basename(self.path).startswith(".")
 
 _MOVEASIDE_FILE_SUFFIX_TEMPLATE = ".ema.%Y-%m-%d-%H-%M-%S"
 def move_aside_file_path(file_path):
     return file_path + time.strftime(_MOVEASIDE_FILE_SUFFIX_TEMPLATE, time.localtime())
 
 class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_token", "repo_mgmt_key"]), PathComponentsMixin):
+    is_dir = False
+    is_link = False
     def open_read_only(self, binary=False):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
@@ -86,7 +91,8 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
     def make(cls, path, f_data, repo_mgmt_key):
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1], repo_mgmt_key)
 
-class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), PathComponentsMixin):
+class _SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]), PathComponentsMixin):
+    is_link = True
     @property
     def tgt_abs_path(self):
         return utils.calc_link_tgt_abs_path(self.tgt_path, self.path)
@@ -135,6 +141,12 @@ class SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"]),
     @classmethod
     def make(cls, path, f_data):
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1])
+
+class SDirSLink(_SLink):
+    is_dir = True
+
+class SFileSLink(_SLink):
+    is_dir = False
 
 # TODO: "nreleased_items" to be ditched for "ncitems" (nothing is released)
 class CreationStats(collections.namedtuple("CreationStats", ["file_count", "soft_link_count", "content_bytes", "nnew_items", "nreleased_citems", "etd"])):
@@ -190,10 +202,10 @@ class Snapshot:
         return SFile.make(file_path, self.find_dir(dir_path).files[file_name], repo_mgmt_key)
     def find_file_link(self, file_path):
         dir_path, file_name = os.path.split(file_path)
-        return SLink.make(file_path, self.find_dir(dir_path).file_links[file_name])
+        return SFileSLink.make(file_path, self.find_dir(dir_path).file_links[file_name])
     def find_subdir_link(self, subdir_path):
         dir_path, subdir_name = os.path.split(subdir_path)
-        return SLink.make(subdir_path, self.find_dir(dir_path).subdir_links[subdir_name])
+        return SDirSLink.make(subdir_path, self.find_dir(dir_path).subdir_links[subdir_name])
     def iterate_content_tokens(self):
         for _dont_care, content_token in self.files.values():
             yield content_token
@@ -579,6 +591,8 @@ class DummyProgessThingy:
         pass
 
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), PathComponentsMixin):
+    is_dir = True
+    is_link = False
     @property
     def attributes(self):
         return ATTRS_NAMED(*self.snapshot.attributes)
@@ -624,6 +638,12 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
                 pass
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
         return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.repo_mgmt_key)
+    def contains_subdir(self, subdir_path):
+        try:
+            self.get_subdir(subdir_path)
+            return True
+        except excpns.DirNotFound:
+            return False
     def iterate_subdirs(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for subdir_name, ss_snapshot in self.snapshot.subdirs.items():
@@ -643,7 +663,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def iterate_subdir_links(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.subdir_links.items():
-            yield SLink.make(os.path.join(pre_path, link_name), data)
+            yield SDirSLink.make(os.path.join(pre_path, link_name), data)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_subdir_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
@@ -651,7 +671,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def iterate_file_links(self, pre_path=False, recurse=False):
         pre_path = self.path if pre_path is True else "" if pre_path is False else pre_path
         for link_name, data in self.snapshot.file_links.items():
-            yield SLink.make(os.path.join(pre_path, link_name), data)
+            yield SFileSLink.make(os.path.join(pre_path, link_name), data)
         if recurse:
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):

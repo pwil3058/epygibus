@@ -104,12 +104,12 @@ class DirExtractionDialog(_ExtractionDialog):
     __g_type_name__ = "DirExtractionDialog"
     WIDGET = DirExtractionWidget
 
-DVRow = collections.namedtuple("DVRow", ["name", "icon", "is_dir", "is_link"])
+DVRow = collections.namedtuple("DVRow", ["fso_data"])
 
 class DVModel(tlview.NamedListStore):
     __g_type_name__ = "DVModel"
     Row = DVRow
-    types = DVRow(name=GObject.TYPE_STRING, icon=GObject.TYPE_STRING, is_dir=GObject.TYPE_BOOLEAN, is_link=GObject.TYPE_BOOLEAN)
+    types = DVRow(fso_data=GObject.TYPE_PYOBJECT, )
     def __init__(self, snapshot_fs=None, offset_dir_path=None):
         tlview.NamedListStore.__init__(self)
         self.set_snapshot_fs(snapshot_fs, offset_dir_path)
@@ -118,10 +118,10 @@ class DVModel(tlview.NamedListStore):
             self.clear()
             return
         offset_subdir_fs = self._snapshot_fs.get_subdir(self._offset_dir_path)
-        real_dirs = [DVRow(key, icons.STOCK_DIR, True, False) for key in offset_subdir_fs.subdirs.keys()]
-        dir_links = [DVRow(key, icons.STOCK_DIR_LINK, True, True) for key in offset_subdir_fs.subdir_links.keys()]
-        real_files = [DVRow(key, icons.STOCK_FILE, False, False) for key in offset_subdir_fs.files.keys()]
-        file_links = [DVRow(key, icons.STOCK_FILE_LINK, False, True) for key in offset_subdir_fs.file_links.keys()]
+        real_dirs = [DVRow(i) for i in offset_subdir_fs.iterate_subdirs(pre_path=True)]
+        dir_links = [DVRow(i) for i in offset_subdir_fs.iterate_subdir_links(pre_path=True)]
+        real_files = [DVRow(i) for i in offset_subdir_fs.iterate_files(pre_path=True)]
+        file_links = [DVRow(i) for i in offset_subdir_fs.iterate_file_links(pre_path=True)]
         self.clear()
         self.append_contents(sorted(real_dirs + dir_links))
         self.append_contents(sorted(real_files + file_links))
@@ -134,6 +134,17 @@ class DVModel(tlview.NamedListStore):
         self._offset_dir_path = offset_dir_path
         self._set_contents()
 
+def stock_id_icon_select_func(fso_data):
+    if fso_data.is_dir:
+        if fso_data.is_link:
+            return icons.STOCK_DIR_LINK
+        else:
+            return icons.STOCK_DIR
+    elif fso_data.is_link:
+        return icons.STOCK_FILE_LINK
+    else:
+        return  icons.STOCK_FILE
+
 def dv_specification():
     return tlview.ViewSpec(
         properties={
@@ -144,8 +155,8 @@ def dv_specification():
         },
         selection_mode = Gtk.SelectionMode.MULTIPLE,
         columns = [
-            tlview.simple_column("", tlview.stock_icon_cell(DVModel, "icon", xalign=0.0)),
-            tlview.simple_column(_("Name"), tlview.fixed_text_cell(DVModel, "name", xalign=0.0)),
+            tlview.simple_column("", tlview.transform_pixbuf_stock_id_cell(DVModel, "fso_data", stock_id_icon_select_func, xalign=0.0)),
+            tlview.simple_column(_("Name"), tlview.transform_data_cell(DVModel, "fso_data", lambda x: x.name, xalign=0.0)),
         ]
     )
 
@@ -164,7 +175,7 @@ class DirectoryView(tlview.ListView):
         self.connect("button_press_event", tlview.clear_selection_cb)
         self.connect("key_press_event", tlview.clear_selection_cb)
     def _show_hidden_visibility_func(self, model, model_iter, toggle):
-        return toggle.get_active() or not model.get_value_named(model_iter, "name").startswith(".")
+        return toggle.get_active() or not model.get_value_named(model_iter, "fso_data").is_hidden
     def change_offset_dir_path(self, new_offset_dir_path):
         self._dv_model.change_offset_dir_path(new_offset_dir_path)
     def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
@@ -174,6 +185,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
     __g_type_name__ = "SnapshotManagerWidget"
     def __init__(self, snapshot_fs, busy_indicator=None, parent=None):
         Gtk.VBox.__init__(self)
+        self._parent = parent
         self._snapshot_fs = snapshot_fs
         self._base_offset_dir_path = snapshot_fs.get_offset_base_subdir_path() if snapshot_fs else None
         self._current_offset_dir_path = self._base_offset_dir_path
@@ -217,8 +229,15 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         model = tree_view.get_model()
         named_model = model.get_model()
         row = named_model.Row(*model[tree_path])
-        if row.is_dir:
-            self._current_offset_dir_path = os.path.join(self._current_offset_dir_path, row.name)
+        if row.fso_data.is_dir:
+            if row.fso_data.is_link:
+                # TODO: think about handling links to links here
+                if not self._snapshot_fs.contains_subdir(row.fso_data.tgt_abs_path):
+                    dialogue.inform_user(_("Symbolic link target {} is not stored in this snapshot").format(row.fso_data.tgt_abs_path), parent=self._parent)
+                    return
+                self._current_offset_dir_path = row.fso_data.tgt_abs_path
+            else:
+                self._current_offset_dir_path = row.fso_data.path
             tree_view.change_offset_dir_path(self._current_offset_dir_path)
             self._update_above_base_offset_status()
     def _change_dir_up_bcb(self, _button=None):
@@ -244,8 +263,8 @@ class ExigSnapshotDialog(Gtk.Window):
     __g_type_name__ = "ExigSnapshotDialog"
     def __init__(self, snapshot_fs, parent=None):
         title = _("Snapshot Exigency: {}:{}").format(snapshot_fs.archive_name, snapshot_fs.snapshot_name)
-        Gtk.Window.__init__(self, title=title, type=Gtk.WindowType.TOPLEVEL)
-        self._ss_mgr = SnapshotManagerWidget(snapshot_fs, parent=parent)
+        Gtk.Window.__init__(self, title=title, type=Gtk.WindowType.TOPLEVEL, parent=parent)
+        self._ss_mgr = SnapshotManagerWidget(snapshot_fs, parent=self)
         self.add(self._ss_mgr)
         self.show_all()
 

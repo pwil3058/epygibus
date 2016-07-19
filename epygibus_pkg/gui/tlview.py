@@ -243,6 +243,12 @@ def _transformer(treeviewcolumn, cell, model, iter, func_and_index):
     cell.set_property('text', func(pyobj))
     return
 
+def _stock_id_transformer(treeviewcolumn, cell, model, iter, func_and_index):
+    func, index = func_and_index
+    pyobj = model.get_value(iter, index)
+    cell.set_property('stock_id', func(pyobj))
+    return
+
 def transform_data_cell(model, fld, transform_func, xalign=0.5):
     return CellSpec(
         cell_renderer_spec=CellRendererSpec(
@@ -252,6 +258,18 @@ def transform_data_cell(model, fld, transform_func, xalign=0.5):
         ),
         properties={"editable" : False, "xalign": xalign},
         cell_data_function_spec=CellDataFunctionSpec(_transformer, (transform_func, model.col_index(fld))),
+        attributes = {}
+    )
+
+def transform_pixbuf_stock_id_cell(model, fld, transform_func, xalign=0.5):
+    return CellSpec(
+        cell_renderer_spec=CellRendererSpec(
+            cell_renderer=Gtk.CellRendererPixbuf,
+            expand=False,
+            start=True
+        ),
+        properties={"xalign": xalign},
+        cell_data_function_spec=CellDataFunctionSpec(_stock_id_transformer, (transform_func, model.col_index(fld))),
         attributes = {}
     )
 
