@@ -35,11 +35,17 @@ from . import dialogue
 from . import gutils
 
 AC_REPOS_AVAILABLE = actions.ActionCondns.new_flag()
-NE_NEW_REPO, NE_DELETE_REPO, NE_NUM_REPO_CHANGE = enotify.new_event_flags_and_mask(2)
+NE_NEW_REPO, NE_DELETE_REPO, NE_REPO_POPN_CHANGE = enotify.new_event_flags_and_mask(2)
 NE_REPO_STATS_CHANGE = enotify.new_event_flag()
 NE_REPO_SPEC_CHANGE = enotify.new_event_flag()
 
 _n_repos = 0
+_repo_name_hash_digest = None
+
+def get_repo_name_hash_digest_etc():
+    import hashlib
+    repo_name_list = config.get_repo_name_list()
+    return (hashlib.sha1(str(repo_name_list).encode()).digest(), len(repo_name_list),)
 
 def get_repo_available_condn():
     if _n_repos:
@@ -50,16 +56,18 @@ def get_repo_available_condn():
 def _ne_num_repo_change_cb(**kwargs):
     global _n_repos
     old_n_repos = _n_repos
-    _n_repos = len(config.get_repo_name_list())
-    if old_n_repos != _n_repos:
+    global _repo_name_hash_digest
+    old_repo_name_hash_digest = _repo_name_hash_digest
+    _repo_name_hash_digest, _n_repos = get_repo_name_hash_digest_etc()
+    if old_n_repos != _n_repos and not (old_n_repos and _n_repos):
         actions.CLASS_INDEP_AGS.update_condns(get_repo_available_condn())
 
 _ne_num_repo_change_cb()
 
-enotify.add_notification_cb(NE_NUM_REPO_CHANGE, _ne_num_repo_change_cb)
+enotify.add_notification_cb(NE_REPO_POPN_CHANGE, _ne_num_repo_change_cb)
 
 def _auto_update_cb(events_so_far, _args):
-    if events_so_far & NE_NUM_REPO_CHANGE or len(config.get_repo_name_list()) == _n_repos:
+    if events_so_far & NE_REPO_POPN_CHANGE or get_repo_name_hash_digest_etc()[0] == _repo_name_hash_digest:
         return 0
     return NE_NEW_REPO
 
@@ -104,7 +112,7 @@ class RepoListView(table.MapManagedTableView):
     Model = RepoListModel
     PopUp = None
     SET_EVENTS = 0
-    REFRESH_EVENTS = NE_NUM_REPO_CHANGE | NE_REPO_SPEC_CHANGE
+    REFRESH_EVENTS = NE_REPO_POPN_CHANGE | NE_REPO_SPEC_CHANGE
     AU_REQ_EVENTS = NE_REPO_SPEC_CHANGE
     UI_DESCR = ""
     specification = _repo_list_spec()
@@ -174,7 +182,7 @@ class RepoStatsListView(table.MapManagedTableView):
                     unreferenced_stored_bytes=GObject.TYPE_STRING)
     PopUp = "/repos_STATS_popup"
     SET_EVENTS = 0
-    REFRESH_EVENTS = NE_REPO_STATS_CHANGE | NE_NUM_REPO_CHANGE
+    REFRESH_EVENTS = NE_REPO_STATS_CHANGE | NE_REPO_POPN_CHANGE
     AU_REQ_EVENTS = NE_REPO_STATS_CHANGE
     UI_DESCR = """
     <ui>
@@ -275,7 +283,7 @@ class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
     def __init__(self):
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
-        self.add_notification_cb(NE_NUM_REPO_CHANGE, self._enotify_cb)
+        self.add_notification_cb(NE_REPO_POPN_CHANGE, self._enotify_cb)
     def _enotify_cb(self, **kwargs):
         self.update_contents()
     def _get_updated_item_list(self):

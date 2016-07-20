@@ -36,10 +36,16 @@ from . import dialogue
 from . import gutils
 
 AC_ARCHIVES_AVAILABLE = actions.ActionCondns.new_flag()
-NE_NEW_ARCHIVE, NE_DELETE_ARCHIVE, NE_NUM_ARCHIVE_CHANGE = enotify.new_event_flags_and_mask(2)
+NE_NEW_ARCHIVE, NE_DELETE_ARCHIVE, NE_ARCHIVE_POPN_CHANGE = enotify.new_event_flags_and_mask(2)
 NE_ARCHIVE_SPEC_CHANGE = enotify.new_event_flag()
 
 _n_archives = 0
+_archive_name_hash_digest = None
+
+def get_archive_name_hash_digest_etc():
+    import hashlib
+    archive_name_list = config.get_archive_name_list()
+    return (hashlib.sha1(str(archive_name_list).encode()).digest(), len(archive_name_list),)
 
 def get_archive_available_condn():
     if _n_archives:
@@ -50,18 +56,20 @@ def get_archive_available_condn():
 def _ne_num_archive_change_cb(**kwargs):
     global _n_archives
     old_n_archives = _n_archives
-    _n_archives = len(config.get_archive_name_list())
-    if old_n_archives != _n_archives:
+    global _archive_name_hash_digest
+    old_archive_name_hash_digest = _archive_name_hash_digest
+    _archive_name_hash_digest, _n_archives = get_archive_name_hash_digest_etc()
+    if old_n_archives != _n_archives and not (old_n_archives and _n_archives):
         actions.CLASS_INDEP_AGS.update_condns(get_archive_available_condn())
 
 _ne_num_archive_change_cb()
 
-enotify.add_notification_cb(NE_NUM_ARCHIVE_CHANGE, _ne_num_archive_change_cb)
+enotify.add_notification_cb(NE_ARCHIVE_POPN_CHANGE, _ne_num_archive_change_cb)
 
 def _auto_update_cb(events_so_far, _args):
-    if events_so_far & NE_NUM_ARCHIVE_CHANGE or len(config.get_archive_name_list()) == _n_archives:
+    if events_so_far & NE_ARCHIVE_POPN_CHANGE or get_archive_name_hash_digest_etc()[0] == _archive_name_hash_digest:
         return 0
-    return NE_NEW_ARCHIVE
+    return NE_ARCHIVE_POPN_CHANGE
 
 auto_update.register_cb(_auto_update_cb)
 
@@ -119,7 +127,7 @@ class ArchiveListView(table.MapManagedTableView):
     Model = ArchiveListModel
     PopUp = None
     SET_EVENTS = 0
-    REFRESH_EVENTS = NE_NUM_ARCHIVE_CHANGE | NE_ARCHIVE_SPEC_CHANGE
+    REFRESH_EVENTS = NE_ARCHIVE_POPN_CHANGE | NE_ARCHIVE_SPEC_CHANGE
     AU_REQ_EVENTS = NE_ARCHIVE_SPEC_CHANGE
     UI_DESCR = ""
     specification = _archive_list_spec()
@@ -361,7 +369,7 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
     def __init__(self):
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
-        self.add_notification_cb(NE_NUM_ARCHIVE_CHANGE, self._enotify_cb)
+        self.add_notification_cb(NE_ARCHIVE_POPN_CHANGE, self._enotify_cb)
     def _enotify_cb(self, **kwargs):
         self.update_contents()
     def _get_updated_item_list(self):
