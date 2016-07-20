@@ -106,25 +106,23 @@ class DirExtractionDialog(_ExtractionDialog):
 
 DVRow = collections.namedtuple("DVRow", ["fso_data"])
 
-class DVModel(tlview.NamedListStore):
+class DVModel(Gtk.ListStore):
     __g_type_name__ = "DVModel"
-    Row = DVRow
-    types = DVRow(fso_data=GObject.TYPE_PYOBJECT, )
     def __init__(self, snapshot_fs=None, offset_dir_path=None):
-        tlview.NamedListStore.__init__(self)
+        Gtk.ListStore.__init__(self, GObject.TYPE_PYOBJECT)
         self.set_snapshot_fs(snapshot_fs, offset_dir_path)
     def _set_contents(self):
         if self._snapshot_fs is None:
             self.clear()
             return
         offset_subdir_fs = self._snapshot_fs.get_subdir(self._offset_dir_path)
-        real_dirs = [DVRow(i) for i in offset_subdir_fs.iterate_subdirs(pre_path=True)]
-        dir_links = [DVRow(i) for i in offset_subdir_fs.iterate_subdir_links(pre_path=True)]
-        real_files = [DVRow(i) for i in offset_subdir_fs.iterate_files(pre_path=True)]
-        file_links = [DVRow(i) for i in offset_subdir_fs.iterate_file_links(pre_path=True)]
+        real_dirs = list(offset_subdir_fs.iterate_subdirs(pre_path=True))
+        dir_links = list(offset_subdir_fs.iterate_subdir_links(pre_path=True))
+        real_files = list(offset_subdir_fs.iterate_files(pre_path=True))
+        file_links = list(offset_subdir_fs.iterate_file_links(pre_path=True))
         self.clear()
-        self.append_contents(sorted(real_dirs + dir_links))
-        self.append_contents(sorted(real_files + file_links))
+        for item in sorted(real_dirs + dir_links) + sorted(real_files + file_links):
+            self.append([item])
     def change_offset_dir_path(self, new_offset_dir_path):
         self._offset_dir_path = new_offset_dir_path
         self._set_contents()
@@ -134,16 +132,22 @@ class DVModel(tlview.NamedListStore):
         self._offset_dir_path = offset_dir_path
         self._set_contents()
 
-def stock_id_icon_select_func(fso_data):
+def dv_icon_set_func(treeviewcolumn, cell, model, tree_iter, *args):
+    fso_data = model[tree_iter][0]
     if fso_data.is_dir:
         if fso_data.is_link:
-            return icons.STOCK_DIR_LINK
+            icon = icons.STOCK_DIR_LINK
         else:
-            return icons.STOCK_DIR
+            icon = icons.STOCK_DIR
     elif fso_data.is_link:
-        return icons.STOCK_FILE_LINK
+        icon = icons.STOCK_FILE_LINK
     else:
-        return  icons.STOCK_FILE
+        icon = icons.STOCK_FILE
+    cell.set_property("stock_id", icon)
+
+def dv_name_set_func(treeviewcolumn, cell, model, tree_iter, *args):
+    fso_data = model[tree_iter][0]
+    cell.set_property("text", fso_data.name)
 
 def dv_specification():
     return tlview.ViewSpec(
@@ -155,8 +159,36 @@ def dv_specification():
         },
         selection_mode = Gtk.SelectionMode.MULTIPLE,
         columns = [
-            tlview.simple_column("", tlview.transform_pixbuf_stock_id_cell(DVModel, "fso_data", stock_id_icon_select_func, xalign=0.0)),
-            tlview.simple_column(_("Name"), tlview.transform_data_cell(DVModel, "fso_data", lambda x: x.name, xalign=0.0)),
+            tlview.ColumnSpec(
+                title="",
+                properties={"expand": False, "resizable" : True},
+                cells=[
+                    tlview.CellSpec(
+                        cell_renderer_spec=tlview.CellRendererSpec(
+                            cell_renderer=Gtk.CellRendererPixbuf,
+                            expand=False,
+                            start=True
+                        ),
+                        properties={"xalign": 0.0},
+                        cell_data_function_spec=tlview.CellDataFunctionSpec(function=dv_icon_set_func),
+                    ),
+                ],
+            ),
+            tlview.ColumnSpec(
+                title=_("Name"),
+                properties={"expand": False, "resizable" : True},
+                cells=[
+                    tlview.CellSpec(
+                        cell_renderer_spec=tlview.CellRendererSpec(
+                            cell_renderer=Gtk.CellRendererText,
+                            expand=False,
+                            start=True
+                        ),
+                        properties={"editable" : False, "xalign": 0.0},
+                        cell_data_function_spec=tlview.CellDataFunctionSpec(function=dv_name_set_func),
+                    )
+                ],
+            )
         ]
     )
 
@@ -175,7 +207,7 @@ class DirectoryView(tlview.ListView):
         self.connect("button_press_event", tlview.clear_selection_cb)
         self.connect("key_press_event", tlview.clear_selection_cb)
     def _show_hidden_visibility_func(self, model, model_iter, toggle):
-        return toggle.get_active() or not model.get_value_named(model_iter, "fso_data").is_hidden
+        return toggle.get_active() or not model[model_iter][0].is_hidden
     def change_offset_dir_path(self, new_offset_dir_path):
         self._dv_model.change_offset_dir_path(new_offset_dir_path)
     def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
@@ -225,19 +257,16 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
                  self._change_dir_up_bcb),
             ])
     def _double_click_cb(self, tree_view, tree_path, tree_view_column):
-        # TODO: build capability to work with filters into tlview
-        model = tree_view.get_model()
-        named_model = model.get_model()
-        row = named_model.Row(*model[tree_path])
-        if row.fso_data.is_dir:
-            if row.fso_data.is_link:
+        fso_data = tree_view.get_model()[tree_path][0]
+        if fso_data.is_dir:
+            if fso_data.is_link:
                 # TODO: think about handling links to links here
-                if not self._snapshot_fs.contains_subdir(row.fso_data.tgt_abs_path):
-                    dialogue.inform_user(_("Symbolic link target {} is not stored in this snapshot").format(row.fso_data.tgt_abs_path), parent=self._parent)
+                if not self._snapshot_fs.contains_subdir(fso_data.tgt_abs_path):
+                    dialogue.inform_user(_("Symbolic link target {} is not stored in this snapshot").format(fso_data.tgt_abs_path), parent=self._parent)
                     return
-                self._current_offset_dir_path = row.fso_data.tgt_abs_path
+                self._current_offset_dir_path = fso_data.tgt_abs_path
             else:
-                self._current_offset_dir_path = row.fso_data.path
+                self._current_offset_dir_path = fso_data.path
             tree_view.change_offset_dir_path(self._current_offset_dir_path)
             self._update_above_base_offset_status()
     def _change_dir_up_bcb(self, _button=None):
