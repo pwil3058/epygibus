@@ -299,12 +299,13 @@ class View(Gtk.TreeView):
         Gtk.TreeView.__init__(self, model)
         if size_req:
             self.set_size_request(size_req[0], size_req[1])
-        for prop_name, prop_val in self.specification.properties.items():
+        spec = self.specification if isinstance(self.specification, ViewSpec) else self.__class__.specification(model)
+        for prop_name, prop_val in spec.properties.items():
             self.set_property(prop_name, prop_val)
-        if self.specification.selection_mode is not None:
-            self.get_selection().set_mode(self.specification.selection_mode)
+        if spec.selection_mode is not None:
+            self.get_selection().set_mode(spec.selection_mode)
         self._columns = collections.OrderedDict()
-        for col_d in self.specification.columns:
+        for col_d in spec.columns:
             self._view_add_column(col_d)
         self.connect("button_press_event", self._handle_clear_selection_cb)
         self.connect("key_press_event", self._handle_clear_selection_cb)
