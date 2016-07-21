@@ -133,6 +133,12 @@ class NoMatchingSnapshot(Error):
     def __init__(self, available_snapshots):
         self.available_snapshots = available_snapshots
 
+class SnapshotNotFound(Error):
+    STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" not found in {archive_name} archive.")
+    def __init__(self, archive_name, snapshot_name):
+        self.archive_name = archive_name
+        self.archive_name = snapshot_name
+
 class SnapshotAlreadyCompressed(Error):
     STR_TEMPLATE = _("Error: snapshot \"{snapshot_name}\" in \"{archive_name}\" already compressed.")
     def __init__(self, archive_name, snapshot_name):

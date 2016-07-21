@@ -29,6 +29,9 @@ from . import dialogue
 from . import tlview
 from . import icons
 from . import gutils
+from . import table
+from . import auto_update
+from . import g_archives
 
 AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
@@ -297,6 +300,153 @@ class ExigSnapshotDialog(Gtk.Window):
         self.add(self._ss_mgr)
         self.show_all()
 
+class SSNameTableData(table.TableData):
+    def __init__(self, archive_name):
+        table.TableData.__init__(self, archive_name=archive_name)
+    @property
+    def archive_name(self):
+        return self._kwargs["archive_name"]
+    def _get_data_text(self, h):
+        if self.archive_name is None:
+            return []
+        ss_name_list = snapshot.get_snapshot_name_list(self.archive_name, reverse=True)
+        h.update(str(ss_name_list).encode())
+        return ss_name_list
+    def _finalize(self, pdt):
+        self._ss_name_list = pdt
+    def iter_rows(self):
+        for ss_name in self._ss_name_list:
+            yield ss_name
+
+class SSNameListModel(Gtk.ListStore):
+    __g_type_name__ = "SSNameModel"
+    REPOPULATE_EVENTS = 0
+    UPDATE_EVENTS = 0
+    def __init__(self, archive_name=None):
+        Gtk.ListStore.__init__(self, GObject.TYPE_STRING, GObject.TYPE_BOOLEAN)
+        self.set_archive_name(archive_name)
+        auto_update.register_cb(self._auto_update_cb)
+    @property
+    def archive_name(self):
+        return self._archive_name
+    def _auto_update_cb(self, events_so_far, args):
+        if not self._ss_list_db.is_current:
+            self._update_contents(reset_only=True)
+        # NB changes here are of no interest to others
+        return 0
+    def _set_contents(self):
+        self._ss_list_db =  self._get_ss_list_db(reset_only=False)
+        self.clear()
+        for row in self._ss_list_db.iter_rows():
+            self.append(row)
+    def _update_contents(self, reset_only=True):
+        # NB: this process relies on fact all NEW rows will have a name
+        # greater than any in the model and model/list are both ordered
+        # in descending order of time
+        self._ss_list_db = self._get_ss_list_db(reset_only=reset_only)
+        model_iter = self.get_iter_first()
+        for row in self._ss_list_db.iter_rows():
+            model_row_name = self[model_iter][0]
+            if model_row_name == row[0]:
+                self.set(model_iter, [1], row[1:])
+                model_iter = self.iter_next(model_iter)
+            elif model_row_name < row[0]:
+                self.insert_before(model_iter, row)
+            else:
+                self.remove(model_iter)
+        while model_iter and self.iter_is_valid(model_iter):
+            self.remove(model_iter)
+    def set_archive_name(self, archive_name=None):
+        self._archive_name = archive_name
+        self._set_contents()
+    def compressed_toggle_cb(self, toggle, model_path):
+        row = self[model_path]
+        snapshot.toggle_named_snapshot_compression(self.archive_name, row[0])
+        self._update_contents(False)
+    def _get_ss_list_db(self, reset_only):
+        return self._ss_list_db.reset() if reset_only else SSNameTableData(self._archive_name)
+
+def ssnl_specification(model):
+    return tlview.ViewSpec(
+        properties={
+            "enable-grid-lines" : False,
+            "reorderable" : False,
+            "rules_hint" : False,
+            "headers-visible" : True,
+        },
+        selection_mode = Gtk.SelectionMode.MULTIPLE,
+        columns = [
+            tlview.ColumnSpec(
+                title=_("Snapshot Time (Local)"),
+                properties={"expand": False, "resizable" : True},
+                cells=[
+                    tlview.CellSpec(
+                        cell_renderer_spec=tlview.CellRendererSpec(
+                            cell_renderer=Gtk.CellRendererText,
+                            expand=False,
+                            start=True
+                        ),
+                        properties={"editable" : False, "xalign": 0.0},
+                        cell_data_function_spec=None,
+                        attributes = {"text" : 0}
+                    )
+                ],
+            ),
+            tlview.ColumnSpec(
+                title=_("Compressed"),
+                properties={"expand": False, "resizable" : False},
+                cells=[
+                    tlview.CellSpec(
+                        cell_renderer_spec=tlview.CellRendererSpec(
+                            cell_renderer=Gtk.CellRendererToggle,
+                            expand=False,
+                            start=True,
+                            signal_handlers = {"toggled" : model.compressed_toggle_cb}
+                        ),
+                        properties={"xalign": 0.0},
+                        cell_data_function_spec=None,
+                        attributes = {"active" : 1}
+                    )
+                ],
+            )
+        ]
+    )
+
+class SSNameListView(tlview.View):
+    __g_type_name__ = "SSNameListView"
+    PopUp = None
+    Model = SSNameListModel
+    specification = ssnl_specification
+    def __init__(self, archive_name, size_req=None, parent=None):
+        self._parent = parent
+        model = SSNameListModel(archive_name)
+        tlview.View.__init__(self, model=model, size_req=size_req)
+        self.connect("button_press_event", tlview.clear_selection_cb)
+        self.connect("key_press_event", tlview.clear_selection_cb)
+    @property
+    def archive_name(self):
+        return self.get_model().archive_name
+    @archive_name.setter
+    def archive_name(self, archive_name):
+        self.get_model().set_archive_name(archive_name)
+
+class ArchiveSSListWidget(Gtk.VBox):
+    __g_type_name__ = "ArchiveSSListWidget"
+    def __init__(self):
+        Gtk.VBox.__init__(self)
+        self._archive_selector = g_archives.ArchiveComboBox()
+        self._snapshot_list = SSNameListView(self._archive_selector.get_active_text())
+        hbox = Gtk.HBox()
+        hbox.pack_start(Gtk.Label(_("Archive: ")), expand=False, fill=True, padding=0)
+        hbox.pack_start(self._archive_selector, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(gutils.wrap_in_scrolled_window(self._snapshot_list), expand=True, fill=True, padding=0)
+        self._archive_selector.connect("changed", self._archive_selection_change_cb)
+        self.show_all()
+    def _archive_selection_change_cb(self, combo):
+        self._snapshot_list.archive_name = combo.get_active_text()
+
+# class independent actions
 def exig_open_snapshot_file_acb(_action=None):
     snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
     if snapshot_file_path:

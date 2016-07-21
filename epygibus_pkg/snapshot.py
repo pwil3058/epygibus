@@ -995,3 +995,21 @@ def uncompress_snapshot(archive_name, seln_fn=lambda l: l[-1]):
     if not snapshot_file_path.endswith(".gz"):
         raise excpns.SnapshotNotCompressed(archive_name, ss_root(snapshot_file_path))
     utils.uncompress_file(snapshot_file_path)
+
+def get_named_snapshot_file_path(archive_name, snapshot_name):
+    from . import config
+    archive = config.read_archive_spec(archive_name)
+    snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name + ".pkl")
+    if os.path.isfile(snapshot_file_path):
+        return snapshot_file_path
+    snapshot_file_path += ".gz"
+    if os.path.isfile(snapshot_file_path):
+        return snapshot_file_path
+    raise excpns.SnapshotNotFound(archive_name, snapshot_name)
+
+def toggle_named_snapshot_compression(archive_name, snapshot_name):
+    snapshot_file_path = get_named_snapshot_file_path(archive_name, snapshot_name)
+    if snapshot_file_path.endswith(".gz"):
+        utils.uncompress_file(snapshot_file_path)
+    else:
+        utils.compress_file(snapshot_file_path)

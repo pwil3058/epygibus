@@ -53,6 +53,7 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         vbox.pack_start(lmenu_bar, expand=False, fill=True, padding=0)
         notebook = Gtk.Notebook()
         notebook.set_show_border(True)
+        notebook.append_page(g_snapshots.ArchiveSSListWidget(), Gtk.Label(_("Snapshots")))
         notebook.append_page(g_repos.ReposWidget(), Gtk.Label(_("Content Repositories")))
         notebook.append_page(g_archives.ArchivesWidget(), Gtk.Label(_("Snapshot Archives")))
         vbox.pack_start(notebook, expand=True, fill=True, padding=0)
