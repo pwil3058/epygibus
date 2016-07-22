@@ -20,7 +20,7 @@ from gi.repository import Gdk
 
 CSS = b"""
     GtkNotebook tab {
-        background-color: white;
+        background-color: shade(@bg_color, 1.02);
         border-style: solid;
         border-image: -gtk-gradient (linear, left top, left bottom,
                                     from (alpha (shade (@bg_color, 0.9), 0.0)),
@@ -34,7 +34,7 @@ CSS = b"""
         border-color: shade(@bg_color, 0.82);
         border-style: solid;
         border-width: 1px;
-        background-color: shade(@bg_color, 1.02);
+        background-color: white;
         background-image: none;
         color: @fg_color;
     }

@@ -443,8 +443,35 @@ class ArchiveSSListWidget(Gtk.VBox):
         self.pack_start(gutils.wrap_in_scrolled_window(self._snapshot_list), expand=True, fill=True, padding=0)
         self._archive_selector.connect("changed", self._archive_selection_change_cb)
         self.show_all()
+    @property
+    def snapshot_list(self):
+        return self._snapshot_list
     def _archive_selection_change_cb(self, combo):
         self._snapshot_list.archive_name = combo.get_active_text()
+
+class SnapshotsMgrWidget(Gtk.HBox):
+    __g_type_name__ = "SnapshotMgrWidget"
+    def __init__(self):
+        Gtk.HBox.__init__(self)
+        self._snapshot_selector = ArchiveSSListWidget()
+        self._snapshot_selector.snapshot_list.connect("row_activated", self._open_snapshot_cb)
+        self._notebook = gutils.NotebookWithDelete(tab_delete_tooltip=_("Close this snapshot."))
+        self._notebook.set_scrollable(True)
+        self._notebook.popup_enable()
+        self.pack_start(self._snapshot_selector, expand=False, fill=True, padding=0)
+        self.pack_start(self._notebook, expand=True, fill=True, padding=0)
+        self.show_all()
+    def _open_snapshot_cb(self, tree_view, tree_path, tree_view_column):
+        archive_name = tree_view.archive_name
+        snapshot_name = tree_view.get_model()[tree_path][0]
+        snapshot_file_path = snapshot.get_named_snapshot_file_path(archive_name, snapshot_name)
+        snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
+        tab_label = Gtk.Label(archive_name + ":" + snapshot_name)
+        menu_label = Gtk.Label(archive_name + ":" + snapshot_name)
+        ss_mgr = SnapshotManagerWidget(snapshot_fs)
+        page_num = self._notebook.append_deletable_page_menu(ss_mgr, tab_label, menu_label)
+        if page_num != -1:
+            self._notebook.set_current_page(page_num)
 
 # class independent actions
 def exig_open_snapshot_file_acb(_action=None):
