@@ -19,6 +19,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import GObject
+from gi.repository import Gio
 
 class FramedScrollWindow(Gtk.Frame):
     __g_type_name__ = "FramedScrollWindow"
@@ -189,3 +190,36 @@ class PretendWOFile(Gtk.ScrolledWindow):
         bufr_iter = bufr.get_end_iter()
         for line in lines:
             bufr.insert(bufr_iter, line)
+
+class NotebookWithDelete(Gtk.Notebook):
+    __g_type_name__ = "NotebookWithDelete"
+    def __init__(self, tab_delete_tooltip=_("Delete this page."), **kwargs):
+        self._tab_delete_tooltip = tab_delete_tooltip
+        Gtk.Notebook.__init__(self, **kwargs)
+    def append_deletable_page(self, page, tab_label):
+        label_widget = self._make_label_widget(page, tab_label)
+        return self.append_page(page, label_widget)
+    def append_deletable_page_menu(self, page, tab_label, menu_label):
+        tab_label_widget = self._make_label_widget(page, tab_label)
+        menu_label_widget = self._make_label_widget(page, menu_label)
+        return self.append_page_menu(page, tab_label_widget, menu_label_widget)
+    def _make_label_widget(self, page, tab_label):
+        hbox = Gtk.HBox()
+        hbox.pack_start(tab_label, expand=True, fill=True, padding=0)
+        button = Gtk.Button()
+        button.set_relief(Gtk.ReliefStyle.NONE)
+        button.set_focus_on_click(False)
+        icon = Gio.ThemedIcon.new_with_default_fallbacks('window-close-symbolic')
+        image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.MENU)
+        image.set_tooltip_text(self._tab_delete_tooltip)
+        button.add(image)
+        button.set_name("notebook-tab-delete-button")
+        hbox.pack_start(button, expand=False, fill=True, padding=0)
+        button.connect("clicked", lambda _button: self._delete_page(page))
+        hbox.show_all()
+        return hbox
+    def _prepare_for_delete(self, page):
+        pass
+    def _delete_page(self, page):
+        self._prepare_for_delete(page)
+        self.remove_page(self.page_num(page))
