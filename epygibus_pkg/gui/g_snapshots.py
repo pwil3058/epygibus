@@ -378,7 +378,7 @@ def ssnl_specification(model):
         columns = [
             tlview.ColumnSpec(
                 title=_("Snapshot Time (Local)"),
-                properties={"expand": False, "resizable" : True},
+                properties={"expand": False, "resizable" : False},
                 cells=[
                     tlview.CellSpec(
                         cell_renderer_spec=tlview.CellRendererSpec(
@@ -386,14 +386,14 @@ def ssnl_specification(model):
                             expand=False,
                             start=True
                         ),
-                        properties={"editable" : False, "xalign": 0.0},
+                        properties={"editable" : False, "xalign" : 0.0, "width-chars" : 24, "max-width-chars" : 24},
                         cell_data_function_spec=None,
                         attributes = {"text" : 0}
                     )
                 ],
             ),
             tlview.ColumnSpec(
-                title=_("Compressed"),
+                title=_("Cmprd"),
                 properties={"expand": False, "resizable" : False},
                 cells=[
                     tlview.CellSpec(
@@ -403,7 +403,7 @@ def ssnl_specification(model):
                             start=True,
                             signal_handlers = {"toggled" : model.compressed_toggle_cb}
                         ),
-                        properties={"xalign": 0.0},
+                        properties={"xalign": 0.5},
                         cell_data_function_spec=None,
                         attributes = {"active" : 1}
                     )
@@ -435,12 +435,12 @@ class ArchiveSSListWidget(Gtk.VBox):
     def __init__(self):
         Gtk.VBox.__init__(self)
         self._archive_selector = g_archives.ArchiveComboBox()
-        self._snapshot_list = SSNameListView(self._archive_selector.get_active_text())
+        self._snapshot_list = SSNameListView(self._archive_selector.get_active_text(), size_req=(200, 540))
         hbox = Gtk.HBox()
         hbox.pack_start(Gtk.Label(_("Archive: ")), expand=False, fill=True, padding=0)
         hbox.pack_start(self._archive_selector, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
-        self.pack_start(gutils.wrap_in_scrolled_window(self._snapshot_list), expand=True, fill=True, padding=0)
+        self.pack_start(gutils.wrap_in_scrolled_window(self._snapshot_list, policy=(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)), expand=True, fill=True, padding=0)
         self._archive_selector.connect("changed", self._archive_selection_change_cb)
         self.show_all()
     @property
