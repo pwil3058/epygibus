@@ -170,9 +170,9 @@ def dv_specification():
                         cell_renderer_spec=tlview.CellRendererSpec(
                             cell_renderer=Gtk.CellRendererPixbuf,
                             expand=False,
-                            start=True
+                            start=True,
+                            properties={"xalign": 0.0},
                         ),
-                        properties={"xalign": 0.0},
                         cell_data_function_spec=tlview.CellDataFunctionSpec(function=dv_icon_set_func),
                     ),
                 ],
@@ -185,9 +185,9 @@ def dv_specification():
                         cell_renderer_spec=tlview.CellRendererSpec(
                             cell_renderer=Gtk.CellRendererText,
                             expand=False,
-                            start=True
+                            start=True,
+                            properties={"editable" : False, "xalign": 0.0},
                         ),
-                        properties={"editable" : False, "xalign": 0.0},
                         cell_data_function_spec=tlview.CellDataFunctionSpec(function=dv_name_set_func),
                     )
                 ],
@@ -384,9 +384,9 @@ def ssnl_specification(model):
                         cell_renderer_spec=tlview.CellRendererSpec(
                             cell_renderer=Gtk.CellRendererText,
                             expand=False,
-                            start=True
+                            start=True,
+                            properties={"editable" : False, "xalign" : 0.0, "width-chars" : 24, "max-width-chars" : 24},
                         ),
-                        properties={"editable" : False, "xalign" : 0.0, "width-chars" : 24, "max-width-chars" : 24},
                         cell_data_function_spec=None,
                         attributes = {"text" : 0}
                     )
@@ -401,9 +401,9 @@ def ssnl_specification(model):
                             cell_renderer=Gtk.CellRendererToggle,
                             expand=False,
                             start=True,
-                            signal_handlers = {"toggled" : model.compressed_toggle_cb}
+                            signal_handlers = {"toggled" : model.compressed_toggle_cb},
+                            properties={"xalign": 0.5},
                         ),
-                        properties={"xalign": 0.5},
                         cell_data_function_spec=None,
                         attributes = {"active" : 1}
                     )

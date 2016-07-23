@@ -168,9 +168,9 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
                         cell_renderer_spec=tlview.CellRendererSpec(
                             cell_renderer=Gtk.CellRendererText,
                             expand=False,
-                            start=True
+                            start=True,
+                            properties={"editable" : False},
                         ),
-                        properties={"editable" : False},
                         cell_data_function_spec=None,
                         attributes={"text" : Model.col_index("included_path")}
                     ),

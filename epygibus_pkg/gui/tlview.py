@@ -180,10 +180,9 @@ class CellDataFunctionSpec:
         self.user_data = user_data
 
 class CellSpec:
-    __slots__ = ('cell_renderer_spec', 'properties', 'cell_data_function_spec', 'attributes')
-    def __init__(self, cell_renderer_spec, properties=None, cell_data_function_spec=None, attributes=None):
+    __slots__ = ('cell_renderer_spec', 'cell_data_function_spec', 'attributes')
+    def __init__(self, cell_renderer_spec, cell_data_function_spec=None, attributes=None):
         self.cell_renderer_spec = cell_renderer_spec
-        self.properties = properties if properties is not None else dict()
         self.cell_data_function_spec = cell_data_function_spec
         self.attributes = attributes if attributes is not None else dict()
 
@@ -192,9 +191,9 @@ def stock_icon_cell(model, fld, xalign=0.5):
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererPixbuf,
             expand=False,
-            start=True
+            start=True,
+            properties={"xalign": xalign},
         ),
-        properties={"xalign": xalign},
         cell_data_function_spec=None,
         attributes = {"stock_id" : model.col_index("icon")}
     )
@@ -204,9 +203,9 @@ def _text_cell(model, fld, editable, xalign=0.5):
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererText,
             expand=False,
-            start=True
+            start=True,
+            properties={"editable" : editable, "xalign": xalign},
         ),
-        properties={"editable" : editable, "xalign": xalign},
         cell_data_function_spec=None,
         attributes = {"text" : model.col_index(fld)}
     )
@@ -226,7 +225,6 @@ def _toggle_cell(model, fld, activatable, toggle_cb=None, xalign=0.5):
             properties={"activatable" : activatable},
             signal_handlers={"toggled" : toggle_cb} if toggle_cb else None
         ),
-        properties={},
         cell_data_function_spec=None,
         attributes = {"active" : model.col_index(fld)}
     )
@@ -254,9 +252,9 @@ def transform_data_cell(model, fld, transform_func, xalign=0.5):
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererText,
             expand=False,
-            start=True
+            start=True,
+            properties={"editable" : False, "xalign": xalign},
         ),
-        properties={"editable" : False, "xalign": xalign},
         cell_data_function_spec=CellDataFunctionSpec(_transformer, (transform_func, model.col_index(fld))),
         attributes = {}
     )
@@ -266,9 +264,9 @@ def transform_pixbuf_stock_id_cell(model, fld, transform_func, xalign=0.5):
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererPixbuf,
             expand=False,
-            start=True
+            start=True,
+            properties={"xalign": xalign},
         ),
-        properties={"xalign": xalign},
         cell_data_function_spec=CellDataFunctionSpec(_stock_id_transformer, (transform_func, model.col_index(fld))),
         attributes = {}
     )
@@ -278,9 +276,9 @@ def mark_up_cell(model, fld):
         cell_renderer_spec=CellRendererSpec(
             cell_renderer=Gtk.CellRendererText,
             expand=False,
-            start=True
+            start=True,
+            properties={"editable" : False},
         ),
-        properties={"editable" : False},
         cell_data_function_spec=None,
         attributes = {"markup" : model.col_index(fld)}
     )
@@ -356,8 +354,6 @@ class View(Gtk.TreeView):
     def _view_add_cell(self, col, cell_d):
         cell = self._create_cell(col, cell_d.cell_renderer_spec)
         self._columns[col.get_title()].cells.append(cell)
-        for prop_name, prop_val in cell_d.properties.items():
-            cell.set_property(prop_name, prop_val)
         if cell_d.cell_data_function_spec is not None:
             col.set_cell_data_func(cell, cell_d.cell_data_function_spec.function, cell_d.cell_data_function_spec.user_data)
         for attr_name, attr_index in cell_d.attributes.items():
