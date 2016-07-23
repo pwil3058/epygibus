@@ -201,8 +201,7 @@ class NotebookWithDelete(Gtk.Notebook):
         return self.append_page(page, label_widget)
     def append_deletable_page_menu(self, page, tab_label, menu_label):
         tab_label_widget = self._make_label_widget(page, tab_label)
-        menu_label_widget = self._make_label_widget(page, menu_label)
-        return self.append_page_menu(page, tab_label_widget, menu_label_widget)
+        return self.append_page_menu(page, tab_label_widget, menu_label)
     def _make_label_widget(self, page, tab_label):
         hbox = Gtk.HBox()
         hbox.pack_start(tab_label, expand=True, fill=True, padding=0)
@@ -223,3 +222,6 @@ class NotebookWithDelete(Gtk.Notebook):
     def _delete_page(self, page):
         self._prepare_for_delete(page)
         self.remove_page(self.page_num(page))
+    def iterate_pages(self):
+        for pnum in range(self.get_n_pages()):
+            yield (pnum, self.get_nth_page(pnum))

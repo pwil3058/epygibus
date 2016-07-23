@@ -241,6 +241,12 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         self._dir_view.connect("row_activated", self._double_click_cb)
         self._update_above_base_offset_status()
         self.show_all()
+    @property
+    def archive_name(self):
+        return self._snapshot_fs.archive_name
+    @property
+    def snapshot_name(self):
+        return self._snapshot_fs.snapshot_name
     def populate_action_groups(self):
         pass
     def populate_button_groups(self):
@@ -464,6 +470,11 @@ class SnapshotsMgrWidget(Gtk.HBox):
     def _open_snapshot_cb(self, tree_view, tree_path, tree_view_column):
         archive_name = tree_view.archive_name
         snapshot_name = tree_view.get_model()[tree_path][0]
+        for page_num, existing_page in self._notebook.iterate_pages():
+            if existing_page.archive_name == archive_name:
+                if existing_page.snapshot_name == snapshot_name:
+                    self._notebook.set_current_page(page_num)
+                    return
         snapshot_file_path = snapshot.get_named_snapshot_file_path(archive_name, snapshot_name)
         snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
         tab_label = Gtk.Label(archive_name + ":" + snapshot_name)
