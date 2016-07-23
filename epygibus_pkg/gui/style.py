@@ -20,20 +20,16 @@ from gi.repository import Gdk
 
 CSS = b"""
     GtkNotebook tab {
-        background-color: shade(@bg_color, 1.02);
+        background-color: shade(@bg_color, 1.22);
+        border-color: shade(@bg_color, 1.12);
+        border-width: 1px 1px 0 1px;
         border-style: solid;
-        border-image: -gtk-gradient (linear, left top, left bottom,
-                                    from (alpha (shade (@bg_color, 0.9), 0.0)),
-                                    to (shade (@bg_color, 0.9))) 1;
-        border-image-width: 0 1px;
-        border-color: transparent;
-        border-width: 0;
         box-shadow: none;
     }
     GtkNotebook tab:active {
-        border-color: shade(@bg_color, 0.82);
+        border-color: shade(cyan, 0.8);
         border-style: solid;
-        border-width: 1px;
+        border-width: 4px 1px 0 1px;
         background-color: white;
         background-image: none;
         color: @fg_color;
