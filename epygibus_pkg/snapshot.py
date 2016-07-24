@@ -165,6 +165,16 @@ class Snapshot:
     def occupancy(self):
         return len(self.subdirs) + len(self.files) + len(self.subdir_links) + len(self.file_links)
     @property
+    def name(self):
+        if not self.parent:
+            return os.sep
+        for key, value in self.parent.subdirs.iter_items():
+            if value == self:
+                return key
+    @property
+    def path(self):
+        return os.sep if not self.parent else os.path.join(parent.path, self.name)
+    @property
     def nfiles(self):
         # NB this doesn't have to be 100% accurate (just used for progress indicator)
         count = len(self.files) + len(self.file_links)
@@ -198,14 +208,20 @@ class Snapshot:
             return self
         return self._find_dir(dir_path.strip(os.sep).split(os.sep))
     def find_file(self, file_path, repo_mgmt_key):
+        # NB file_path is relative to me
         dir_path, file_name = os.path.split(file_path)
-        return SFile.make(file_path, self.find_dir(dir_path).files[file_name], repo_mgmt_key)
+        abs_file_path = os.path.join(self.path, file_path) if not os.path.isabs(file_path) else file_path
+        return SFile.make(abs_file_path, self.find_dir(dir_path).files[file_name], repo_mgmt_key)
     def find_file_link(self, file_path):
+        # NB file_path is relative to me
         dir_path, file_name = os.path.split(file_path)
-        return SFileSLink.make(file_path, self.find_dir(dir_path).file_links[file_name])
+        abs_file_path = os.path.join(self.path, file_path) if not os.path.isabs(file_path) else file_path
+        return SFileSLink.make(abs_file_path, self.find_dir(dir_path).file_links[file_name])
     def find_subdir_link(self, subdir_path):
+        # NB subdir_path is relative to me
         dir_path, subdir_name = os.path.split(subdir_path)
-        return SDirSLink.make(subdir_path, self.find_dir(dir_path).subdir_links[subdir_name])
+        abs_subdir_path = os.path.join(self.path, subdir_path) if not os.path.isabs(file_path) else subdir_path
+        return SDirSLink.make(abs_subdir_path, self.find_dir(dir_path).subdir_links[subdir_name])
     def iterate_content_tokens(self):
         for _dont_care, content_token in self.files.values():
             yield content_token
@@ -614,30 +630,46 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
     def get_offset_base_subdir_path(self):
         return os.path.join(*self.snapshot.find_offset_base_subdir_bits())
     def get_file(self, file_path):
-        abs_file_path = absolute_path(file_path)
+        if os.path.isabs(file_path):
+            abs_file_path = file_path
+        else:
+            # NB: non absolute paths are considered relative to current working directory
+            abs_file_path = absolute_path(file_path)
+        if os.path.commonprefix([self.path, abs_file_path]) != self.path:
+            # TODO: fix FileNotFound to include starting directory
+            raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
+        file_path_rel_me = os.path.relpath(abs_file_path, self.path)
         try:
-            file_data = self.snapshot.find_file(abs_file_path, self.repo_mgmt_key)
+            file_data = self.snapshot.find_file(file_path_rel_me, self.repo_mgmt_key)
         except (KeyError, AttributeError):
             try:
-                file_link_data = self.snapshot.find_file_link(file_path)
+                file_link_data = self.snapshot.find_file_link(file_path_rel_me)
                 raise excpns.IsSymbolicLink(file_path, file_link_data.tgt_path)
             except (KeyError, AttributeError):
                 pass
             raise excpns.FileNotFound(file_path, self.archive_name, ss_root(self.snapshot_name))
         return file_data
     def get_subdir(self, subdir_path):
-        if subdir_path == os.sep:
-            return self
-        abs_subdir_path = absolute_path(subdir_path)
-        subdir_ss = self.snapshot.find_dir(abs_subdir_path)
+        if os.path.isabs(subdir_path):
+            abs_subdir_path = subdir_path
+            if abs_subdir_path == self.path:
+                return self
+        else:
+            # NB: non absolute paths are considered relative to current working directory
+            abs_subdir_path = absolute_path(subdir_path)
+        if os.path.commonprefix([self.path, abs_subdir_path]) != self.path:
+            # TODO: fix DirNotFound to include starting directory
+            raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
+        subdir_path_rel_me = os.path.relpath(abs_subdir_path, self.path)
+        subdir_ss = self.snapshot.find_dir(subdir_path_rel_me)
         if not subdir_ss:
             try:
-                subdir_link_data = self.snapshot.find_subdir_link(subdir_path)
+                subdir_link_data = self.snapshot.find_subdir_link(subdir_path_rel_me)
                 raise excpns.IsSymbolicLink(subdir_path, subdir_link_data.tgt_path)
             except (KeyError, AttributeError):
                 pass
             raise excpns.DirNotFound(subdir_path, self.archive_name, ss_root(self.snapshot_name))
-        return SnapshotFS(subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.repo_mgmt_key)
+        return SnapshotFS(abs_subdir_path, self.archive_name, self.snapshot_name, subdir_ss, self.repo_mgmt_key)
     def contains_subdir(self, subdir_path):
         try:
             self.get_subdir(subdir_path)
@@ -762,6 +794,11 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             link_count += file_link_data.create_link(orig_curdir, stderr, overwrite)
         progress_indicator.finished()
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
+    def restore(self, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
+        return self.copy_contents_to(self.path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
+    def restore_subdir(self, subdir_path, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
+        snapshot_subdir_ss = self.get_subdir(subdir_path)
+        return snapshot_subdir_ss.copy_contents_to(subdir_path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
     def get_statistics(self):
         from . import repo
         ck_set = set()
