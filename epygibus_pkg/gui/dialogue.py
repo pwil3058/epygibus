@@ -26,7 +26,7 @@ from . import enotify
 from . import icons
 from . import gutils
 
-APP_NAME = "epygibus"
+from .. import APP_NAME
 
 main_window = None
 
@@ -91,7 +91,7 @@ class BusyDialog(Gtk.Dialog, BusyIndicator):
             parent = main_window
         Gtk.Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
         if not parent:
-            self.set_icon_from_file(icons.APP_ICON_FILE)
+            self.set_icon(icons.APP_ICON_PIXBUF)
         BusyIndicator.__init__(self)
     def report_any_problems(self, result):
         report_any_problems(result, self)

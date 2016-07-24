@@ -19,8 +19,10 @@ import sys
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
+from gi.repository import Gio
+from gi.repository import GdkPixbuf
 
-APP_NAME = "epygibus"
+from .. import APP_NAME
 
 # find the icons directory
 # first look in the source directory (so that we can run uninstalled)
@@ -36,6 +38,7 @@ if not os.path.exists(_libdir) or not os.path.isdir(_libdir):
 
 APP_ICON = APP_NAME
 APP_ICON_FILE = os.path.join(os.path.dirname(_libdir), APP_ICON + os.extsep + "png")
+APP_ICON_PIXBUF = GdkPixbuf.Pixbuf.new_from_file(APP_ICON_FILE)
 
 STOCK_REPO_SHOW = None
 STOCK_NEW_REPO = Gtk.STOCK_NEW
@@ -47,3 +50,7 @@ STOCK_DIR = Gtk.STOCK_DIRECTORY
 STOCK_DIR_LINK = Gtk.STOCK_DIRECTORY
 STOCK_FILE = Gtk.STOCK_FILE
 STOCK_FILE_LINK = Gtk.STOCK_FILE
+
+_FACTORY = Gtk.IconFactory()
+_FACTORY.add_default()
+_FACTORY.add(APP_ICON, Gtk.IconSet(APP_ICON_PIXBUF))

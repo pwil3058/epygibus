@@ -441,7 +441,7 @@ class ArchiveSSListWidget(Gtk.VBox):
     def __init__(self):
         Gtk.VBox.__init__(self)
         self._archive_selector = g_archives.ArchiveComboBox()
-        self._snapshot_list = SSNameListView(self._archive_selector.get_active_text(), size_req=(200, 540))
+        self._snapshot_list = SSNameListView(self._archive_selector.get_active_text(), size_req=(200, 640))
         hbox = Gtk.HBox()
         hbox.pack_start(Gtk.Label(_("Archive: ")), expand=False, fill=True, padding=0)
         hbox.pack_start(self._archive_selector, expand=True, fill=True, padding=0)
@@ -497,9 +497,9 @@ def exig_open_snapshot_file_acb(_action=None):
 
 actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     [
-        ("snapshot_exigency_menu", None, _("Snapshot Exigencies")),
+        ("snapshot_exigency_menu", None, _("Snapshot Exigencies"), None, _("Mechanisms for handling cases where configuration files have been lost.")),
         ("exig_open_snapshot_file", icons.STOCK_OPEN_SNAPSHOT_FILE, _("Open Snapshot File"), None,
-         _("(Exigency) open a snapshot file."),
+         _("(Exigency) open a snapshot file directly. Should only be used when configuration files have been lost."),
          exig_open_snapshot_file_acb
         ),
     ])

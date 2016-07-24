@@ -31,6 +31,9 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
     UI_DESCR = """
     <ui>
         <menubar name="epygibus_left_menubar">
+            <menu action="main_window_file_menu">
+              <menuitem action="main_window_quit"/>
+            </menu>
             <menu action="snapshot_exigency_menu">
               <menuitem action="exig_open_snapshot_file"/>
             </menu>
@@ -43,12 +46,10 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         enotify.Listener.__init__(self)
         dialogue.BusyIndicator.__init__(self)
         dialogue.init(self)
-        self.set_icon_from_file(icons.APP_ICON_FILE)
+        self.set_default_icon(icons.APP_ICON_PIXBUF)
+        self.set_icon(icons.APP_ICON_PIXBUF)
         self.connect("delete_event", Gtk.main_quit)
         vbox = Gtk.VBox()
-        label = Gtk.Label()
-        label.set_label("Work in progress.  Try again later.")
-        vbox.pack_start(label, expand=False, fill=True, padding=0)
         lmenu_bar = self.ui_manager.get_widget('/epygibus_left_menubar')
         vbox.pack_start(lmenu_bar, expand=False, fill=True, padding=0)
         stack = Gtk.Stack()
@@ -63,3 +64,12 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         self.show_all()
     def populate_action_groups(self):
         pass
+
+actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
+    [
+        ("main_window_file_menu", None, _("File"), ),
+        ("main_window_quit", Gtk.STOCK_QUIT, _("Quit"), None,
+         _("Close the application."),
+         lambda _action: Gtk.main_quit()
+        ),
+    ])

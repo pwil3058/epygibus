@@ -21,7 +21,7 @@ from gi.repository import Gdk
 CSS = b"""
     GtkNotebook tab {
         background-color: shade(@bg_color, 1.22);
-        border-color: shade(@bg_color, 1.12);
+        border-color: white;
         border-width: 1px 1px 0 1px;
         border-style: solid;
         box-shadow: none;
