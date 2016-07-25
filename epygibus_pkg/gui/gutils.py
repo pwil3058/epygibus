@@ -154,8 +154,8 @@ def yield_to_pending_events():
         if not Gtk.events_pending():
             break
 
-class ProgessThingy(Gtk.ProgressBar):
-    __g_type_name__ = "ProgessThingy"
+class ProgressThingy(Gtk.ProgressBar):
+    __g_type_name__ = "ProgressThingy"
     def set_expected_total(self, total):
         nsteps = min(100, max(total, 1))
         self._numerator = 0.0

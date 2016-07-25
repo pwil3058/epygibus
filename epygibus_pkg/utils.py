@@ -71,3 +71,11 @@ def create_flag_generator():
     while True:
         yield 2 ** next_flag_num
         next_flag_num += 1
+
+class DummyProgessThingy:
+    def set_expected_total(self, total):
+        pass
+    def increment_count(self, by=1):
+        pass
+    def finished(self):
+        pass

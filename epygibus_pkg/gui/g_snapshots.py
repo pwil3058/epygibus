@@ -45,7 +45,7 @@ class _ExtractionWidget(Gtk.VBox):
         self.close_button.set_sensitive(False)
         self.cancel_button = Gtk.Button.new_with_label(_("Cancel"))
         self._overwrite_button = Gtk.CheckButton.new_with_label(_("Overwrite"))
-        self._progress_indicator = gutils.ProgessThingy()
+        self._progress_indicator = gutils.ProgressThingy()
         self._stderr_file = gutils.PretendWOFile()
         self._start_button.connect("clicked", self._start_button_bcb)
     def _start_button_bcb(self, _button):
@@ -106,6 +106,35 @@ class DirExtractionWidget(_ExtractionWidget):
 class DirExtractionDialog(_ExtractionDialog):
     __g_type_name__ = "DirExtractionDialog"
     WIDGET = DirExtractionWidget
+
+class DirRestorationWidget(_ExtractionWidget):
+    __g_type_name__ = "DirRestorationWidget"
+    DST = _("Restored: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
+    def __init__(self, snapshot_fs, parent=None):
+        self._snapshot_fs = snapshot_fs
+        _ExtractionWidget.__init__(self, parent=parent)
+        label_text = _("Restoring: contents of \"{}\" from \"{}\" snapshot in archive \"{}\".\n").format(snapshot_fs.path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+        self.pack_start(Gtk.Label(label_text), expand=False, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self._overwrite_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self._start_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(self._progress_indicator, expand=False, fill=True, padding=0)
+        self.pack_start(self._stderr_file, expand=True, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self.cancel_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self.close_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.show_all()
+    def _do_extraction(self):
+        from .. import utils
+        overwrite = self._overwrite_button.get_active()
+        cs = self._snapshot_fs.restore(overwrite=overwrite, stderr=self._stderr_file, progress_indicator=self._progress_indicator)
+        self._stderr_file.write(self.DST.format(cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
+
+class DirRestorationDialog(_ExtractionDialog):
+    __g_type_name__ = "DirRestorationDialog"
+    WIDGET = DirRestorationWidget
 
 DVRow = collections.namedtuple("DVRow", ["fso_data"])
 
@@ -236,7 +265,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
         self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
-        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir"])
+        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir", "snapshot_restore_current_dir"])
         self.pack_start(bbox, expand=False, fill=True, padding=0)
         self._dir_view.connect("row_activated", self._double_click_cb)
         self._update_above_base_offset_status()
@@ -258,6 +287,9 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
                 ("snapshot_extract_current_dir", Gtk.Button.new_with_label(_("Extract")),
                  _("Extract this directory's files and directories to a nominated directory."),
                  self._extract_this_dir_bcb),
+                ("snapshot_restore_current_dir", Gtk.Button.new_with_label(_("Restore")),
+                 _("Restore this directory's files and directories to the file system."),
+                 self._restore_this_dir_bcb),
             ])
         self.button_groups[AC_ABOVE_BASE_OFFSET].add_buttons(
             [
@@ -295,6 +327,10 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
     def _extract_this_dir_bcb(self, _button):
         dir_snapshot_fs = self._snapshot_fs.get_subdir(self._current_offset_dir_path)
         dialog = DirExtractionDialog(snapshot_fs=dir_snapshot_fs)
+        dialog.show()
+    def _restore_this_dir_bcb(self, _button):
+        dir_snapshot_fs = self._snapshot_fs.get_subdir(self._current_offset_dir_path)
+        dialog = DirRestorationDialog(snapshot_fs=dir_snapshot_fs)
         dialog.show()
 
 class ExigSnapshotDialog(Gtk.Window):

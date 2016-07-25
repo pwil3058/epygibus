@@ -598,14 +598,6 @@ class CCStats(collections.namedtuple("CCStats", ["dir_count", "file_count", "sof
     def __add__(self, other):
         return SSFSStats(*[self[i] + other[i] for i in range(len(self))])
 
-class DummyProgessThingy:
-    def set_expected_total(self, total):
-        pass
-    def increment_count(self, by=1):
-        pass
-    def finished(self):
-        pass
-
 class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "snapshot_name", "snapshot", "repo_mgmt_key"]), PathComponentsMixin):
     is_dir = True
     is_link = False
@@ -708,7 +700,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield slink
-    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
+    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
         from . import repo
         # Create the target directory if necessary
         dir_count = 0
@@ -794,9 +786,9 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             link_count += file_link_data.create_link(orig_curdir, stderr, overwrite)
         progress_indicator.finished()
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
-    def restore(self, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
+    def restore(self, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
         return self.copy_contents_to(self.path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
-    def restore_subdir(self, subdir_path, overwrite=False, stderr=sys.stderr, progress_indicator=DummyProgessThingy()):
+    def restore_subdir(self, subdir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
         snapshot_subdir_ss = self.get_subdir(subdir_path)
         return snapshot_subdir_ss.copy_contents_to(subdir_path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
     def get_statistics(self):
