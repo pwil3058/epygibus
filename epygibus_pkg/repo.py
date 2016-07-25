@@ -22,6 +22,8 @@ import shutil
 
 import pickle
 
+from . import utils
+
 _REF_COUNTER_FILE_NAME = "ref_counter"
 _LOCK_FILE_NAME = "lock"
 _ref_counter_path = lambda base_dir_path: os.path.join(base_dir_path, _REF_COUNTER_FILE_NAME)
@@ -137,14 +139,15 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                     else:
                         num_unrefed += 1
         return (num_refed, num_unrefed, ref_total)
-    def prune_unreferenced_content(self, rm_empty_dirs=False, rm_empty_subdirs=True):
+    def prune_unreferenced_content(self, rm_empty_dirs=False, rm_empty_subdirs=True, progress_indicator=utils.DummyProgessThingy()):
         assert self.writeable
         citem_count = 0
         total_content_bytes = 0
         total_stored_bytes = 0
-        for dir_name, dir_data in self.ref_counter.items():
-            for subdir_name, subdir_data in dir_data.items():
-                for file_name, file_data in subdir_data.items():
+        progress_indicator.set_expected_total(len(self.ref_counter))
+        for dir_name, dir_data in list(self.ref_counter.items()):
+            for subdir_name, subdir_data in list(dir_data.items()):
+                for file_name, file_data in list(subdir_data.items()):
                     count, content_size, stored_size = file_data
                     if count: continue
                     citem_count += 1
@@ -162,6 +165,8 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
             if rm_empty_dirs and len(self.ref_counter[dir_name]) == 0:
                 del self.ref_counter[dir_name]
                 os.rmdir(os.path.join(self.base_dir_path, dir_name))
+            progress_indicator.increment_count()
+        progress_indicator.finished()
         return (citem_count, total_content_bytes, total_stored_bytes) #if citem_count else None
     def open_contents_read_only(self, content_token, binary=False):
         # NB since this doen't use ref count data it doesn't need locking

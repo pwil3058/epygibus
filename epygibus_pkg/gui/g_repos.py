@@ -187,6 +187,7 @@ class RepoStatsListView(table.MapManagedTableView):
     UI_DESCR = """
     <ui>
       <popup name="repos_STATS_popup">
+        <menuitem action="prune_selected_repo"/>
         <menuitem action="show_selected_repo_spec"/>
         <menuitem action="delete_selected_repo"/>
         <separator/>
@@ -220,6 +221,10 @@ class RepoStatsListView(table.MapManagedTableView):
                 ("delete_selected_repo", icons.STOCK_REPO_DELETE, _("Delete"), None,
                   _("Delete the selected repository."),
                   lambda _action=None: do_delete_repo(self.get_selected_repo_name())
+                ),
+                ("prune_selected_repo", icons.STOCK_REPO_PRUNE, _("Prune"), None,
+                  _("Delete the selected repository."),
+                  lambda _action=None: RepoPruneDialog(self.get_selected_repo_name()).prune()
                 ),
             ])
     def get_selected_repo_name(self):
@@ -293,6 +298,35 @@ class RepoComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
         if repo_name:
             return config.read_repo_spec(repo_name)
         return None
+
+class RepoPruneDialog(Gtk.Dialog):
+    def __init__(self, repo_name, parent=None):
+        title = _("Pruning: \"{}\".").format(repo_name)
+        self._repo_name = repo_name
+        parent = parent if parent else dialogue.main_window
+        Gtk.Dialog.__init__(self, title, parent, 0, (Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE))
+        self.set_response_sensitive(Gtk.ResponseType.CLOSE, False)
+        self.connect("response", lambda _dialog, _response: self.destroy())
+        vbox = Gtk.VBox()
+        vbox.pack_start(Gtk.Label(title), expand=False, fill=True, padding=0)
+        self._progress_indicator = gutils.ProgressThingy()
+        vbox.pack_start(self._progress_indicator, expand=False, fill=True, padding=0)
+        self._message = Gtk.Entry()
+        self._message.set_editable(False)
+        vbox.pack_start(self._message, expand=False, fill=True, padding=0)
+        self.get_content_area().add(vbox)
+        self.show_all()
+    def prune(self):
+        self.show()
+        repo_mgmt_key = repo.get_repo_mgmt_key(self._repo_name)
+        with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
+            stats = repo_mgr.prune_unreferenced_content(progress_indicator=self._progress_indicator)
+        if not stats[0]:
+            self._message.set_text(_("Nothing to do."))
+        else:
+            self._message.set_text(_("{:>4,} unreferenced content items removed freeing {} of content and {} of storage.").format(stats[0], utils.format_bytes(stats[1]), utils.format_bytes(stats[2])))
+        self.set_response_sensitive(Gtk.ResponseType.CLOSE, True)
+
 
 class ReposWidget(Gtk.VBox, actions.CAGandUIManager):
     __g_type_name__ = "ReposWidget"
