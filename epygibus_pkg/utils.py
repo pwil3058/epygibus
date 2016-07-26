@@ -72,7 +72,7 @@ def create_flag_generator():
         yield 2 ** next_flag_num
         next_flag_num += 1
 
-class DummyProgessThingy:
+class DummyProgressThingy:
     def set_expected_total(self, total):
         pass
     def increment_count(self, by=1):

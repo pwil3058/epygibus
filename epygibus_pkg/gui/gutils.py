@@ -165,7 +165,7 @@ class ProgressThingy(Gtk.ProgressBar):
         self.set_fraction(0.0)
     def increment_count(self, by=1):
         self._numerator += by
-        if self._numerator > self._next_kick:
+        if self._numerator >= self._next_kick:
             self.set_fraction(min(self._numerator / self._denominator, 1.0))
             self._next_kick += self._step
             yield_to_pending_events()
@@ -225,3 +225,17 @@ class NotebookWithDelete(Gtk.Notebook):
     def iterate_pages(self):
         for pnum in range(self.get_n_pages()):
             yield (pnum, self.get_nth_page(pnum))
+
+class YesNoWidget(Gtk.HBox):
+    def __init__(self, question_text):
+        Gtk.HBox.__init__(self)
+        q_label = Gtk.Label(question_text)
+        self.no_button = Gtk.Button.new_from_stock(Gtk.STOCK_NO)
+        self.yes_button = Gtk.Button.new_from_stock(Gtk.STOCK_YES)
+        self.pack_start(q_label, expand=True, fill=True, padding=0)
+        self.pack_start(no_button, expand=False, padding=0)
+        self.pack_start(yes_button, expand=False, padding=0)
+        self.show_all()
+    def set_button_sensitivity(self, no_sensitive, yes_sensitive):
+        self.no_button.set_sensitive(no_sensitive)
+        self.yes_button.set_sensitive(yes_sensitive)

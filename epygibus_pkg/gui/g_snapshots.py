@@ -454,23 +454,81 @@ def ssnl_specification(model):
         ]
     )
 
-class SSNameListView(tlview.View):
+class SSNameListView(tlview.View, actions.CAGandUIManager):
     __g_type_name__ = "SSNameListView"
     PopUp = None
     Model = SSNameListModel
     specification = ssnl_specification
+    UI_DESCR = '''
+    <ui>
+      <popup name="snapshot_name_list_popup">
+        <menuitem action="delete_selected_snapshots"/>
+      </popup>
+    </ui>
+    '''
     def __init__(self, archive_name, size_req=None, parent=None):
         self._parent = parent
         model = SSNameListModel(archive_name)
         tlview.View.__init__(self, model=model, size_req=size_req)
         self.connect("button_press_event", tlview.clear_selection_cb)
         self.connect("key_press_event", tlview.clear_selection_cb)
+        actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup="/snapshot_name_list_popup")
     @property
     def archive_name(self):
         return self.get_model().archive_name
     @archive_name.setter
     def archive_name(self, archive_name):
         self.get_model().set_archive_name(archive_name)
+    def get_selected_snapshots(self):
+        model, paths = self.get_selection().get_selected_rows()
+        return [model[p][0] for p in paths]
+    def populate_action_groups(self):
+        self.action_groups[actions.AC_SELN_MADE].add_actions(
+            [
+                ("delete_selected_snapshots", icons.STOCK_REPO_DELETE, _("Delete"), None,
+                  _("Delete the selected snapshot(s)."),
+                  lambda _action=None: self._delete_selected_snapshots()
+                )
+            ])
+    def _delete_selected_snapshots(self):
+        selected_snapshots = self.get_selected_snapshots()
+        remainder = len(self.model) - len(selected_snapshots)
+        DeleteSnapshotsDialog(self.archive_name, selected_snapshots, remainder, self._parent).run()
+
+class DeleteSnapshotsDialog(Gtk.Dialog):
+    def __init__(self, archive_name, snapshot_names, leaving_behind, parent=None):
+        self._archive_name = archive_name
+        self._snapshot_names = snapshot_names
+        parent = parent if parent else dialogue.main_window
+        Gtk.Dialog.__init__(self, _("Delete snapshots."), parent, 0, (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_YES, Gtk.ResponseType.YES, Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE))
+        self.set_response_sensitive(Gtk.ResponseType.CLOSE, False)
+        c_text = _("About to delete {} snapshots from \"{}\" archive leavin {}. Continue?").format(len(snapshot_names), archive_name, leaving_behind)
+        self._count_indicator = gutils.ProgressThingy()
+        self._count_indicator.set_expected_total(len(self._snapshot_names))
+        self._ss_progress_indicator = gutils.ProgressThingy()
+        self._ss_name_label = Gtk.Label("                    ")
+        vbox = Gtk.VBox()
+        vbox.pack_start(self._count_indicator, expand=False, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self._ss_name_label, expand=False, fill=True, padding=0)
+        hbox.pack_start(self._ss_progress_indicator, expand=True, fill=True, padding=0)
+        vbox.pack_start(hbox, expand=False, fill=True, padding=0)
+        vbox.pack_start(Gtk.Label(c_text), expand=True, fill=True, padding=0)
+        self.get_content_area().add(vbox)
+        self.connect("response", self._response_cb)
+        self.show_all()
+    def _response_cb(self, _dialog, response_id):
+        if response_id in [Gtk.ResponseType.CANCEL, Gtk.ResponseType.CLOSE]:
+            self.destroy()
+            return
+        for response_id in [Gtk.ResponseType.CANCEL, Gtk.ResponseType.YES]:
+            self.set_response_sensitive(response_id, False)
+        for snapshot_name in self._snapshot_names:
+            self._ss_name_label.set_text(snapshot_name)
+            snapshot.delete_named_snapshot(self._archive_name, snapshot_name, self._ss_progress_indicator)
+            self._count_indicator.increment_count()
+        self._count_indicator.finished()
+        self.set_response_sensitive(Gtk.ResponseType.CLOSE, True)
 
 class ArchiveSSListWidget(Gtk.VBox):
     __g_type_name__ = "ArchiveSSListWidget"
@@ -504,6 +562,7 @@ class SnapshotsMgrWidget(Gtk.HBox):
         self.pack_start(self._notebook, expand=True, fill=True, padding=0)
         self.show_all()
     def _open_snapshot_cb(self, tree_view, tree_path, tree_view_column):
+        # TODO: close snapshots if their file disappears
         archive_name = tree_view.archive_name
         snapshot_name = tree_view.get_model()[tree_path][0]
         for page_num, existing_page in self._notebook.iterate_pages():
@@ -511,8 +570,7 @@ class SnapshotsMgrWidget(Gtk.HBox):
                 if existing_page.snapshot_name == snapshot_name:
                     self._notebook.set_current_page(page_num)
                     return
-        snapshot_file_path = snapshot.get_named_snapshot_file_path(archive_name, snapshot_name)
-        snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)
+        snapshot_fs = snapshot.get_named_snapshot_fs(archive_name, snapshot_name)
         tab_label = Gtk.Label(archive_name + ":" + snapshot_name)
         menu_label = Gtk.Label(archive_name + ":" + snapshot_name)
         ss_mgr = SnapshotManagerWidget(snapshot_fs)

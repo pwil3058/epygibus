@@ -700,7 +700,7 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             for subdir in self.iterate_subdirs():
                 for slink in subdir.iterate_file_links(pre_path=os.path.join(pre_path, subdir.name), recurse=recurse):
                     yield slink
-    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
+    def copy_contents_to(self, target_dir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgressThingy()):
         from . import repo
         # Create the target directory if necessary
         dir_count = 0
@@ -786,9 +786,9 @@ class SnapshotFS(collections.namedtuple("SnapshotFS", ["path", "archive_name", "
             link_count += file_link_data.create_link(orig_curdir, stderr, overwrite)
         progress_indicator.finished()
         return CCStats(dir_count, file_count, link_count, len(hard_links), gross_size, net_size)
-    def restore(self, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
+    def restore(self, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgressThingy()):
         return self.copy_contents_to(self.path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
-    def restore_subdir(self, subdir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgessThingy()):
+    def restore_subdir(self, subdir_path, overwrite=False, stderr=sys.stderr, progress_indicator=utils.DummyProgressThingy()):
         snapshot_subdir_ss = self.get_subdir(subdir_path)
         return snapshot_subdir_ss.copy_contents_to(subdir_path, overwrite=overwrite, stderr=stderr, progress_indicator=progress_indicator)
     def get_statistics(self):
@@ -822,6 +822,18 @@ def get_snapshot_fs_fm_file(snapshot_file_path):
     snapshot = read_snapshot(snapshot_file_path)
     repo_mgmt_key = snapshot.repo_mgmt_key
     return SnapshotFS(os.sep, archive_name, ss_root(snapshot_file_name), snapshot, repo_mgmt_key)
+
+def get_named_snapshot_fs(archive_name, snapshot_name):
+    snapshot_file_path = get_named_snapshot_file_path(archive_name, snapshot_name)
+    snapshot = read_snapshot(snapshot_file_path)
+    try: # WORKAROUND: to handle snapshots without a key
+        repo_mgmt_key = snapshot.repo_mgmt_key
+    except AttributeError:
+        from . import repo
+        from . import config
+        archive = config.read_archive_spec(archive_name)
+        repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    return SnapshotFS(os.sep, archive_name, snapshot_name, snapshot, repo_mgmt_key)
 
 def get_snapshot_fs(archive_name, seln_fn=lambda l: l[-1]):
     from . import config
@@ -872,25 +884,36 @@ def iter_snapshot_fs_list(archive_name, reverse=False):
         snapshot_fs = SnapshotFS(os.sep, archive_name, ss_root(snapshot_name), snapshot, repo_mgmt_key)
         yield (snapshot_fs, os.path.getsize(snapshot_file_path))
 
+def delete_named_snapshot(archive_name, snapshot_name, progress_indicator=utils.DummyProgressThingy()):
+    from . import repo
+    print("delete:", archive_name, snapshot_name)
+    snapshot_file_path = get_named_snapshot_file_path(archive_name, snapshot_name)
+    snapshot = read_snapshot(snapshot_file_path)
+    progress_indicator.set_expected_total(snapshot.nfiles)
+    try: # WORKAROUND: to handle snapshots without a key
+        repo_mgmt_key = snapshot.repo_mgmt_key
+    except AttributeError:
+        from . import config
+        archive = config.read_archive_spec(archive_name)
+        repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
+    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
+        os.remove(snapshot_file_path)
+        repo_mgr.release_contents(snapshot.iterate_content_tokens(), progress_indicator)
+
 def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
     from . import config
     from . import repo
     archive = config.read_archive_spec(archive_name)
-    snapshot_names = _get_snapshot_file_list(archive.snapshot_dir_path)
-    if not snapshot_names:
+    snapshot_file_names = _get_snapshot_file_list(archive.snapshot_dir_path)
+    if not snapshot_file_names:
         raise excpns.EmptyArchive(archive_name)
     try:
-        snapshot_name = seln_fn(snapshot_names)
+        snapshot_file_name = seln_fn(snapshot_file_names)
     except:
-        raise excpns.NoMatchingSnapshot([ss_root(ss_name) for ss_name in snapshot_names])
-    if not clear_fell and len(snapshot_names) == 1:
-        raise excpns.LastSnapshot(archive_name, ss_root(snapshot_name))
-    snapshot_file_path = os.path.join(archive.snapshot_dir_path, snapshot_name)
-    snapshot = read_snapshot(snapshot_file_path)
-    repo_mgmt_key = repo.get_repo_mgmt_key(archive.repo_name)
-    with repo.open_repo_mgr(repo_mgmt_key, writeable=True) as repo_mgr:
-        os.remove(snapshot_file_path)
-        repo_mgr.release_contents(snapshot.iterate_content_tokens())
+        raise excpns.NoMatchingSnapshot([ss_root(ss_file_name) for ss_file_name in snapshot_file_names])
+    if not clear_fell and len(snapshot_file_names) == 1:
+        raise excpns.LastSnapshot(archive_name, ss_root(snapshot_file_name))
+    delete_named_snapshot(archive_name, ss_root(snapshot_file_name))
 
 def iter_snapshot_list(archive_name, reverse=False):
     from . import config

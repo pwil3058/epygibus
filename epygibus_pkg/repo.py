@@ -116,11 +116,17 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
         assert self.writeable
         dir_name, subdir_name, file_name = _split_content_token(content_token)
         self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT] -= 1
-    def release_contents(self, content_tokens):
+    def release_contents(self, content_tokens, progress_indicator=utils.DummyProgressThingy()):
         assert self.writeable
+        try:
+            progress_indicator.set_expected_total(len(content_tokens))
+        except TypeError:
+            pass # content_tokens is an iterater so assume caller set the total
         for content_token in content_tokens:
             dir_name, subdir_name, file_name = _split_content_token(content_token)
             self.ref_counter[dir_name][subdir_name][file_name][_REF_COUNT] -= 1
+            progress_indicator.increment_count()
+        progress_indicator.finished()
     def iterate_content_tokens(self):
         for dir_name, dir_data in self.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
@@ -139,7 +145,7 @@ class _BlobRepo(collections.namedtuple("_BlobRepo", ["ref_counter", "base_dir_pa
                     else:
                         num_unrefed += 1
         return (num_refed, num_unrefed, ref_total)
-    def prune_unreferenced_content(self, rm_empty_dirs=False, rm_empty_subdirs=True, progress_indicator=utils.DummyProgessThingy()):
+    def prune_unreferenced_content(self, rm_empty_dirs=False, rm_empty_subdirs=True, progress_indicator=utils.DummyProgressThingy()):
         assert self.writeable
         citem_count = 0
         total_content_bytes = 0
