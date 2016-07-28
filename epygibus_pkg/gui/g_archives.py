@@ -125,11 +125,17 @@ def _archive_list_spec():
 class ArchiveListView(table.MapManagedTableView):
     __g_type_name__ = "ArchiveListView"
     Model = ArchiveListModel
-    PopUp = None
+    PopUp = "/archive_list_view_popup"
     SET_EVENTS = 0
     REFRESH_EVENTS = NE_ARCHIVE_POPN_CHANGE | NE_ARCHIVE_SPEC_CHANGE
     AU_REQ_EVENTS = NE_ARCHIVE_SPEC_CHANGE
-    UI_DESCR = ""
+    UI_DESCR = """
+    <ui>
+      <popup name="archive_list_view_popup">
+        <menuitem action="edit_selected_snapshot_inclusions"/>
+      </popup>
+    </ui>
+    """
     specification = _archive_list_spec()
     def __init__(self, busy_indicator=None, size_req=None):
         table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
@@ -139,6 +145,15 @@ class ArchiveListView(table.MapManagedTableView):
         return None if store_iter is None else store.get_value_named(store_iter, "name")
     def _get_table_db(self):
         return ArchiveTableData()
+    def populate_action_groups(self):
+        table.MapManagedTableView.populate_action_groups(self)
+        self.action_groups[actions.AC_SELN_UNIQUE].add_actions(
+            [
+                ("edit_selected_snapshot_inclusions", icons.STOCK_EDIT_INCLUDES, _("Edit Inclusions"), None,
+                  _("Edit the inclusions for the selected snapshot."),
+                  lambda _action=None: IncludesEditDialog(self.get_selected_archive()).show()
+                )
+            ])
 
 class ArchiveListWidget(table.TableWidget):
     __g_type_name__ = "ArchiveListWidget"
@@ -231,6 +246,111 @@ class IncludesTable(actions.ClientAndButtonsWidget):
     SCROLLABLE = True
     def get_included_paths(self):
         return self.client.get_included_paths()
+
+# TODO: combine IncludesEditView and IncludesView into single class
+class IncludesEditView(table.EditableEntriesView):
+    __g_type_name__ = "IncludesEditView"
+    Model = IncludesModel
+    specification = tlview.ViewSpec(
+        properties={
+            "enable-grid-lines" : True,
+            "reorderable" : True,
+            "headers-visible" : False,
+        },
+        selection_mode=Gtk.SelectionMode.MULTIPLE,
+        columns=[
+            tlview.ColumnSpec(
+                title=_("Included Path"),
+                properties={"expand" : True},
+                cells=[
+                    tlview.CellSpec(
+                        cell_renderer_spec=tlview.CellRendererSpec(
+                            cell_renderer=Gtk.CellRendererText,
+                            expand=False,
+                            start=True,
+                            properties={"editable" : False},
+                        ),
+                        cell_data_function_spec=None,
+                        attributes={"text" : Model.col_index("included_path")}
+                    ),
+                ],
+            ),
+        ]
+    )
+    def __init__(self, archive_name):
+        self._archive_name = archive_name
+        tlview.View.__init__(self, size_req=(320, 160))
+        actions.CBGUserMixin.__init__(self, self.get_selection())
+        self.set_contents()
+    def populate_button_groups(self):
+        table.EditableEntriesView.populate_button_groups(self)
+        self.button_groups[actions.AC_DONT_CARE].add_buttons(
+            [
+                ("table_add_file_path", Gtk.Button.new_with_label(_("Append File")),
+                 _("Append a new file path to the includes table"),
+                 self._add_file_path_bcb),
+                ("table_add_dir_path", Gtk.Button.new_with_label(_("Append Directory")),
+                 _("Append a new directory path to the includes table"),
+                 self._add_dir_path_bcb),
+            ])
+        self.button_groups[actions.AC_SELN_MADE].add_buttons(
+            [
+                ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
+                 _("Delete selected row(s)"),
+                 self._delete_selection_bcb),
+                ("table_insert_file_path", Gtk.Button.new_with_label(_("Insert File")),
+                 _("Insert a new file path before the selected row(s)"),
+                 self._insert_file_path_bcb),
+                ("table_insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory")),
+                 _("Insert a new directory path before the selected row(s)"),
+                 self._insert_dir_path_bcb),
+            ])
+    def get_included_paths(self):
+        return [row.included_path for row in self.model.named()]
+    def _add_file_path_bcb(self, _button=None):
+        file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
+        if file_path:
+            self.model.append(self.Model.Row(file_path))
+            self._set_modified(True)
+    def _add_dir_path_bcb(self, _button=None):
+        dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
+        if dir_path:
+            self.model.append(self.Model.Row(dir_path))
+            self._set_modified(True)
+    def _insert_file_path_bcb(self, _button=None):
+        file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
+        if file_path:
+            tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
+            self._set_modified(True)
+    def _insert_dir_path_bcb(self, _button=None):
+        dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
+        if dir_path:
+            tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
+            self._set_modified(True)
+    def _delete_selection_bcb(self, _button=None):
+        tlview.delete_selection(self.get_selection())
+        self._set_modified(True)
+    def _fetch_contents(self):
+        return [self.Model.Row(line) for line in config.read_includes_file_lines(self._archive_name)]
+    def apply_changes(self):
+        config.write_includes_file_lines(self._archive_name, self.get_included_paths())
+        self._set_modified(False)
+
+class IncludesEditTable(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "IncludesEditTable"
+    CLIENT = IncludesEditView
+    BUTTONS = ["table_undo_changes", "table_add_dir_path", "table_insert_dir_path", "table_add_file_path", "table_insert_file_path", "table_delete_selection", "table_apply_changes"]
+    SCROLLABLE = True
+
+class IncludesEditDialog(Gtk.Dialog):
+    __g_type_name__ = "IncludesEditDialog"
+    def __init__(self, archive_name, parent=None):
+        title = _("Edit \"{}\" archive\'s inclusions.").format(archive_name)
+        parent = parent if parent else dialogue.main_window
+        Gtk.Dialog.__init__(self, title=title, parent=parent)
+        self.new_archive_widget = IncludesEditTable(archive_name=archive_name)
+        self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
+        self.show_all()
 
 class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
     __g_type_name__ = "ExcludesView"

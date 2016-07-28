@@ -173,9 +173,9 @@ class ClientAndButtonsWidget(Gtk.VBox):
     CLIENT = CBGUserMixin
     BUTTONS = []
     SCROLLABLE = False
-    def __init__(self, size_req=None):
+    def __init__(self, **kwargs):
         Gtk.VBox.__init__(self)
-        self.client = self.CLIENT()
+        self.client = self.CLIENT(**kwargs)
         if self.SCROLLABLE:
             from . import gutils
             self.pack_start(gutils.wrap_in_scrolled_window(self.client), expand=True, fill=True, padding=0)

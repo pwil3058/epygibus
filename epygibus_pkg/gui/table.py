@@ -35,15 +35,14 @@ from . import auto_update
 
 AC_MODIFIED, AC_NOT_MODIFIED, AC_MODIFIED_MASK = actions.ActionCondns.new_flags_and_mask(2)
 
-class EditableEntriesView(tlview.ListView):
+class EditableEntriesView(tlview.ListView, actions.CBGUserMixin):
     __g_type_name__ = "EditableEntriesView"
     Model = tlview.ListView.Model
     def __init__(self, model=None, size_req=None):
         tlview.ListView.__init__(self, model)
         if size_req:
             self.set_size_request(*size_req)
-        self.button_groups = actions.ConditionalButtonGroups(selection=self.get_selection())
-        self.populate_button_groups()
+        actions.CBGUserMixin.__init__(self, self.get_selection())
         self._set_modified(False)
         self.model.connect("row-inserted", self._row_inserted_cb)
         self.register_modification_callback(self._set_modified, True)

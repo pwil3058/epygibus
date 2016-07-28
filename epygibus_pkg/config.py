@@ -47,17 +47,33 @@ def read_archive_config_lines(archive_name):
     with open(_archive_config_path(archive_name), "r") as f_obj:
         return [l.rstrip() for l in f_obj.readlines()]
 
+def write_archive_config_lines(archive_name, lines):
+    with open(_archive_config_path(archive_name), "w") as f_obj:
+        f_obj.writelines([l.rstrip() + os.linesep for l in lines])
+
 def read_includes_file_lines(archive_name):
     with open(_archive_includes_path(archive_name), "r") as f_obj:
         return [l.rstrip() for l in f_obj.readlines()]
+
+def write_includes_file_lines(archive_name, lines):
+    with open(_archive_includes_path(archive_name), "w") as f_obj:
+        f_obj.writelines([l.rstrip() + os.linesep for l in lines])
 
 def read_exclude_dir_lines(archive_name):
     with open(_archive_exclude_dirs_path(archive_name), "r") as f_obj:
         return [l.rstrip() for l in f_obj.readlines()]
 
+def write_exclude_dir_lines(archive_name, lines):
+    with open(_archive_exclude_dirs_path(archive_name), "w") as f_obj:
+        f_obj.writelines([l.rstrip() + os.linesep for l in lines])
+
 def read_exclude_file_lines(archive_name):
     with open(_archive_exclude_files_path(archive_name), "r") as f_obj:
         return [l.rstrip() for l in f_obj.readlines()]
+
+def write_exclude_file_lines(archive_name, lines):
+    with open(_archive_exclude_files_path(archive_name), "w") as f_obj:
+        f_obj.writelines([l.rstrip() + os.linesep for l in lines])
 
 Archive = collections.namedtuple("Archive", ["name", "repo_name", "snapshot_dir_path", "includes", "exclude_dir_globs", "exclude_file_globs", "skip_broken_soft_links", "compress_default"])
 
@@ -76,14 +92,10 @@ def write_archive_spec(archive_name, location_dir_path, repo_name, includes, exc
     base_dir_path = os.path.join(os.path.abspath(location_dir_path), APP_NAME_D, "snapshots", os.environ["HOSTNAME"], os.environ["USER"], archive_name)
     try:
         os.mkdir(_archive_dir_path(archive_name))
-        with open(_archive_config_path(archive_name), "w") as f_obj:
-            f_obj.writelines([p + os.linesep for p in [repo_name, base_dir_path, str(skip_broken_sl), str(compress_default)]])
-        with open(_archive_includes_path(archive_name), "w") as f_obj:
-            f_obj.writelines([i + os.linesep for i in includes])
-        with open(_archive_exclude_dirs_path(archive_name), "w") as f_obj:
-            f_obj.writelines([x + os.linesep for x in exclude_dir_globs])
-        with open(_archive_exclude_files_path(archive_name), "w") as f_obj:
-            f_obj.writelines([x + os.linesep for x in exclude_file_globs])
+        write_archive_config_lines(archive_name, [repo_name, base_dir_path, str(skip_broken_sl), str(compress_default)])
+        write_includes_file_lines(archive_name, includes)
+        write_exclude_dir_lines(archive_name, exclude_dir_globs)
+        write_exclude_file_lines(archive_name, exclude_file_globs)
     except FileExistsError:
         raise excpns.SnapshotArchiveExists(archive_name)
     return base_dir_path
