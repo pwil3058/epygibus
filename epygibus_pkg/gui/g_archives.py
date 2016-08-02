@@ -14,6 +14,7 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import collections
+import os
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -34,6 +35,7 @@ from . import icons
 from . import tlview
 from . import dialogue
 from . import gutils
+from . import text_edit
 
 AC_ARCHIVES_AVAILABLE = actions.ActionCondns.new_flag()
 NE_NEW_ARCHIVE, NE_DELETE_ARCHIVE, NE_ARCHIVE_POPN_CHANGE = enotify.new_event_flags_and_mask(2)
@@ -133,6 +135,8 @@ class ArchiveListView(table.MapManagedTableView):
     <ui>
       <popup name="archive_list_view_popup">
         <menuitem action="edit_selected_snapshot_inclusions"/>
+        <menuitem action="edit_selected_snapshot_dir_exclusions"/>
+        <menuitem action="edit_selected_snapshot_file_exclusions"/>
       </popup>
     </ui>
     """
@@ -152,6 +156,14 @@ class ArchiveListView(table.MapManagedTableView):
                 ("edit_selected_snapshot_inclusions", icons.STOCK_EDIT_INCLUDES, _("Edit Inclusions"), None,
                   _("Edit the inclusions for the selected snapshot."),
                   lambda _action=None: IncludesEditDialog(self.get_selected_archive()).show()
+                ),
+                ("edit_selected_snapshot_file_exclusions", icons.STOCK_EDIT_EXCLUDE_FILES, _("Edit File Exclusions"), None,
+                  _("Edit the file exclusions for the selected snapshot."),
+                  lambda _action=None: FileExcludesEditDialog(self.get_selected_archive()).show()
+                ),
+                ("edit_selected_snapshot_dir_exclusions", icons.STOCK_EDIT_EXCLUDE_DIRS, _("Edit Directory Exclusions"), None,
+                  _("Edit the directory exclusions for the selected snapshot."),
+                  lambda _action=None: DirExcludesEditDialog(self.get_selected_archive()).show()
                 )
             ])
 
@@ -352,11 +364,10 @@ class IncludesEditDialog(Gtk.Dialog):
         self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
         self.show_all()
 
-class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
-    __g_type_name__ = "ExcludesView"
+class ExcludesBuffer(text_edit.ModifyUndoSaveBuffer):
+    __g_type_name__ = "ExcludesBuffer"
     def __init__(self):
-        Gtk.TextView.__init__(self)
-        actions.CBGUserMixin.__init__(self)
+        text_edit.ModifyUndoSaveBuffer.__init__(self)
     def populate_button_groups(self):
         self.button_groups[actions.AC_DONT_CARE].add_buttons(
             [
@@ -370,16 +381,26 @@ class ExcludesView(Gtk.TextView, actions.CBGUserMixin):
     def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
-            self.get_buffer().insert_at_cursor(dir_path + "\n")
+            self.insert_at_cursor(dir_path + "\n")
+            self.set_modified(True)
     def _insert_file_path_bcb(self, _button=None):
-        dir_path = dialogue.select_file(_("Select Directory to Insert"), absolute=True)
-        if dir_path:
-            self.get_buffer().insert_at_cursor(dir_path + "\n")
+        file_path = dialogue.select_file(_("Select Directory to Insert"), absolute=True)
+        if file_path:
+            self.insert_at_cursor(file_path + "\n")
+            self.set_modified(True)
     def get_lines(self):
-        bfr = self.get_buffer()
-        start = bfr.get_start_iter()
-        end = bfr.get_end_iter()
-        return [line.rstrip() for line in bfr.get_text(start, end, False).splitlines(False)]
+        return [line.rstrip() for line in self.get_text(self.get_start_iter(), self.get_end_iter(), False).splitlines(False)]
+
+class ExcludesView(Gtk.TextView):
+    __g_type_name__ = "ExcludesView"
+    BUFFER = ExcludesBuffer
+    def __init__(self, **kwargs):
+        bfr = self.BUFFER(**kwargs)
+        Gtk.TextView.__init__(self, buffer=bfr)
+    def get_lines(self):
+        return self.get_buffer().get_lines()
+    def create_button_box(self, button_name_list):
+        return self.get_buffer().create_button_box(button_name_list)
 
 class DirExcludesWidget(actions.ClientAndButtonsWidget):
     __g_type_name__ = "DirExcludesWidget"
@@ -396,6 +417,87 @@ class FileExcludesWidget(actions.ClientAndButtonsWidget):
     SCROLLABLE = True
     def get_lines(self):
         return self.client.get_lines()
+
+class DirExcludesEditBuffer(ExcludesBuffer):
+    __g_type_name__ = "DirExcludesEditBuffer"
+    def __init__(self, archive_name):
+        self._archive_name = archive_name
+        ExcludesBuffer.__init__(self)
+        self._load_content()
+    def populate_button_groups(self):
+        ExcludesBuffer.populate_button_groups(self)
+        self.button_groups[self.AC_MODIFIED].add_buttons(
+            [
+                ("apply_changes", Gtk.Button.new_with_label(_("Apply")),
+                _("Apply the pending changes to the specification."),
+                lambda _button: self._write_content()),
+                ("undo_changes", Gtk.Button.new_with_label(_("Undo")),
+                _("Undo the pending changes to the specification."),
+                lambda _button: self._load_content()),
+            ])
+    def _load_content(self):
+        lines = config.read_exclude_dir_lines(self._archive_name)
+        if lines:
+            self.set_text(os.linesep.join(lines) + os.linesep)
+        else:
+            self.set_text("")
+        self.set_modified(False)
+    def _write_content(self):
+        config.write_exclude_dir_lines(self._archive_name, self.get_lines())
+        self.set_modified(False)
+
+class DirExcludesEditView(ExcludesView):
+    __g_type_name__ = "DirExcludesEditView"
+    BUFFER = DirExcludesEditBuffer
+
+class DirExcludesEditWidget(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "DirExcludesEditWidget"
+    CLIENT = DirExcludesEditView
+    BUTTONS = ["insert_dir_path", "undo_changes", "apply_changes"]
+    SCROLLABLE = True
+
+class DirExcludesEditDialog(Gtk.Dialog):
+    __g_type_name__ = "DirExcludesEditDialog"
+    def __init__(self, archive_name, parent=None):
+        title = _("Edit \"{}\" archive\'s directory exclusions.").format(archive_name)
+        parent = parent if parent else dialogue.main_window
+        Gtk.Dialog.__init__(self, title=title, parent=parent)
+        self.new_archive_widget = DirExcludesEditWidget(archive_name=archive_name)
+        self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
+        self.show_all()
+
+class FileExcludesEditBuffer(DirExcludesEditBuffer):
+    __g_type_name__ = "FileExcludesEditBuffer"
+    def _load_content(self):
+        lines = config.read_exclude_file_lines(self._archive_name)
+        if lines:
+            self.set_text(os.linesep.join(lines) + os.linesep)
+        else:
+            self.set_text("")
+        self.set_modified(False)
+    def _write_content(self):
+        config.write_exclude_file_lines(self._archive_name, self.get_lines())
+        self.set_modified(False)
+
+class FileExcludesEditView(ExcludesView):
+    __g_type_name__ = "FileExcludesEditView"
+    BUFFER = FileExcludesEditBuffer
+
+class FileExcludesEditWidget(actions.ClientAndButtonsWidget):
+    __g_type_name__ = "FileExcludesEditWidget"
+    CLIENT = FileExcludesEditView
+    BUTTONS = ["insert_file_path", "undo_changes", "apply_changes"]
+    SCROLLABLE = True
+
+class FileExcludesEditDialog(Gtk.Dialog):
+    __g_type_name__ = "FileExcludesEditDialog"
+    def __init__(self, archive_name, parent=None):
+        title = _("Edit \"{}\" archive\'s directory exclusions.").format(archive_name)
+        parent = parent if parent else dialogue.main_window
+        Gtk.Dialog.__init__(self, title=title, parent=parent)
+        self.new_archive_widget = FileExcludesEditWidget(archive_name=archive_name)
+        self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
+        self.show_all()
 
 class NewArchiveWidget(Gtk.VBox):
     __g_type_name__ = "NewArchiveWidget"

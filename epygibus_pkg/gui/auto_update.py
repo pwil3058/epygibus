@@ -23,11 +23,6 @@ from . import enotify
 
 initialize_event_flags = lambda args: 0
 
-def _check_interfaces(args):
-    # NB: need extra level of function to avoid import loop/gridlock
-    from . import ifce
-    return ifce.check_interfaces(args)
-
 _REGISTERED_CBS = []
 
 def register_cb(callback):
@@ -46,7 +41,7 @@ def _auto_update_cb():
     DEBUG = False # set to True to investigate unexpected activity
     invalid_cbs = []
     event_args = {}
-    # make sure that the interfaces are up to date so that checks are valid
+    # do any necessary initialization of flags and arguments
     event_flags = initialize_event_flags(event_args)
     if DEBUG: print("AA START:", event_flags)
     for callback in _REGISTERED_CBS:
