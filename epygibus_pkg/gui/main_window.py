@@ -25,6 +25,7 @@ from . import g_archives
 from . import g_snapshots
 from . import icons
 from . import dialogue
+from . import recollect
 
 class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
     __g_type_name__ = "MainWindow"
@@ -62,8 +63,12 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
         vbox.pack_start(stack, expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
+        self.parse_geometry(recollect.get("main_window", "last_geometry"))
+        self.connect("configure-event", self._configure_event_cb)
     def populate_action_groups(self):
         pass
+    def _configure_event_cb(self, widget, event):
+        recollect.set("main_window", "last_geometry", "{0.width}x{0.height}+{0.x}+{0.y}".format(event))
 
 actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
     [

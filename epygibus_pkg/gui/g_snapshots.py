@@ -32,6 +32,7 @@ from . import gutils
 from . import table
 from . import auto_update
 from . import g_archives
+from . import recollect
 
 AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
@@ -535,6 +536,17 @@ class ArchiveSSListWidget(Gtk.VBox):
     def __init__(self):
         Gtk.VBox.__init__(self)
         self._archive_selector = g_archives.ArchiveComboBox()
+        last_archive_name = recollect.get("snapshots", "last_archive_viewed")
+        if last_archive_name:
+            model = self._archive_selector.get_model()
+            model_iter = model.get_iter_first()
+            while model_iter is not None:
+                row = model.get(model_iter, 0)
+                if row[0] == last_archive_name:
+                    self._archive_selector.set_active_iter(model_iter)
+                    break
+                else:
+                    model_iter = model.iter_next(model_iter)
         self._snapshot_list = SSNameListView(self._archive_selector.get_active_text(), size_req=(200, 640))
         hbox = Gtk.HBox()
         hbox.pack_start(Gtk.Label(_("Archive: ")), expand=False, fill=True, padding=0)
@@ -548,6 +560,8 @@ class ArchiveSSListWidget(Gtk.VBox):
         return self._snapshot_list
     def _archive_selection_change_cb(self, combo):
         self._snapshot_list.archive_name = combo.get_active_text()
+        if self._snapshot_list.archive_name:
+            recollect.set("snapshots", "last_archive_viewed", self._snapshot_list.archive_name)
 
 class SnapshotsMgrWidget(Gtk.HBox):
     __g_type_name__ = "SnapshotMgrWidget"
