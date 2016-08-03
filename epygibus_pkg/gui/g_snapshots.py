@@ -137,6 +137,69 @@ class DirRestorationDialog(_ExtractionDialog):
     __g_type_name__ = "DirRestorationDialog"
     WIDGET = DirRestorationWidget
 
+class _MultiExtractionWidget(_ExtractionWidget):
+    __g_type_name__ = "_MultiExtractionWidget"
+    def __init__(self, parent=None):
+        _ExtractionWidget.__init__(self, parent=parent)
+        self._item_progress_indicator = gutils.ProgressThingy()
+        self._item_label = Gtk.Label(" " * 32)
+        self._item_box = Gtk.HBox()
+        self._item_box.pack_start(self._item_label, expand=True, fill=True, padding=0)
+        self._item_box.pack_start(self._item_progress_indicator, expand=True, fill=True, padding=0)
+
+class MultiExtractionWidget(_MultiExtractionWidget):
+    __g_type_name__ = "MultiExtractionWidget"
+    DST = _("\"{}\" Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
+    def __init__(self, snapshot_fs, selected_items, parent=None):
+        self._snapshot_fs = snapshot_fs
+        self._selected_items = selected_items
+        _MultiExtractionWidget.__init__(self, parent=parent)
+        if len(selected_items) == 1:
+            self._subdir_path = os.path.dirname(selected_items[0].path)
+            label_text = _("Extracting: \"{}\" from \"{}\" snapshot in archive \"{}\".\n").format(selected_items[0].path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+        else:
+            self._subdir_path = os.path.commonprefix([item.path for item in selected_items])
+            label_text = _("Extracting: {} items from \"{}\" in \"{}\" snapshot in archive \"{}\".\n").format(len(selected_items), self._subdir_path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+        self.pack_start(Gtk.Label(label_text), expand=False, fill=True, padding=0)
+        self.pack_start(self._target_dir, expand=False, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self._overwrite_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self._start_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(self._progress_indicator, expand=False, fill=True, padding=0)
+        self.pack_start(self._item_box, expand=False, fill=True, padding=0)
+        self.pack_start(self._stderr_file, expand=True, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self.cancel_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self.close_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.show_all()
+    def _do_extraction(self):
+        from .. import utils
+        target_dir_path = os.path.abspath(self._target_dir.path)
+        overwrite = self._overwrite_button.get_active()
+        self._progress_indicator.set_expected_total(len(self._selected_items))
+        for item in self._selected_items:
+            self._item_label.set_text(item.name)
+            if item.is_link:
+                self._stderr_file.write(_("Symbolic link \"{}\" SKIPPED.\n").format(item.name))
+            elif item.is_dir:
+                cs = item.copy_contents_to(os.path.join(target_dir_path, item.name), overwrite=overwrite, stderr=self._stderr_file, progress_indicator=self._item_progress_indicator)
+                self._stderr_file.write(self.DST.format(item.name, cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
+            else:
+                self._item_progress_indicator.set_expected_total(1)
+                if item.copy_contents_to(os.path.join(target_dir_path, item.name), overwrite):
+                    self._stderr_file.write(_("\"{}\": extracted to \"{}\".\n").format(item.name, target_dir_path))
+                else:
+                    self._stderr_file.write(_("\"{}\": nothing to do.\n").format(item.name))
+                self._item_progress_indicator.finished()
+            self._progress_indicator.increment_count()
+        self._progress_indicator.finished()
+
+class MultiExtractionDialog(_ExtractionDialog):
+    __g_type_name__ = "MultiExtractionDialog"
+    WIDGET = MultiExtractionWidget
+
 DVRow = collections.namedtuple("DVRow", ["fso_data"])
 
 class DVModel(Gtk.ListStore):
@@ -144,6 +207,9 @@ class DVModel(Gtk.ListStore):
     def __init__(self, snapshot_fs=None, offset_dir_path=None):
         Gtk.ListStore.__init__(self, GObject.TYPE_PYOBJECT)
         self.set_snapshot_fs(snapshot_fs, offset_dir_path)
+    @property
+    def snapshot_fs(self):
+        return self._snapshot_fs
     def _set_contents(self):
         if self._snapshot_fs is None:
             self.clear()
@@ -225,11 +291,18 @@ def dv_specification():
         ]
     )
 
-class DirectoryView(tlview.ListView):
+class DirectoryView(tlview.ListView, actions.CAGandUIManager):
     __g_type_name__ = "DirectoryView"
-    PopUp = None
+    PopUp = "/snapshot_directory_view_popup"
     Model = DVModel
     specification = dv_specification()
+    UI_DESCR = '''
+    <ui>
+      <popup name="snapshot_directory_view_popup">
+        <menuitem action="extract_selected_items"/>
+      </popup>
+    </ui>
+    '''
     def __init__(self, snapshot_fs, offset_dir_path, size_req=None):
         self._dv_model = self.Model(snapshot_fs, offset_dir_path)
         self.show_hidden_toggle = Gtk.CheckButton(_("Show Hidden"))
@@ -239,12 +312,31 @@ class DirectoryView(tlview.ListView):
         tlview.ListView.__init__(self, model=show_hidden_filter, size_req=size_req)
         self.connect("button_press_event", tlview.clear_selection_cb)
         self.connect("key_press_event", tlview.clear_selection_cb)
+        actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup=self.PopUp)
     def _show_hidden_visibility_func(self, model, model_iter, toggle):
         return toggle.get_active() or not model[model_iter][0].is_hidden
+    @property
+    def snapshot_fs(self):
+        return self._dv_model._snapshot_fs
     def change_offset_dir_path(self, new_offset_dir_path):
         self._dv_model.change_offset_dir_path(new_offset_dir_path)
     def set_snapshot_fs(self, snapshot_fs, offset_dir_path=None):
         self._dv_model.set_snapshot_fs(snapshot_fs, offset_dir_path)
+    def get_selected_fs_paths(self):
+        model, model_paths = self.get_selection().get_selected_rows()
+        return [model[model_path][0].path for model_path in model_paths]
+    def get_selected_ss_items(self):
+        model, model_paths = self.get_selection().get_selected_rows()
+        return [model[model_path][0] for model_path in model_paths]
+    def populate_action_groups(self):
+        self.action_groups[actions.AC_SELN_MADE].add_actions(
+            [
+                ("extract_selected_items", icons.STOCK_EXTRACT, _("Extract"), None,
+                  _("Extract the selectected items to a nominated directory."),
+                  lambda _action=None: MultiExtractionDialog(snapshot_fs=self.snapshot_fs, selected_items=self.get_selected_ss_items()).show()
+                )
+            ])
+
 
 class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMixin, dialogue.BusyIndicatorUser):
     __g_type_name__ = "SnapshotManagerWidget"
@@ -285,6 +377,9 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
                 ("snapshot_dir_show_hidden", self._dir_view.show_hidden_toggle,
                  _("Show/hide hidden files and directories."),
                  None),
+            ])
+        self.button_groups[actions.AC_SELN_NONE].add_buttons(
+            [
                 ("snapshot_extract_current_dir", Gtk.Button.new_with_label(_("Extract")),
                  _("Extract this directory's files and directories to a nominated directory."),
                  self._extract_this_dir_bcb),

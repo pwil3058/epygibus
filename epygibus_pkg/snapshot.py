@@ -80,6 +80,9 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
             attributes = self.move_target_aside(repo_mgr, target_file_path, overwrite)
             if attributes is not None: # contents of target are the same as ours
                 repo_mgr.copy_contents_to(self.content_token, target_file_path, attributes)
+                return True
+            else:
+                return False
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
