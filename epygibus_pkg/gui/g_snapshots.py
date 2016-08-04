@@ -150,16 +150,18 @@ class _MultiExtractionWidget(_ExtractionWidget):
 class MultiExtractionWidget(_MultiExtractionWidget):
     __g_type_name__ = "MultiExtractionWidget"
     DST = _("\"{}\" Extracted: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
+    ONE_ITEM_LABEL_T = _("Extracting: \"{}\" from \"{}\" snapshot in archive \"{}\".\n")
+    MULTI_ITEM_LABEL_T = _("Extracting: {} items from \"{}\" in \"{}\" snapshot in archive \"{}\".\n")
     def __init__(self, snapshot_fs, selected_items, parent=None):
         self._snapshot_fs = snapshot_fs
         self._selected_items = selected_items
         _MultiExtractionWidget.__init__(self, parent=parent)
         if len(selected_items) == 1:
             self._subdir_path = os.path.dirname(selected_items[0].path)
-            label_text = _("Extracting: \"{}\" from \"{}\" snapshot in archive \"{}\".\n").format(selected_items[0].path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+            label_text = self.ONE_ITEM_LABEL_T.format(selected_items[0].path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
         else:
             self._subdir_path = os.path.commonprefix([item.path for item in selected_items])
-            label_text = _("Extracting: {} items from \"{}\" in \"{}\" snapshot in archive \"{}\".\n").format(len(selected_items), self._subdir_path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+            label_text = self.MULTI_ITEM_LABEL_T.format(len(selected_items), self._subdir_path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
         self.pack_start(Gtk.Label(label_text), expand=False, fill=True, padding=0)
         self.pack_start(self._target_dir, expand=False, fill=True, padding=0)
         hbox = Gtk.HBox()
@@ -216,6 +218,76 @@ class MultiExtractionWidget(_MultiExtractionWidget):
 class MultiExtractionDialog(_ExtractionDialog):
     __g_type_name__ = "MultiExtractionDialog"
     WIDGET = MultiExtractionWidget
+
+class MultiRestorationWidget(_MultiExtractionWidget):
+    __g_type_name__ = "MultiRestorationWidget"
+    DST = _("\"{}\" Restored: {} dirs, {} files, {} symbolic links, {} hard links, {}({}).\n")
+    ONE_ITEM_LABEL_T = _("Restoring: \"{}\" from \"{}\" snapshot in archive \"{}\".\n")
+    MULTI_ITEM_LABEL_T = _("Restoring: {} items from \"{}\" in \"{}\" snapshot in archive \"{}\".\n")
+    def __init__(self, snapshot_fs, selected_items, parent=None):
+        self._snapshot_fs = snapshot_fs
+        self._selected_items = selected_items
+        _MultiExtractionWidget.__init__(self, parent=parent)
+        if len(selected_items) == 1:
+            self._subdir_path = os.path.dirname(selected_items[0].path)
+            label_text = self.ONE_ITEM_LABEL_T.format(selected_items[0].path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+        else:
+            self._subdir_path = os.path.commonprefix([item.path for item in selected_items])
+            label_text = self.MULTI_ITEM_LABEL_T.format(len(selected_items), self._subdir_path, snapshot_fs.snapshot_name, snapshot_fs.archive_name)
+        self.pack_start(Gtk.Label(label_text), expand=False, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self._overwrite_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self._start_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(self._progress_indicator, expand=False, fill=True, padding=0)
+        self.pack_start(self._item_box, expand=False, fill=True, padding=0)
+        self.pack_start(self._stderr_file, expand=True, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_start(self.cancel_button, expand=True, fill=True, padding=0)
+        hbox.pack_start(self.close_button, expand=True, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.show_all()
+    def _do_extraction(self):
+        from .. import utils
+        overwrite = self._overwrite_button.get_active()
+        self._progress_indicator.set_expected_total(len(self._selected_items))
+        dir_links = list()
+        file_links = list()
+        for item in self._selected_items:
+            if item.is_link: # defer symbolic links to later to enhance chances of success
+                if item.is_dir:
+                    dir_links.append(item)
+                else:
+                    file_links.append(item)
+                continue
+            self._item_label.set_text(item.name)
+            if item.is_dir:
+                cs = item.restore(overwrite=overwrite, stderr=self._stderr_file, progress_indicator=self._item_progress_indicator)
+                self._stderr_file.write(self.DST.format(item.name, cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
+            else:
+                self._item_progress_indicator.set_expected_total(1)
+                if item.restore(overwrite):
+                    self._stderr_file.write(_("\"{}\": restored.\n").format(item.name))
+                else:
+                    self._stderr_file.write(_("\"{}\": nothing to do.\n").format(item.name))
+                self._item_progress_indicator.finished()
+            self._progress_indicator.increment_count()
+        curdir = os.getcwd()
+        # Do dir links before file links to enhance chances of success
+        for item in dir_links + file_links:
+            self._item_progress_indicator.set_expected_total(1)
+            self._item_label.set_text(item.name)
+            if item.create_link(curdir, stderr=self._stderr_file, overwrite=overwrite):
+                self._stderr_file.write(_("Symbolic link \"{}\" -> \"{}\" created.\n").format(item.name, item.tgt_abs_path))
+            else:
+                self._stderr_file.write(_("Symbolic link \"{}\" ->\"{}\" nothing to do.\n").format(item.name, item.tgt_abs_path))
+            self._item_progress_indicator.finished()
+            self._progress_indicator.increment_count()
+        self._progress_indicator.finished()
+
+class MultiRestorationDialog(_ExtractionDialog):
+    __g_type_name__ = "MultiRestorationDialog"
+    WIDGET = MultiRestorationWidget
 
 DVRow = collections.namedtuple("DVRow", ["fso_data"])
 
@@ -316,6 +388,7 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager):
     UI_DESCR = '''
     <ui>
       <popup name="snapshot_directory_view_popup">
+        <menuitem action="restore_selected_items"/>
         <menuitem action="extract_selected_items"/>
       </popup>
     </ui>
@@ -348,9 +421,13 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager):
     def populate_action_groups(self):
         self.action_groups[actions.AC_SELN_MADE].add_actions(
             [
-                ("extract_selected_items", icons.STOCK_EXTRACT, _("Extract"), None,
+                ("extract_selected_items", icons.STOCK_EXTRACT, _("Extract Selection"), None,
                   _("Extract the selectected items to a nominated directory."),
                   lambda _action=None: MultiExtractionDialog(snapshot_fs=self.snapshot_fs, selected_items=self.get_selected_ss_items()).show()
+                ),
+                ("restore_selected_items", icons.STOCK_RESTORE, _("Restore Selection"), None,
+                  _("Restore the selectected items to their original place in the file system."),
+                  lambda _action=None: MultiRestorationDialog(snapshot_fs=self.snapshot_fs, selected_items=self.get_selected_ss_items()).show()
                 )
             ])
 

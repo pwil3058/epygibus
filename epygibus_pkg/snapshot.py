@@ -83,6 +83,8 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
                 return True
             else:
                 return False
+    def restore(self, overwrite=False):
+        return self.copy_contents_to(self.path, overwrite)
     def get_content_storage_stats(self):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
