@@ -99,6 +99,8 @@ class _SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"])
     @property
     def tgt_abs_path(self):
         return utils.calc_link_tgt_abs_path(self.tgt_path, self.path)
+    def clone(self, new_path):
+        return self.__class__(new_path, self.attributes, self.tgt_path)
     def create_link(self, orig_curdir, stderr, overwrite=False):
         attributes = self.attributes
         if os.path.exists(self.path):
@@ -130,17 +132,26 @@ class _SLink(collections.namedtuple("SLink", ["path", "attributes", "tgt_path"])
                     os.chdir(orig_curdir)
             else:
                 os.symlink(self.tgt_path, self.path)
+        except OSError as edata:
+            # report the error and move on (we have permission to wreak havoc)
+            stderr.write(_("Error: {}: creating symbolic link \"{}\"->\"{}\"\n").format(edata.strerror, self.name, self.tgt_abs_path))
+            return 0
+        try:
             try:
                 os.lchmod(self.path, attributes.st_mode)
             except AttributeError:
                 # NB: some systems don't support lchmod())
                 os.chmod(self.path, attributes.st_mode)
+        except OSError as edata:
+            # report the error and move on (we have permission to wreak havoc)
+            stderr.write(_("Error: chmod: {}: \"{}\"\n").format(edata.strerror, edata.filename))
+        try:
             os.lchown(self.path, attributes.st_uid, attributes.st_gid)
             return 1
         except OSError as edata:
             # report the error and move on (we have permission to wreak havoc)
-            stderr.write(_("Error: {}: {}\n").format(edata.strerror, edata.filename))
-            return 0
+            stderr.write(_("Error: chown: {}: \"{}\"\n").format(edata.strerror, edata.filename))
+            return 1
     @classmethod
     def make(cls, path, f_data):
         return cls(path, ATTRS_NAMED(*f_data[0]), f_data[1])

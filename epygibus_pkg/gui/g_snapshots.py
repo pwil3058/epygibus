@@ -179,11 +179,17 @@ class MultiExtractionWidget(_MultiExtractionWidget):
         target_dir_path = os.path.abspath(self._target_dir.path)
         overwrite = self._overwrite_button.get_active()
         self._progress_indicator.set_expected_total(len(self._selected_items))
+        dir_links = list()
+        file_links = list()
         for item in self._selected_items:
+            if item.is_link: # defer symbolic links to later to enhance chances of success
+                if item.is_dir:
+                    dir_links.append(item)
+                else:
+                    file_links.append(item)
+                continue
             self._item_label.set_text(item.name)
-            if item.is_link:
-                self._stderr_file.write(_("Symbolic link \"{}\" SKIPPED.\n").format(item.name))
-            elif item.is_dir:
+            if item.is_dir:
                 cs = item.copy_contents_to(os.path.join(target_dir_path, item.name), overwrite=overwrite, stderr=self._stderr_file, progress_indicator=self._item_progress_indicator)
                 self._stderr_file.write(self.DST.format(item.name, cs.dir_count, cs.file_count, cs.soft_link_count, cs.hard_link_count, utils.format_bytes(cs.gross_bytes), utils.format_bytes(cs.net_bytes)))
             else:
@@ -193,6 +199,17 @@ class MultiExtractionWidget(_MultiExtractionWidget):
                 else:
                     self._stderr_file.write(_("\"{}\": nothing to do.\n").format(item.name))
                 self._item_progress_indicator.finished()
+            self._progress_indicator.increment_count()
+        curdir = os.getcwd()
+        # Do dir links before file links to enhance chances of success
+        for item in dir_links + file_links:
+            self._item_progress_indicator.set_expected_total(1)
+            self._item_label.set_text(item.name)
+            if item.clone(os.path.join(target_dir_path, item.name)).create_link(curdir, stderr=self._stderr_file, overwrite=overwrite):
+                self._stderr_file.write(_("Symbolic link \"{}\" -> \"{}\" created.\n").format(item.name, item.tgt_abs_path))
+            else:
+                self._stderr_file.write(_("Symbolic link \"{}\" ->\"{}\" nothing to do.\n").format(item.name, item.tgt_abs_path))
+            self._item_progress_indicator.finished()
             self._progress_indicator.increment_count()
         self._progress_indicator.finished()
 
