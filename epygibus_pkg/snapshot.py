@@ -62,7 +62,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
     is_link = False
     def open_read_only(self, binary=False):
         from . import repo
-        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             return repo_mgr.open_contents_read_only(self.content_token, binary=binary)
     def move_target_aside(self, repo_mgr, target_file_path, overwrite=False):
         attributes = self.attributes
@@ -87,7 +87,7 @@ class SFile(collections.namedtuple("SFile", ["path", "attributes", "content_toke
         return self.copy_contents_to(self.path, overwrite)
     def get_content_storage_stats(self):
         from . import repo
-        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
+        with repo.open_repo_mgr(self.repo_mgmt_key, writeable=False) as repo_mgr:
             return repo_mgr.get_content_storage_stats(self.content_token)
     @property
     def is_hard_linked(self):
