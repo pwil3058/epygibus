@@ -598,7 +598,7 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
         return config.get_archive_name_list()
     def get_selected_archive_spec(self):
         archive_name = self.get_active_text()
-        if repo_name:
+        if archive_name:
             return config.read_archive_spec(archive_name)
         return None
 

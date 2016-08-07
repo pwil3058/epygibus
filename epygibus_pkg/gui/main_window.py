@@ -33,6 +33,7 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
     <ui>
         <menubar name="epygibus_left_menubar">
             <menu action="main_window_file_menu">
+              <menuitem action="take_new_snapshot"/>
               <menuitem action="main_window_quit"/>
             </menu>
             <menu action="snapshot_exigency_menu">

@@ -79,3 +79,11 @@ class DummyProgressThingy:
         pass
     def finished(self):
         pass
+
+class DummyActivityIndicator:
+    def start(self):
+        pass
+    def pulse(self):
+        pass
+    def finished(self):
+        pass

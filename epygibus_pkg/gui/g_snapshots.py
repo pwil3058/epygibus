@@ -23,6 +23,7 @@ from gi.repository import GObject
 
 from .. import snapshot
 from .. import excpns
+from .. import utils
 
 from . import actions
 from . import dialogue
@@ -781,6 +782,85 @@ class SnapshotsMgrWidget(Gtk.HBox):
         if page_num != -1:
             self._notebook.set_current_page(page_num)
 
+class TakeSnapshotWidget(Gtk.VBox):
+    __g_type_name__ = "TakeSnapshotWidget"
+    def __init__(self, parent=None):
+        self._parent = parent
+        Gtk.VBox.__init__(self)
+        self._compress_snapshots = Gtk.CheckButton(_("Compress?"))
+        self._archive_selector = g_archives.ArchiveComboBox()
+        self._archive_selector.connect("changed", self._archive_changed_cb)
+        last_archive_name = recollect.get("snapshots", "last_archive_viewed")
+        if last_archive_name:
+            model = self._archive_selector.get_model()
+            model_iter = model.get_iter_first()
+            while model_iter is not None:
+                row = model.get(model_iter, 0)
+                if row[0] == last_archive_name:
+                    self._archive_selector.set_active_iter(model_iter)
+                    break
+                else:
+                    model_iter = model.iter_next(model_iter)
+            if model_iter is None:
+                self._archive_selector.set_active(0)
+        self._start_button = Gtk.Button.new_with_label(_("Start"))
+        self.close_button = Gtk.Button.new_with_label(_("Close"))
+        self.close_button.set_sensitive(False)
+        self.cancel_button = Gtk.Button.new_with_label(_("Cancel"))
+        self._activity_indicator = gutils.ProgressThingy()
+        self._stderr_file = gutils.PretendWOFile()
+        self._start_button.connect("clicked", self._start_button_bcb)
+        hbox = Gtk.HBox()
+        hbox.pack_start(Gtk.Label(_("Archive: ")), expand=False, fill=True, padding=0)
+        hbox.pack_start(self._archive_selector, expand=False, fill=True, padding=0)
+        hbox.pack_start(self._compress_snapshots, expand=False, fill=True, padding=0)
+        hbox.pack_end(self._start_button, expand=False, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.pack_start(self._activity_indicator, expand=False, fill=True, padding=0)
+        self.pack_start(self._stderr_file, expand=True, fill=True, padding=0)
+        hbox = Gtk.HBox()
+        hbox.pack_end(self.close_button, expand=False, fill=True, padding=0)
+        hbox.pack_end(self.cancel_button, expand=False, fill=True, padding=0)
+        self.pack_start(hbox, expand=False, fill=True, padding=0)
+        self.show_all()
+    def _archive_changed_cb(self, combo_box):
+        self._archive_spec = combo_box.get_selected_archive_spec()
+        self._compress_snapshots.set_active(self._archive_spec.compress_default)
+    def _start_button_bcb(self, _button):
+        self._archive_selector.set_sensitive(False)
+        self.cancel_button.set_sensitive(False)
+        self._start_button.set_sensitive(False)
+        self._compress_snapshots.set_sensitive(False)
+        try:
+            compress = self._compress_snapshots.get_active()
+            ss_name, ss_size, ss_stats, write_etd = snapshot.generate_snapshot(self._archive_spec, compress=compress, stderr=self._stderr_file, activity_indicator=self._activity_indicator)
+            nfiles, nlinks, csize, new_citems, rel_citems, construction_etd = ss_stats
+            self._stderr_file.write(self._archive_spec.name + ":" + ss_name + ":")
+            self._stderr_file.write(_("#files={:>9,} #links={:>9,} content={:>12} #new={:>9,} ").format(nfiles, nlinks, utils.format_bytes(csize), new_citems))
+            self._stderr_file.write(_("Build Time: {:>8.2f}s({:>4.1f}) Write Time: {:>8.2f}s\n").format(construction_etd.real_time, construction_etd.percent_io, write_etd.real_time))
+        except excpns.Error as edata:
+            self._stderr_file.write(str(edata) + "\n")
+            dialogue.report_exception_as_error(edata, parent=self._parent)
+        finally:
+            self._compress_snapshots.set_sensitive(True)
+            self._archive_selector.set_sensitive(True)
+            self.close_button.set_sensitive(True)
+            self.cancel_button.set_sensitive(True)
+            self._start_button.set_sensitive(True)
+
+class TakeSnapshotDialog(Gtk.Dialog):
+    __g_type_name__ = "TakeSnapshotDialog"
+    def __init__(self, parent=None):
+        title = _("Take Snapshot")
+        if parent is None:
+            parent = dialogue.main_window
+        Gtk.Dialog.__init__(self, title=title, type=Gtk.WindowType.TOPLEVEL, parent=parent)
+        self._ss_taker = TakeSnapshotWidget(parent=self)
+        self.get_content_area().add(self._ss_taker)
+        self._ss_taker.close_button.connect("clicked", lambda _button: self.destroy())
+        self._ss_taker.cancel_button.connect("clicked", lambda _button: self.destroy())
+        self.show_all()
+
 # class independent actions
 def exig_open_snapshot_file_acb(_action=None):
     snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
@@ -798,5 +878,12 @@ actions.CLASS_INDEP_AGS[actions.AC_DONT_CARE].add_actions(
         ("exig_open_snapshot_file", icons.STOCK_OPEN_SNAPSHOT_FILE, _("Open Snapshot File"), None,
          _("(Exigency) open a snapshot file directly. Should only be used when configuration files have been lost."),
          exig_open_snapshot_file_acb
+        ),
+    ])
+
+actions.CLASS_INDEP_AGS[g_archives.AC_ARCHIVES_AVAILABLE].add_actions([
+        ("take_new_snapshot", icons.STOCK_OPEN_SNAPSHOT_FILE, _("Take New Snapshot"), None,
+         _("Take new snapshot(s)."),
+         lambda _action: TakeSnapshotDialog().show()
         ),
     ])

@@ -314,7 +314,7 @@ def get_repo_storage_stats(repo_name):
     total_unreferenced_items = 0
     total_unreferenced_content_bytes = 0
     total_unreferenced_stored_bytes = 0
-    with open_repo_mgr(repo_mgmt_key, True) as repo_mgr:
+    with open_repo_mgr(repo_mgmt_key, False) as repo_mgr:
         for dir_name, dir_data in repo_mgr.ref_counter.items():
             for subdir_name, subdir_data in dir_data.items():
                 for count, content_bytes, stored_bytes in subdir_data.values():

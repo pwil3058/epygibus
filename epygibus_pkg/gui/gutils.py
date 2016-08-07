@@ -163,6 +163,7 @@ class ProgressThingy(Gtk.ProgressBar):
         self._step = self._denominator / float(nsteps)
         self._next_kick = self._step
         self.set_fraction(0.0)
+        yield_to_pending_events()
     def increment_count(self, by=1):
         self._numerator += by
         if self._numerator >= self._next_kick:
@@ -171,6 +172,17 @@ class ProgressThingy(Gtk.ProgressBar):
             yield_to_pending_events()
     def finished(self):
         self.set_fraction(1.0)
+        yield_to_pending_events()
+    def start(self, only_every=1):
+        self._pulse_count = 0
+        self._only_every = only_every
+        self.set_fraction(0.0)
+        yield_to_pending_events()
+    def pulse(self):
+        self._pulse_count += 1
+        if self._pulse_count % self._only_every == 0:
+            Gtk.ProgressBar.pulse(self)
+            yield_to_pending_events()
 
 class PretendWOFile(Gtk.ScrolledWindow):
     __g_type_name__ = "PretendWOFile"
