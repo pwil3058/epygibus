@@ -588,10 +588,33 @@ class NewArchiveDialog(dialogue.CancelOKDialog):
 
 class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
     __g_type_name__ = "ArchiveComboBox"
+    RSECTION = "snapshots"
+    RONAME = "last_archive_viewed"
     def __init__(self):
+        from . import recollect
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
         self.add_notification_cb(NE_ARCHIVE_POPN_CHANGE, self._enotify_cb)
+        last_archive_name = recollect.get(self.RSECTION, self.RONAME)
+        if last_archive_name:
+            model = self.get_model()
+            model_iter = model.get_iter_first()
+            while model_iter is not None:
+                row = model.get(model_iter, 0)
+                if row[0] == last_archive_name:
+                    self.set_active_iter(model_iter)
+                    break
+                else:
+                    model_iter = model.iter_next(model_iter)
+            if model_iter is None:
+                self.set_active(0)
+        self.connect("changed", self._save_last_archive_cb)
+    def _save_last_archive_cb(self, combo_box):
+        from . import recollect
+        archive_name = combo_box.get_active_text()
+        if archive_name:
+            recollect.set(self.RSECTION, self.RONAME, archive_name)
+        return False
     def _enotify_cb(self, **kwargs):
         self.update_contents()
     def _get_updated_item_list(self):
