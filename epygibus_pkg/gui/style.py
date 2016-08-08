@@ -34,6 +34,21 @@ CSS = b"""
         background-image: none;
         color: @fg_color;
     }
+    NotebookWithDelete tab {
+        background-color: shade(@bg_color, 1.22);
+        border-color: white;
+        border-width: 1px 1px 0 1px;
+        border-style: solid;
+        box-shadow: none;
+    }
+    NotebookWithDelete tab:active {
+        border-color: shade(cyan, 0.8);
+        border-style: solid;
+        border-width: 4px 1px 0 1px;
+        background-color: white;
+        background-image: none;
+        color: @fg_color;
+    }
 """
 
 cssprovider = Gtk.CssProvider()

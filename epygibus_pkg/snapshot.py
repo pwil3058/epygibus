@@ -367,11 +367,12 @@ def _get_snapshot_file_list(snapshot_dir_path, reverse=False):
 class SnapshotGenerator:
     # The file has gone away
     FORGIVEABLE_ERRNOS = frozenset((errno.ENOENT, errno.ENXIO))
-    def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False):
+    def __init__(self, archive, stderr=sys.stderr, report_skipped_links=False, activity_indicator=utils.DummyActivityIndicator()):
         import re
         import fnmatch
         from . import repo
         from . import bmark
+        self._activity_indicator = activity_indicator
         self._use_gmt = False # TODO: make this an option
         self._archive = archive
         self._exclude_dir_cres = [re.compile(fnmatch.translate(os.path.expanduser(glob))) for glob in archive.exclude_dir_globs]
@@ -418,6 +419,7 @@ class SnapshotGenerator:
         self.content_count += file_attrs[SIZE_I]
         self.file_count += 1
         subdir_ss.files[file_name] = (file_attrs, content_token)
+        self._activity_indicator.pulse()
     def _include_file_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
         # let the caller handle OSError exceptions
@@ -428,9 +430,11 @@ class SnapshotGenerator:
         if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
+            self._activity_indicator.pulse()
             return None
         self.file_slink_count += 1
         subdir_ss.file_links[file_name] = (get_attr_tuple(file_path), target_path)
+        self._activity_indicator.pulse()
         return abs_target_path if target_valid else None
     def _include_subdir_link(self, subdir_ss, file_name, file_path):
         # NB. redundancy in file_name and file_path is deliberate
@@ -442,21 +446,21 @@ class SnapshotGenerator:
         if self._archive.skip_broken_soft_links and not target_valid:
             if self.report_skipped_links:
                 self.stderr.write("{0} -> {1} symbolic link is broken.  Skipping.\n".format(file_path, target_path))
+            self._activity_indicator.pulse()
             return None
         self.subdir_slink_count += 1
         subdir_ss.subdir_links[file_name] = (get_attr_tuple(file_path), target_path)
+        self._activity_indicator.pulse()
         return abs_target_path if target_valid else None
-    def _include_dir(self, abs_base_dir_path, activity_indicator):
+    def _include_dir(self, abs_base_dir_path):
         from . import repo
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             start_counts = repo_mgr.get_counts()
             for abs_dir_path, subdir_names, file_names in os.walk(abs_base_dir_path, followlinks=True):
-                activity_indicator.pulse()
                 if self.is_excluded_dir(abs_dir_path):
                     continue
                 new_subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
                 for file_name in file_names:
-                    #activity_indicator.pulse()
                     # NB: checking both name AND full path of file for exclusion
                     if self.is_excluded_file(file_name):
                         continue
@@ -475,7 +479,6 @@ class SnapshotGenerator:
                         raise edata # something we can't handle so throw the towel in
                 excluded_subdir_names = []
                 for subdir_name in subdir_names:
-                    #activity_indicator.pulse()
                     if self.is_excluded_dir(subdir_name):
                         excluded_subdir_names.append(subdir_name)
                         continue
@@ -506,9 +509,9 @@ class SnapshotGenerator:
             if cre.match(dir_path_or_name):
                 return True
         return False
-    def generate_snapshot(self, activity_indicator=utils.DummyActivityIndicator()):
+    def generate_snapshot(self):
         from . import repo
-        activity_indicator.start(only_every=100)
+        self._activity_indicator.start(only_every=200)
         start_time = bmark.get_os_times()
         self._reset_counters()
         if self._snapshot is not None:
@@ -522,7 +525,6 @@ class SnapshotGenerator:
         for item in self._archive.includes:
             abs_item_path = absolute_path(item)
             if os.path.islink(abs_item_path):
-                activity_indicator.pulse()
                 # NB: no exclusion checks as explicit inclusion trumps exclusion
                 abs_dir_path, file_name = os.path.split(abs_item_path)
                 try:
@@ -538,7 +540,6 @@ class SnapshotGenerator:
                 except OSError as edata:
                     self.stderr.write(_("Error: processing link {} failed: {}: Skipping.\n").format(abs_item_path, edata.strerror))
             elif os.path.isfile(abs_item_path):
-                activity_indicator.pulse()
                 abs_dir_path, file_name = os.path.split(abs_item_path)
                 try:
                     subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
@@ -550,7 +551,7 @@ class SnapshotGenerator:
                     self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
             elif os.path.isdir(abs_item_path):
                 try:
-                    self._include_dir(abs_item_path, activity_indicator)
+                    self._include_dir(abs_item_path)
                 except OSError as edata:
                     self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
             elif item == abs_item_path:
@@ -566,13 +567,12 @@ class SnapshotGenerator:
         for abs_item_path in abs_dir_link_target_paths:
             # NB: no point testing for directory existence as mere existence doesn't mean it's fully processed
             try:
-                self._include_dir(abs_item_path, activity_indicator)
+                self._include_dir(abs_item_path)
             except OSError as edata:
                 self.stderr.write(_("Error: processing directory {} failed: {}\n").format(abs_item_path, edata.strerror))
         with repo.open_repo_mgr(self.repo_mgmt_key, writeable=True) as repo_mgr:
             start_counts = repo_mgr.get_counts()
             for abs_item_path in abs_file_link_target_paths:
-                activity_indicator.pulse()
                 abs_dir_path, file_name = os.path.split(abs_item_path)
                 try:
                     subdir_ss = self._snapshot.find_or_add_subdir(abs_dir_path)
@@ -582,42 +582,42 @@ class SnapshotGenerator:
                     self.stderr.write(_("Error: processing file {} failed: {}\n").format(abs_item_path, edata.strerror))
             self._adjust_item_stats(start_counts, repo_mgr.get_counts())
         self.elapsed_time = bmark.get_os_times() - start_time
-        activity_indicator.finished()
-    def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP, activity_indicator=utils.DummyActivityIndicator()):
+        self._activity_indicator.finished()
+    def write_snapshot(self, compress=False, permissions=stat.S_IRUSR|stat.S_IRGRP):
         assert self._snapshot is not None
         import time
-        activity_indicator.start()
-        activity_indicator.pulse()
+        self._activity_indicator.start()
+        self._activity_indicator.pulse()
         if self._use_gmt:
             snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.gmtime())
         else:
             snapshot_file_name = time.strftime(_SNAPSHOT_FILE_NAME_TEMPLATE, time.localtime())
         snapshot_file_path = os.path.join(self._archive.snapshot_dir_path, snapshot_file_name)
         compress = self._archive.compress_default if compress is None else compress
-        activity_indicator.pulse()
+        self._activity_indicator.pulse()
         if compress:
             OPEN = gzip.open
             snapshot_file_path += ".gz"
         else:
             OPEN = open
-        activity_indicator.pulse()
+        self._activity_indicator.pulse()
         with OPEN(snapshot_file_path, "wb") as f_obj:
             pickle.dump(SnapshotPlus(self._snapshot, self.creation_stats, self.repo_mgmt_key), f_obj, pickle.HIGHEST_PROTOCOL)
         self._snapshot = None # for reference count purposes we don't care if the permissions get set
-        activity_indicator.pulse()
+        self._activity_indicator.pulse()
         os.chmod(snapshot_file_path, permissions)
-        activity_indicator.pulse()
-        activity_indicator.finished()
+        self._activity_indicator.pulse()
+        self._activity_indicator.finished()
         return (ss_root(snapshot_file_name), os.path.getsize(snapshot_file_path))
 
 GSS = collections.namedtuple("GSS", ["name", "size", "stats", "write_etd"])
 
 def generate_snapshot(archive, compress=None, stderr=sys.stderr, report_skipped_links=True, activity_indicator=utils.DummyActivityIndicator()):
     from . import bmark
-    with SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links) as snapshot_generator:
-        snapshot_generator.generate_snapshot(activity_indicator=activity_indicator)
+    with SnapshotGenerator(archive, stderr=stderr, report_skipped_links=report_skipped_links, activity_indicator=activity_indicator) as snapshot_generator:
+        snapshot_generator.generate_snapshot()
         start_time = bmark.get_os_times()
-        snapshot_name, snapshot_size = snapshot_generator.write_snapshot(compress=compress, activity_indicator=activity_indicator)
+        snapshot_name, snapshot_size = snapshot_generator.write_snapshot(compress=compress)
         elapsed_time = bmark.get_os_times() - start_time
         return GSS(snapshot_name, snapshot_size, snapshot_generator.creation_stats, elapsed_time.get_etd())
 
