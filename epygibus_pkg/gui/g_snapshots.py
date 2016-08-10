@@ -453,7 +453,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
         self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
-        bbox = self.button_groups.create_action_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir", "snapshot_restore_current_dir"])
+        bbox = self.button_groups.create_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir", "snapshot_restore_current_dir"])
         self.pack_start(bbox, expand=False, fill=True, padding=0)
         self._dir_view.connect("row_activated", self._double_click_cb)
         self._update_above_base_offset_status()
@@ -477,16 +477,19 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
             [
                 ("snapshot_extract_current_dir", Gtk.Button.new_with_label(_("Extract")),
                  _("Extract this directory's files and directories to a nominated directory."),
-                 self._extract_this_dir_bcb),
+                 [("clicked", self._extract_this_dir_bcb)]
+                ),
                 ("snapshot_restore_current_dir", Gtk.Button.new_with_label(_("Restore")),
                  _("Restore this directory's files and directories to the file system."),
-                 self._restore_this_dir_bcb),
+                 [("clicked", self._restore_this_dir_bcb)]
+                ),
             ])
         self.button_groups[AC_ABOVE_BASE_OFFSET].add_buttons(
             [
                 ("snapshot_dir_go_up", Gtk.Button.new_from_icon_name(Gtk.STOCK_GO_UP, Gtk.IconSize.BUTTON),
                  _("Change displayed directory to parent of current displayed directory."),
-                 self._change_dir_up_bcb),
+                 [("clicked", self._change_dir_up_bcb)]
+                ),
             ])
     def _double_click_cb(self, tree_view, tree_path, tree_view_column):
         fso_data = tree_view.get_model()[tree_path][0]

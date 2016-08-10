@@ -213,22 +213,27 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
             [
                 ("table_add_file_path", Gtk.Button.new_with_label(_("Append File")),
                  _("Append a new file path to the includes table"),
-                 self._add_file_path_bcb),
+                 [("clicked", self._add_file_path_bcb)]
+                ),
                 ("table_add_dir_path", Gtk.Button.new_with_label(_("Append Directory")),
                  _("Append a new directory path to the includes table"),
-                 self._add_dir_path_bcb),
+                 [("clicked", self._add_dir_path_bcb)]
+                ),
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
             [
                 ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
                  _("Delete selected row(s)"),
-                 self._delete_selection_bcb),
+                 [("clicked", self._delete_selection_bcb)]
+                ),
                 ("table_insert_file_path", Gtk.Button.new_with_label(_("Insert File")),
                  _("Insert a new file path before the selected row(s)"),
-                 self._insert_file_path_bcb),
+                 [("clicked", self._insert_file_path_bcb)]
+                ),
                 ("table_insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory")),
                  _("Insert a new directory path before the selected row(s)"),
-                 self._insert_dir_path_bcb),
+                 ["clicked", (self._insert_dir_path_bcb)]
+                ),
             ])
     def get_included_paths(self):
         return [row.included_path for row in self.model.named()]
@@ -300,22 +305,27 @@ class IncludesEditView(table.EditableEntriesView):
             [
                 ("table_add_file_path", Gtk.Button.new_with_label(_("Append File")),
                  _("Append a new file path to the includes table"),
-                 self._add_file_path_bcb),
+                 [("clicked", self._add_file_path_bcb)]
+                ),
                 ("table_add_dir_path", Gtk.Button.new_with_label(_("Append Directory")),
                  _("Append a new directory path to the includes table"),
-                 self._add_dir_path_bcb),
+                 [("clicked", self._add_dir_path_bcb)]
+                ),
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
             [
                 ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
                  _("Delete selected row(s)"),
-                 self._delete_selection_bcb),
+                 [("clicked", self._delete_selection_bcb)]
+                ),
                 ("table_insert_file_path", Gtk.Button.new_with_label(_("Insert File")),
                  _("Insert a new file path before the selected row(s)"),
-                 self._insert_file_path_bcb),
+                 [("clicked", self._insert_file_path_bcb)]
+                ),
                 ("table_insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory")),
                  _("Insert a new directory path before the selected row(s)"),
-                 self._insert_dir_path_bcb),
+                 [("clicked", self._insert_dir_path_bcb)]
+                ),
             ])
     def get_included_paths(self):
         return [row.included_path for row in self.model.named()]
@@ -373,10 +383,12 @@ class ExcludesBuffer(text_edit.ModifyUndoSaveBuffer):
             [
                 ("insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory Path")),
                  _("Browse for and insert a directory path at the text cursor."),
-                 self._insert_dir_path_bcb),
+                 [("clicked", self._insert_dir_path_bcb)]
+                ),
                 ("insert_file_path", Gtk.Button.new_with_label(_("Insert File Path")),
                  _("Browse for and insert a file path at the text cursor."),
-                 self._insert_file_path_bcb),
+                 [("clicked", self._insert_file_path_bcb)]
+                ),
             ])
     def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
@@ -429,11 +441,13 @@ class DirExcludesEditBuffer(ExcludesBuffer):
         self.button_groups[self.AC_MODIFIED].add_buttons(
             [
                 ("apply_changes", Gtk.Button.new_with_label(_("Apply")),
-                _("Apply the pending changes to the specification."),
-                lambda _button: self._write_content()),
+                 _("Apply the pending changes to the specification."),
+                 [("clicked", lambda _button: self._write_content())]
+                ),
                 ("undo_changes", Gtk.Button.new_with_label(_("Undo")),
-                _("Undo the pending changes to the specification."),
-                lambda _button: self._load_content()),
+                 _("Undo the pending changes to the specification."),
+                 [("clicked", lambda _button: self._load_content())]
+                ),
             ])
     def _load_content(self):
         lines = config.read_exclude_dir_lines(self._archive_name)

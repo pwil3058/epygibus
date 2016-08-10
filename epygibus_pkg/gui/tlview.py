@@ -364,7 +364,7 @@ class View(Gtk.TreeView):
                 cell.connect('toggled', self._cell_toggled_cb, attr_index)
     @property
     def model(self):
-        return  self.get_model()
+        return self.get_model()
     @model.setter
     def model(self, new_model):
         self.set_model(new_model)

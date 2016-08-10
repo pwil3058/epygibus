@@ -65,21 +65,24 @@ def get_masked_seln_conditions(seln):
     else:
         return MaskedCondns(AC_SELN_MADE, AC_SELN_MASK)
 
-class _ButtonGroup:
+class ButtonGroup:
     def __init__(self, is_sensitive=True, is_visible=True, **kwargs):
         self._buttons = dict()
         self._is_visible = is_visible
         self._is_sensitive = is_sensitive
-    def add_button(self, name, button, tooltip, click_action=None, **kwargs):
+    def __getitem__(self, button_name):
+        return self._buttons[button_name]
+    def add_button(self, name, button, tooltip, callbacks=None):
         button.set_visible(self._is_visible)
         button.set_sensitive(self._is_sensitive)
         button.set_tooltip_text(tooltip)
         self._buttons[name] = button
-        if click_action:
-            button.connect("clicked", click_action, **kwargs)
+        if callbacks:
+            for callback_data in callbacks:
+                button.connect(*callback_data)
     def add_buttons(self, button_list):
-        for name, button, tooltip, click_action in button_list:
-            self.add_button(name, button, tooltip, click_action)
+        for name, button, tooltip, callbacks in button_list:
+            self.add_button(name, button, tooltip, callbacks)
     def set_sensitive(self, value):
         for button in self._buttons.values():
             button.set_sensitive(value)
@@ -103,6 +106,23 @@ class _ButtonGroup:
                 ostr += ", "
             ostr += button_name
         ostr += "]"
+    def create_button_box(self, button_name_list, horizontal=True, expand=True, fill=True, padding=0):
+        if horizontal:
+            box = Gtk.HBox()
+        else:
+            box = Gtk.VBox()
+        for button_name in button_name_list:
+            box.pack_start(self._buttons[button_name], expand=expand, fill=fill, padding=padding)
+        return box
+
+class BGUserMixin:
+    def __init__(self):
+        self.button_group = ButtonGroup()
+        self.populate_button_group()
+    def populate_button_group(self):
+        pass
+    def create_button_box(self, button_name_list):
+        return self.button_group.create_button_box(button_name_list)
 
 class ConditionalButtonGroups:
     class UnknownButton(Exception): pass
@@ -119,7 +139,7 @@ class ConditionalButtonGroups:
         return seln.connect('changed', self._seln_condns_change_cb)
     def __getitem__(self, condns):
         if condns not in self.groups:
-            self.groups[condns] = _ButtonGroup(is_sensitive=(condns & self.current_condns) == condns)
+            self.groups[condns] = ButtonGroup(is_sensitive=(condns & self.current_condns) == condns)
         return self.groups[condns]
     def update_condns(self, changed_condns):
         """
@@ -149,7 +169,7 @@ class ConditionalButtonGroups:
         for condns, group in self.groups.items():
             string += '\tGroup({0:x}): {2}\n'.format(condns, str(group))
         return string
-    def create_action_button_box(self, button_name_list, horizontal=True, expand=True, fill=True, padding=0):
+    def create_button_box(self, button_name_list, horizontal=True, expand=True, fill=True, padding=0):
         if horizontal:
             box = Gtk.HBox()
         else:
@@ -166,7 +186,7 @@ class CBGUserMixin:
     def populate_button_groups(self):
         pass
     def create_button_box(self, button_name_list):
-        return self.button_groups.create_action_button_box(button_name_list)
+        return self.button_groups.create_button_box(button_name_list)
 
 class ClientAndButtonsWidget(Gtk.VBox):
     __g_type_name__ = "ClientAndButtonsWidget"

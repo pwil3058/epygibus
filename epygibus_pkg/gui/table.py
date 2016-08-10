@@ -57,25 +57,30 @@ class EditableEntriesView(tlview.ListView, actions.CBGUserMixin):
             [
                 ("table_add_row", Gtk.Button.new_from_stock(Gtk.STOCK_ADD),
                  _("Add a new entry to the table"),
-                 self._add_row_acb),
+                 [("clicked", self._add_row_acb)]
+                ),
             ])
         self.button_groups[AC_MODIFIED].add_buttons(
             [
                 ("table_undo_changes", Gtk.Button.new_from_stock(Gtk.STOCK_UNDO),
                  _("Undo unapplied changes"),
-                 self._undo_changes_acb),
+                 [("clicked", self._undo_changes_acb)]
+                ),
                 ("table_apply_changes", Gtk.Button.new_from_stock(Gtk.STOCK_APPLY),
                  _("Apply outstanding changes"),
-                 self._apply_changes_acb),
+                 [("clicked", self._apply_changes_acb)]
+                ),
             ])
         self.button_groups[actions.AC_SELN_MADE].add_buttons(
             [
                 ("table_delete_selection", Gtk.Button.new_from_stock(Gtk.STOCK_DELETE),
                  _("Delete selected row(s)"),
-                 self._delete_selection_acb),
+                 [("clicked", self._delete_selection_acb)]
+                ),
                 ("table_insert_row", Gtk.Button.new_with_label(_("Insert")),
                  _("Insert a new entry before the selected row(s)"),
-                 self._insert_row_acb),
+                 [("clicked", self._insert_row_acb)]
+                ),
             ])
     def _set_modified(self, val):
         self._modified = val
@@ -134,7 +139,7 @@ class EditableEntriesView(tlview.ListView, actions.CBGUserMixin):
         columns = self.model.col_indices(labels)
         return self.get_selected_data(columns)
     def create_button_box(self, button_name_list):
-        return self.button_groups.create_action_button_box(button_name_list)
+        return self.button_groups.create_button_box(button_name_list)
 
 class EditedEntriesTable(Gtk.VBox):
     __g_type_name__ = "EditedEntriesTable"
