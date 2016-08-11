@@ -25,10 +25,10 @@ from .. import config
 from .. import utils
 from .. import excpns
 from .. import snapshot
+from .. import enotify
 
 from . import g_repos
 from . import actions
-from . import enotify
 from . import auto_update
 from . import table
 from . import icons

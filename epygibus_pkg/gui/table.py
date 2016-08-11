@@ -25,9 +25,10 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 from gi.repository import Gdk
 
+from .. import enotify
+
 from . import gutils
 from . import actions
-from . import enotify
 from . import tlview
 from . import icons
 from . import dialogue

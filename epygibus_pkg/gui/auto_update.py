@@ -17,9 +17,10 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from .. import enotify
+
 from . import gutils
 from . import actions
-from . import enotify
 
 initialize_event_flags = lambda args: 0
 
@@ -59,7 +60,7 @@ def _auto_update_cb():
             # TODO: try to be more explicit in naming exception type to catch here
             # this is done to catch the race between a caller has going away and deleting its registers
             if True: # NB: for debug assistance e.g . locating exceptions not due to caller going away
-                print ("AUTO UPDATE:", edata, callback, event_flags, event_args)
+                print("AUTO UPDATE:", edata, callback, event_flags, event_args)
                 raise edata
             invalid_cbs.append(callback)
     if DEBUG: print("AA END:", event_flags)

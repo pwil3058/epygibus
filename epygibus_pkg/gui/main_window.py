@@ -17,8 +17,9 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
+from .. import enotify
+
 from . import actions
-from . import enotify
 from . import auto_update
 from . import g_repos
 from . import g_archives
