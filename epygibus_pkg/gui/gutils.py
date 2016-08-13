@@ -36,12 +36,28 @@ class FramedScrollWindow(Gtk.Frame):
     def get_vscrollbar(self):
         return self._sw.get_hscrollbar()
 
-def wrap_in_scrolled_window(widget, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC), with_frame=True, label=None):
-    scrw = FramedScrollWindow(label) if with_frame else Gtk.ScrolledWindow()
+def wrap_in_scrolled_window(widget, policy=(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC), with_frame=True):
+    scrw = FramedScrollWindow() if with_frame else Gtk.ScrolledWindow()
     scrw.set_policy(policy[0], policy[1])
     scrw.add(widget)
     scrw.show_all()
     return scrw
+
+class MappedManager:
+    def __init__(self):
+        self.is_mapped = False
+        self.connect("map", self._map_cb)
+        self.connect("unmap", self._unmap_cb)
+    def _map_cb(self, widget=None):
+        self.is_mapped = True
+        self.map_action()
+    def _unmap_cb(self, widget=None):
+        self.is_mapped = False
+        self.unmap_action()
+    def map_action(self):
+        pass
+    def unmap_action(self):
+        pass
 
 class TimeOutController:
     ToggleData = collections.namedtuple('ToggleData', ['name', 'label', 'tooltip', 'stock_id'])
@@ -84,22 +100,6 @@ class TimeOutController:
             self._toggle_acb()
     def get_interval(self):
         return self._interval
-
-class MappedManager:
-    def __init__(self):
-        self.is_mapped = False
-        self.connect("map", self._map_cb)
-        self.connect("unmap", self._unmap_cb)
-    def _map_cb(self, widget=None):
-        self.is_mapped = True
-        self.map_action()
-    def _unmap_cb(self, widget=None):
-        self.is_mapped = False
-        self.unmap_action()
-    def map_action(self):
-        pass
-    def unmap_action(self):
-        pass
 
 class SplitBar(Gtk.HBox):
     __g_type_name__ = "SplitBar"

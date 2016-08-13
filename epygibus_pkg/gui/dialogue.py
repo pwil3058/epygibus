@@ -48,23 +48,27 @@ def init(window):
 
 class BusyIndicator:
     def __init__(self, parent=None):
-        self.parent_indicator = parent
+        self._bi_parent = parent
         self._count = 0
-        self.gdk_window = self.get_window()
     def show_busy(self):
-        if self.parent_indicator:
-            self.parent_indicator.show_busy()
+        if self._bi_parent:
+            self._bi_parent.show_busy()
         self._count += 1
-        if self._count == 1 and self.gdk_window:
-            self.gdk_window.set_cursor(Gdk.Cursor(Gdk.WATCH))
-            gutils.yield_to_pending_events()
+        if self._count == 1:
+            window = self.get_window()
+            if window is not None:
+                window.set_cursor(Gdk.Cursor.new(Gdk.CursorType.WATCH))
+                gutils.yield_to_pending_events()
     def unshow_busy(self):
-        if self.parent_indicator:
-            self.parent_indicator.unshow_busy()
+        if self._bi_parent:
+            self._bi_parent.unshow_busy()
         self._count -= 1
         assert self._count >= 0
-        if self._count == 0 and self.gdk_window:
-            self.gdk_window.set_cursor(None)
+        if self._count == 0:
+            window = self.get_window()
+            if window is not None:
+                window.set_cursor(None)
+                gutils.yield_to_pending_events()
     @property
     def is_busy(self):
         return self._count > 0

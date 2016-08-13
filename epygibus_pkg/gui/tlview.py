@@ -139,7 +139,7 @@ class CellRendererSpin(Gtk.CellRendererSpin):
         Propagate "value-changed" signal to get things moving
         """
         cell.emit('value-changed', path, spinbutton)
-GObject.signal_new('value-changed', CellRendererSpin, GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT, GObject.TYPE_PYOBJECT,))
+GObject.signal_new('value-changed', CellRendererSpin, GObject.SignalFlags.RUN_LAST, None, (GObject.TYPE_PYOBJECT, GObject.TYPE_PYOBJECT,))
 
 # Views
 class ViewSpec:

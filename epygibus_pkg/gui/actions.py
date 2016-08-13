@@ -179,6 +179,8 @@ class ConditionalButtonGroups:
             box.pack_start(button, expand=expand, fill=fill, padding=padding)
         return box
 
+CLASS_INDEP_BGS = ConditionalButtonGroups()
+
 class CBGUserMixin:
     def __init__(self, selection=None):
         self.button_groups = ConditionalButtonGroups(selection)
