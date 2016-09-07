@@ -1,4 +1,6 @@
-### Copyright (C) 2005-2016 Peter Williams <pwil3058@gmail.com>
+### -*- coding: utf-8 -*-
+###
+###  Copyright (C) 2016 Peter Williams <pwil3058@gmail.com>
 ###
 ### This program is free software; you can redistribute it and/or modify
 ### it under the terms of the GNU General Public License as published by
@@ -14,282 +16,125 @@
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 import os
+
 from contextlib import contextmanager
 
-import gi
-gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
-from gi.repository import GObject
 from gi.repository import Gdk
 
 from .. import enotify
+from ..decorators import singleton
 
-from . import icons
-from . import gutils
+from . import yield_to_pending_events
 
-from .. import APP_NAME
-
+# parent for windows/dialogs that would otherwise be orphans
 main_window = None
-
-@contextmanager
-def showing_busy():
-    if main_window is None:
-        yield
-    else:
-        main_window.show_busy()
-        try:
-            yield
-        finally:
-            main_window.unshow_busy()
-
-def is_busy():
-    return main_window is None or main_window.is_busy
-
-def init(window):
-    global main_window
-    main_window = window
 
 class BusyIndicator:
     def __init__(self, parent=None):
         self._bi_parent = parent
-        self._count = 0
+        self._bi_depth = 0
+        self.connect("destroy", lambda _widget: self._turn_off_busy())
+    def _turn_off_busy(self):
+        while self.is_busy:
+            self.unshow_busy()
     def show_busy(self):
-        if self._bi_parent:
+        if self._bi_parent and self.get_modal():
             self._bi_parent.show_busy()
-        self._count += 1
-        if self._count == 1:
+        self._bi_depth += 1
+        if self._bi_depth == 1:
             window = self.get_window()
             if window is not None:
                 window.set_cursor(Gdk.Cursor.new(Gdk.CursorType.WATCH))
-                gutils.yield_to_pending_events()
+                yield_to_pending_events()
     def unshow_busy(self):
-        if self._bi_parent:
+        if self._bi_parent and self.get_modal():
             self._bi_parent.unshow_busy()
-        self._count -= 1
-        assert self._count >= 0
-        if self._count == 0:
+        self._bi_depth -= 1
+        assert self._bi_depth >= 0
+        if self._bi_depth == 0:
             window = self.get_window()
             if window is not None:
                 window.set_cursor(None)
-                gutils.yield_to_pending_events()
+                yield_to_pending_events()
     @contextmanager
     def showing_busy(self):
         self.show_busy()
         try:
             yield
-        except:
+        finally:
             self.unshow_busy()
     @property
     def is_busy(self):
-        return self._count > 0
+        return self._bi_depth > 0
 
 class BusyIndicatorUser:
-    def __init__(self, busy_indicator=None):
-        self._busy_indicator = busy_indicator
-    def _show_busy(self):
-        if self._busy_indicator is not None:
-            self._busy_indicator.show_busy()
-        elif main_window is not None:
-            main_window.show_busy()
-    def _unshow_busy(self):
-        if self._busy_indicator is not None:
-            self._busy_indicator.unshow_busy()
-        elif main_window is not None:
-            main_window.unshow_busy()
     @contextmanager
     def showing_busy(self):
-        self._show_busy()
-        try:
+        # NB: need to cater for the case where called before all the packing is complete
+        tl = self.get_toplevel()
+        if tl.is_toplevel():
+            tl.show_busy()
+            try:
+                yield
+            finally:
+                tl.unshow_busy()
+        else:
             yield
-        except:
-            self._unshow_busy()
-    def set_busy_indicator(self, busy_indicator=None):
-        self._busy_indicator = busy_indicator
 
-class BusyDialog(Gtk.Dialog, BusyIndicator):
-    __g_type_name__ = "BusyDialog"
-    def __init__(self, title=None, parent=None, flags=0, buttons=None):
-        if not parent:
-            parent = main_window
-        Gtk.Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
-        if not parent:
-            self.set_icon(icons.APP_ICON_PIXBUF)
+class Window(Gtk.Window, BusyIndicator):
+    def __init__(self, *args, **kwargs):
+        if not kwargs.get("parent", None):
+            kwargs["parent"] = main_window
+        Gtk.Window.__init__(self, *args, **kwargs)
         BusyIndicator.__init__(self)
-    def report_any_problems(self, result):
-        report_any_problems(result, self)
-    def inform_user(self, msg):
-        inform_user(msg, parent=self)
-    def warn_user(self, msg):
-        warn_user(msg, parent=self)
-    def alert_user(self, msg):
-        alert_user(msg, parent=self)
 
-class ListenerDialog(BusyDialog, enotify.Listener):
-    __g_type_name__ = "ListenerDialog"
-    def __init__(self, title=None, parent=None, flags=0, buttons=None):
-        flags &= ~Gtk.DialogFlags.MODAL
-        BusyDialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
+class Dialog(Gtk.Dialog, BusyIndicator):
+    def __init__(self, *args, **kwargs):
+        if not kwargs.get("parent", None):
+            kwargs["parent"] = main_window
+        Gtk.Dialog.__init__(self, *args, **kwargs)
+        BusyIndicator.__init__(self, )
+
+class ListenerDialog(Dialog, enotify.Listener):
+    def __init__(self, *args, **kwargs):
+        Dialog.__init__(self, *args, **kwargs)
         enotify.Listener.__init__(self)
         self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+        self.add_notification_cb(enotify.E_CHANGE_WD, self._self_destruct_cb)
+        self.set_modal(False)
     def _self_destruct_cb(self, **kwargs):
         self.destroy()
 
-class MessageDialog(BusyDialog):
-    __g_type_name__ = "MessageDialog"
-    icons = {
-        Gtk.MessageType.INFO: Gtk.STOCK_DIALOG_INFO,
-        Gtk.MessageType.WARNING: Gtk.STOCK_DIALOG_WARNING,
-        Gtk.MessageType.QUESTION: Gtk.STOCK_DIALOG_QUESTION,
-        Gtk.MessageType.ERROR: Gtk.STOCK_DIALOG_ERROR,
-    }
-    labels = {
-        Gtk.MessageType.INFO: _("FYI"),
-        Gtk.MessageType.WARNING: _("Warning"),
-        Gtk.MessageType.QUESTION: _("Question"),
-        Gtk.MessageType.ERROR: _("Error"),
-    }
-    def __init__(self, parent=None, flags=Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT, type=Gtk.MessageType.INFO, buttons=None, message=None, explanation=None):
-        if not parent:
-            parent = main_window
-        BusyDialog.__init__(self, title=APP_NAME + ": {0}".format(self.labels[type]), parent=parent, flags=flags, buttons=buttons)
-        self.set_property("skip-taskbar-hint", True)
-        hbox = Gtk.HBox()
-        icon = Gtk.Image()
-        icon.set_from_stock(self.icons[type], Gtk.IconSize.DIALOG)
-        hbox.pack_start(icon, expand=False, fill=False, padding=0)
-        label = Gtk.Label()
-        label.set_markup("<big><b>" + self.labels[type] + "</b></big>")
-        hbox.pack_start(label, expand=False, fill=False, padding=0)
-        self.get_content_area().pack_start(hbox, expand=False, fill=False, padding=0)
-        m_label = Gtk.Label()
-        m_label.set_markup("<b>" + message + "</b>")
-        self.get_content_area().pack_start(m_label, expand=True, fill=True, padding=0)
-        if explanation:
-            e_label = Gtk.Label(explanation)
-            e_label.set_justify(Gtk.Justification.LEFT)
-            self.get_content_area().pack_start(e_label, expand=True, fill=True, padding=0)
-        self.show_all()
-        self.set_resizable(True)
-
-class QuestionDialog(BusyDialog):
-    __g_type_name__ = "QuestionDialog"
-    def __init__(self, title=None, parent=None, flags=0, buttons=None, question="", explanation=""):
-        if title is None:
-            title = APP_NAME
-        BusyDialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
-        self.set_property("skip-taskbar-hint", True)
-        hbox = Gtk.HBox()
-        self.vbox.add(hbox)
-        hbox.show()
-        self.image = Gtk.Image()
-        self.image.set_from_stock(Gtk.STOCK_DIALOG_QUESTION, Gtk.IconSize.DIALOG)
-        hbox.pack_start(self.image, expand=False, fill=True, padding=0)
-        self.image.show()
+class QuestionDialog(Dialog):
+    def __init__(self, qtn="", expln="", **kwargs):
+        Dialog.__init__(self, **kwargs)
+        self.set_skip_taskbar_hint(True)
+        self.set_destroy_with_parent(True)
+        grid = Gtk.Grid()
+        self.vbox.add(grid)
+        image = Gtk.Image()
+        image.set_from_stock(Gtk.STOCK_DIALOG_QUESTION, Gtk.IconSize.DIALOG)
+        grid.add(image)
         q_label = Gtk.Label()
-        q_label.set_markup("<big><b>" + question + "</b></big>")
-        if explanation:
-            vbox = Gtk.VBox()
-            e_label = Gtk.Label(explanation)
-            e_label.set_justify(Gtk.Justification.LEFT)
-            vbox.pack_start(q_label, expand=True, fill=True, padding=0)
-            vbox.pack_start(e_label, expand=True, fill=True, padding=0)
-            hbox.add(vbox)
-        else:
-            hbox.add(q_label)
+        q_label.set_markup("<big><b>" + qtn + "</b></big>")
+        q_label.set_justify(Gtk.Justification.LEFT)
+        q_label.set_line_wrap(True)
+        grid.attach_next_to(q_label, image, Gtk.PositionType.RIGHT, 1, 1)
+        if expln:
+            e_label = Gtk.Label(expln)
+            e_label.set_justify(Gtk.Justification.FILL)
+            e_label.set_line_wrap(True)
+            grid.attach_next_to(e_label, q_label, Gtk.PositionType.BOTTOM, 1, 1)
         self.show_all()
 
-def ask_question(question, explanation="", parent=None,
-                 buttons=(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                          Gtk.STOCK_OK, Gtk.ResponseType.OK)):
-    dialog = QuestionDialog(parent=parent,
-                            flags=Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                            buttons=buttons, question=question, explanation=explanation)
-    response = dialog.run()
-    dialog.destroy()
-    return response
-
-def ask_ok_cancel(question, explanation="", parent=None):
-    return ask_question(question, explanation, parent) == Gtk.ResponseType.OK
-
-def ask_yes_no(question, explanation="", parent=None):
-    buttons = (Gtk.STOCK_NO, Gtk.ResponseType.NO, Gtk.STOCK_YES, Gtk.ResponseType.YES)
-    return ask_question(question, explanation, parent, buttons) == Gtk.ResponseType.YES
-
-def inform_user(msg, expln=None, parent=None, problem_type=Gtk.MessageType.INFO):
-    dialog = MessageDialog(parent=parent,
-                           flags=Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                           type=problem_type, buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE),
-                           message=msg, explanation=expln)
-    dialog.run()
-    dialog.destroy()
-
-def warn_user(msg, expln=None, parent=None):
-    inform_user(msg, expln, parent=parent, problem_type=Gtk.MessageType.WARNING)
-
-def alert_user(msg, expln=None, parent=None):
-    inform_user(msg, expln, parent=parent, problem_type=Gtk.MessageType.ERROR)
-
-def report_any_problems(result, parent=None):
-    if result.is_ok:
-        return
-    elif result.is_warning:
-        problem_type = Gtk.MessageType.WARNING
-    else:
-        problem_type = Gtk.MessageType.ERROR
-    inform_user("\n".join(result[1:]), parent, problem_type)
-
-def report_failure(failure, parent=None):
-    inform_user(failure.result, parent, Gtk.MessageType.ERROR)
-
-def report_exception_as_error(edata, parent=None):
-    alert_user(str(edata), parent=parent)
-
-class UndecoratedMessage(Gtk.Dialog):
-    __g_type_name__ = "UndecoratedMessage"
-    def __init__(self, message, parent=None):
-        Gtk.Dialog.__init__(self, "", main_window if not parent else parent, 0)
-        self.set_decorated(False)
-        label = Gtk.Label()
-        label.set_markup("<big><b>" + message + "</b></big>")
-        self.get_content_area().add(label)
-        self.show_all()
-
-@contextmanager
-def comforting_message(message, spinner=False, parent=None):
-    # TODO: Fix this mess and get going need to know how to force mapping of window
-    dialog = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-    dialog.set_decorated(False)
-    dialog.set_destroy_with_parent(True)
-    label = Gtk.Label()
-    label.set_can_focus(True)
-    label.set_markup("<big><b>" + message + "</b></big>")
-    dialog.add(label)
-    dialog.show_all()
-    dialog.show()
-    dialog.set_keep_above(True)
-    dialog.present()
-    try:
-        os.sched_yield()
-    except:
-        import time
-        time.sleep(1)
-    try:
-        yield dialog
-    finally:
-        dialog.destroy()
-        pass
-
-class CancelOKDialog(BusyDialog):
-    __g_type_name__ = "CancelOKDialog"
+class CancelOKDialog(Dialog):
     def __init__(self, title=None, parent=None):
-        if not parent:
-            parent = main_window
         flags = Gtk.DialogFlags.DESTROY_WITH_PARENT
         buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        BusyDialog.__init__(self, title, parent, flags, buttons)
+        Dialog.__init__(self, title=title, parent=parent, flags=flags, buttons=buttons)
 
 class ReadTextWidget(Gtk.HBox):
-    __g_type_name__ = "ReadTextWidget"
     def __init__(self, prompt=None, suggestion="", width_chars=32):
         Gtk.HBox.__init__(self)
         if prompt:
@@ -315,79 +160,124 @@ class ReadTextWidget(Gtk.HBox):
         self._timeout_id = None
         self.entry.set_progress_pulse_step(0)
 
-class FileChooserDialog(Gtk.FileChooserDialog):
-    __g_type_name__ = "FileChooserDialog"
-    def __init__(self, title=None, parent=None, action=Gtk.FileChooserAction.OPEN, buttons=None, backend=None):
-        if not parent:
-            parent = main_window
-        Gtk.FileChooserDialog.__init__(self, title, parent, action, buttons, backend)
+class ReadTextDialog(CancelOKDialog):
+    def __init__(self, title=None, prompt=None, suggestion="", parent=None):
+        CancelOKDialog.__init__(self, title=title, parent=parent)
+        self._rtw = ReadTextWidget(prompt, suggestion, width_chars=32)
+        self.entry.set_activates_default(True)
+        self.vbox.pack_start(self._rtw, expand=False, fill=True, padding=0)
+        self.show_all()
+    @property
+    def entry(self):
+        return self._rtw.entry
 
-def select_file(prompt, suggestion=None, existing=True, absolute=False, parent=None):
-    if existing:
-        mode = Gtk.FileChooserAction.OPEN
-        if suggestion and not os.path.exists(suggestion):
-            suggestion = None
-    else:
-        mode = Gtk.FileChooserAction.SAVE
-    dialog = FileChooserDialog(prompt, parent, mode,
-                               (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                Gtk.STOCK_OK, Gtk.ResponseType.OK))
-    dialog.set_default_response(Gtk.ResponseType.OK)
-    if suggestion:
-        if os.path.isdir(suggestion):
-            dialog.set_current_folder(suggestion)
+class ReadTextAndToggleDialog(ReadTextDialog):
+    def __init__(self, title=None, prompt=None, suggestion="", toggle_prompt=None, toggle_state=False, parent=None):
+        ReadTextDialog.__init__(self, title=title, prompt=prompt, suggestion=suggestion, parent=parent)
+        self.toggle = Gtk.CheckButton(label=toggle_prompt)
+        self.toggle.set_active(toggle_state)
+        self._rtw.pack_start(self.toggle, expand=True, fill=True, padding=0)
+        self.show_all()
+
+class PathSelectorMixin:
+    # TODO: fix relative paths in PathSelectorMixin results i.e. use "./" at start
+    def select_file(self, prompt, suggestion=None, existing=True, absolute=False):
+        if existing:
+            mode = Gtk.FileChooserAction.OPEN
+            if suggestion and not os.path.exists(suggestion):
+                suggestion = None
         else:
-            dirname, basename = os.path.split(suggestion)
-            if dirname:
-                dialog.set_current_folder(dirname)
+            mode = Gtk.FileChooserAction.SAVE
+        dialog = Gtk.FileChooserDialog(prompt, self.get_toplevel(), mode,
+                                   (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                    Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        if suggestion:
+            if os.path.isdir(suggestion):
+                dialog.set_current_folder(suggestion)
             else:
-                dialog.set_current_folder(os.getcwd())
-            if basename:
-                dialog.set_current_name(basename)
-    else:
-        dialog.set_current_folder(os.getcwd())
-    response = dialog.run()
-    if response == Gtk.ResponseType.OK:
-        new_file_name = os.path.relpath(dialog.get_filename())
-    else:
-        new_file_name = None
-    dialog.destroy()
-    return os.path.abspath(new_file_name) if (absolute and new_file_name) else new_file_name
-
-def select_directory(prompt, suggestion=None, existing=True, absolute=False, parent=None):
-    if existing:
+                dirname, basename = os.path.split(suggestion)
+                if dirname:
+                    dialog.set_current_folder(dirname)
+                else:
+                    dialog.set_current_folder(os.getcwd())
+                if basename:
+                    dialog.set_current_name(basename)
+        else:
+            dialog.set_current_folder(os.getcwd())
+        response = dialog.run()
+        if dialog.run() == Gtk.ResponseType.OK:
+            if absolute:
+                new_file_path = dialog.get_filename()
+            else:
+                new_file_path = os.path.relpath(dialog.get_filename())
+        else:
+            new_file_path = None
+        dialog.destroy()
+        return new_file_path
+    def select_directory(self, prompt, suggestion=None, existing=True, absolute=False):
+        if existing:
+            if suggestion and not os.path.exists(suggestion):
+                suggestion = None
+        dialog = Gtk.FileChooserDialog(prompt, self.get_toplevel(), Gtk.FileChooserAction.SELECT_FOLDER,
+                                   (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                    Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        if suggestion:
+            if os.path.isdir(suggestion):
+                dialog.set_current_folder(suggestion)
+            else:
+                dirname = os.path.dirname(suggestion)
+                if dirname:
+                    dialog.set_current_folder(dirname)
+                else:
+                    dialog.set_current_folder(os.getcwd())
+        else:
+            dialog.set_current_folder(os.getcwd())
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            if absolute:
+                new_dir_path = dialog.get_filename()
+            else:
+                new_dir_path = os.path.relpath(dialog.get_filename())
+        else:
+            new_dir_path = None
+        dialog.destroy()
+        return new_dir_path
+    def select_uri(self, prompt, suggestion=None):
         if suggestion and not os.path.exists(suggestion):
             suggestion = None
-    dialog = FileChooserDialog(prompt, parent, Gtk.FileChooserAction.SELECT_FOLDER,
-                               (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                Gtk.STOCK_OK, Gtk.ResponseType.OK))
-    dialog.set_default_response(Gtk.ResponseType.OK)
-    if suggestion:
-        if os.path.isdir(suggestion):
-            dialog.set_current_folder(suggestion)
+        dialog = Gtk.FileChooserDialog(prompt, self.get_toplevel(), Gtk.FileChooserAction.SELECT_FOLDER,
+                                   (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                    Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.set_local_only(False)
+        if suggestion:
+            if os.path.isdir(suggestion):
+                dialog.set_current_folder(suggestion)
+            else:
+                dirname = os.path.dirname(suggestion)
+                if dirname:
+                    dialog.set_current_folder(dirname)
         else:
-            dirname = os.path.dirname(suggestion)
-            if dirname:
-                dialog.set_current_folder(dirname)
-    else:
-        dialog.set_current_folder(os.getcwd())
-    response = dialog.run()
-    if response == Gtk.ResponseType.OK:
-        new_dir_name = os.path.relpath(dialog.get_filename())
-    else:
-        new_dir_name = None
-    dialog.destroy()
-    return os.path.abspath(new_dir_name) if (absolute and new_dir_name) else new_dir_name
+            dialog.set_current_folder(os.getcwd())
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            uri = os.path.relpath(dialog.get_uri())
+        else:
+            uri = None
+        dialog.destroy()
+        return uri
 
 # TODO: put auto completion into the text entry component
-class _EnterPathWidget(Gtk.HBox):
-    __g_type_name__ = "_EnterPathWidget"
+class _EnterPathWidget(Gtk.HBox, PathSelectorMixin):
     SELECT_FUNC = None
     SELECT_TITLE = None
     def __init__(self, prompt=None, suggestion=None, existing=True, width_chars=32, parent=None):
         Gtk.HBox.__init__(self)
         self._parent = parent
         self._path = ReadTextWidget(prompt=prompt, suggestion=suggestion, width_chars=width_chars)
+        self._path.entry.set_activates_default(True)
         self._existing = existing
         self.b_button = Gtk.Button.new_with_label(_("Browse"))
         self.b_button.connect("clicked", self._browse_cb)
@@ -396,27 +286,28 @@ class _EnterPathWidget(Gtk.HBox):
         self.show_all()
     @property
     def path(self):
-        return self._path.entry.get_text()
+        return os.path.expanduser(self._path.entry.get_text())
     def set_sensitive(self, sensitive):
         self._path.entry.set_editable(sensitive)
         self.b_button.set_sensitive(sensitive)
     def _browse_cb(self, button=None):
         suggestion = self._path.entry.get_text()
-        path = self.SELECT_FUNC(self.SELECT_TITLE, suggestion=suggestion, existing=self._existing, parent=self._parent)
+        path = self.SELECT_FUNC(self.SELECT_TITLE, suggestion=suggestion, existing=self._existing, absolute=False)
         if path:
-            self._path.entry.set_text(os.path.abspath(os.path.expanduser(path)))
+            self._path.entry.set_text(path)
     def start_busy_pulse(self):
         self._path.start_busy_pulse()
     def stop_busy_pulse(self):
         self._path.stop_busy_pulse()
 
 class _EnterPathDialog(CancelOKDialog):
-    __g_type_name__ = "_EnterPathDialog"
     WIDGET = None
     def __init__(self, title=None, prompt=None, suggestion="", existing=True, parent=None):
         CancelOKDialog.__init__(self, title, parent)
         self.entry = self.WIDGET(prompt, suggestion, existing, parent=self)
         self.get_content_area().add(self.entry)
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.set_position(Gtk.WindowPosition.MOUSE)
         self.show_all()
     @property
     def path(self):
@@ -429,31 +320,129 @@ class _EnterPathDialog(CancelOKDialog):
         self.entry.stop_busy_pulse()
 
 class EnterDirPathWidget(_EnterPathWidget):
-    __g_type_name__ = "EnterDirPathWidget"
-    SELECT_FUNC = lambda s, *args, **kwargs: select_directory(*args, **kwargs)
+    SELECT_FUNC = PathSelectorMixin.select_directory
     SELECT_TITLE = _("Browse for Directory")
 
 class EnterDirPathDialog(_EnterPathDialog):
-    __g_type_name__ = "EnterDirPathDialog"
     WIDGET = EnterDirPathWidget
 
 class EnterFilePathWidget(_EnterPathWidget):
-    __g_type_name__ = "EnterFilePathWidget"
-    SELECT_FUNC = lambda s, *args, **kwargs: select_file(*args, **kwargs)
+    SELECT_FUNC = PathSelectorMixin.select_file
     SELECT_TITLE = _("Browse for File")
 
 class EnterFilePathDialog(_EnterPathDialog):
-    __g_type_name__ = "EnterFilePathDialog"
     WIDGET = EnterFilePathWidget
 
-def ask_dir_path(prompt, suggestion=None, existing=True, parent=None):
-    dialog = EnterDirPathDialog(title=_("Enter Directory Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
-    dir_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
-    dialog.destroy()
-    return dir_path
+CANCEL_OK_BUTTONS = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+NO_YES_BUTTONS = (Gtk.STOCK_NO, Gtk.ResponseType.NO, Gtk.STOCK_YES, Gtk.ResponseType.YES)
 
-def ask_file_path(prompt, suggestion=None, existing=True, parent=None):
-    dialog = EnterFilePathDialog(title=_("Enter File Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=parent)
-    file_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
-    dialog.destroy()
-    return file_path
+from .. import Suggestion
+Response = Suggestion
+
+SUGGESTION_LABEL_MAP = {
+    Suggestion.FORCE : _("Force"),
+    Suggestion.REFRESH : _("Refresh"),
+    Suggestion.RECOVER : _("Recover"),
+    Suggestion.RENAME : _("Rename"),
+    Suggestion.DISCARD : _("Discard"),
+    Suggestion.ABSORB : _("Absorb"),
+    Suggestion.EDIT : _("Edit"),
+    Suggestion.MERGE : _("Merge"),
+    Suggestion.OVERWRITE : _("Overwrite"),
+    Suggestion.SKIP : _("Skip"),
+    Suggestion.SKIP_ALL : _("Skip All"),
+}
+
+ALL_SUGGESTIONS = [key for key in sorted(SUGGESTION_LABEL_MAP.keys())]
+
+assert len(SUGGESTION_LABEL_MAP) == Suggestion.NFLAGS
+
+def response_str(response):
+    if response > 0:
+        return SUGGESTION_LABEL_MAP[response]
+    else:
+        return _("Gtk.Response({})".format(response))
+
+class AskerMixin:
+    def ask_question(self, qtn, expln="", buttons=CANCEL_OK_BUTTONS):
+        dialog = QuestionDialog(parent=self.get_toplevel(), buttons=buttons, qtn=qtn, expln=expln)
+        response = dialog.run()
+        dialog.destroy()
+        return response
+    def ask_ok_cancel(self, qtn, expln=""):
+        return self.ask_question(qtn, expln) == Gtk.ResponseType.OK
+    def ask_yes_no(self, qtn, expln=""):
+        buttons = (Gtk.STOCK_NO, Gtk.ResponseType.NO, Gtk.STOCK_YES, Gtk.ResponseType.YES)
+        return self.ask_question(qtn, expln, buttons) == Gtk.ResponseType.YES
+    def ask_dir_path(self, prompt, suggestion=None, existing=True):
+        dialog = EnterDirPathDialog(title=_("Enter Directory Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=self.get_toplevel())
+        dir_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
+        dialog.destroy()
+        return dir_path
+    def ask_file_path(self, prompt, suggestion=None, existing=True):
+        dialog = EnterFilePathDialog(title=_("Enter File Path"), prompt=prompt, suggestion=suggestion, existing=existing, parent=self.get_toplevel())
+        file_path = dialog.path if dialog.run() == Gtk.ResponseType.OK else None
+        dialog.destroy()
+        return file_path
+    def confirm_list_action(self, alist, qtn):
+        return self.ask_ok_cancel('\n'.join(alist + ['\n', qtn]))
+    def accept_suggestion_or_cancel(self, result, expln="", suggestions=ALL_SUGGESTIONS):
+        buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+        for suggestion in suggestions:
+            if result.suggests(suggestion):
+                buttons += (SUGGESTION_LABEL_MAP[suggestion], suggestion)
+        return self.ask_question(result.message, expln, buttons)
+    # Commonly encountered suggestion combinations
+    def ask_edit_force_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.EDIT, Suggestion.FORCE])
+    def ask_force_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.FORCE])
+    def ask_force_refresh_absorb_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.FORCE, Suggestion.REFRESH, Suggestion.ABSORB])
+    def ask_recover_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.RECOVER])
+    def ask_rename_force_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.RENAME, Suggestion.FORCE])
+    def ask_rename_force_or_skip(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.RENAME, Suggestion.FORCE, Suggestion.SKIP, Suggestion.SKIP_ALL])
+    def ask_rename_overwrite_force_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.RENAME, Suggestion.OVERWRITE, Suggestion.FORCE])
+    def ask_rename_overwrite_or_cancel(self, result, expln=""):
+        return self.accept_suggestion_or_cancel(result, expln, [Suggestion.RENAME, Suggestion.OVERWRITE])
+
+class ReporterMixin:
+    def inform_user(self, msg, expln=None, problem_type=Gtk.MessageType.INFO):
+        dialog = Gtk.MessageDialog(parent=self.get_toplevel(),
+                               flags=Gtk.DialogFlags.MODAL|Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                               type=problem_type, buttons=(Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE),
+                               text=msg)
+        if expln:
+            dialog.format_secondary_text(expln)
+        dialog.run()
+        dialog.destroy()
+    def alert_user(self, msg, expln=None):
+        return self.inform_user(msg=msg, expln=expln, problem_type=Gtk.MessageType.ERROR)
+    def report_failure(self, failure):
+        return self.inform_user(msg=failure.result, problem_type=Gtk.MessageType.ERROR)
+    def report_exception_as_error(self, edata):
+        return self.alert_user(msg=str(edata))
+    def report_any_problems(self, result):
+        if result.is_ok:
+            return
+        elif result.is_warning:
+            problem_type = Gtk.MessageType.WARNING
+        else:
+            problem_type = Gtk.MessageType.ERROR
+        return self.inform_user(msg=result.message, problem_type=problem_type)
+
+class ClientMixin(BusyIndicatorUser, PathSelectorMixin, AskerMixin, ReporterMixin):
+    pass
+
+@singleton
+class MainWindow(Gtk.Window, BusyIndicator, AskerMixin, ReporterMixin):
+    def __init__(self, *args, **kwargs):
+        global main_window
+        kwargs["type"] = Gtk.WindowType.TOPLEVEL
+        Gtk.Window.__init__(self, *args, **kwargs)
+        BusyIndicator.__init__(self)
+        main_window = self

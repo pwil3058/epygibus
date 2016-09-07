@@ -18,6 +18,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 from .. import enotify
+from ..decorators import singleton
 
 from . import actions
 from . import auto_update
@@ -28,7 +29,8 @@ from . import icons
 from . import dialogue
 from . import recollect
 
-class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue.BusyIndicator):
+@singleton
+class MainWindow(dialogue.MainWindow, actions.CAGandUIManager, enotify.Listener):
     __g_type_name__ = "MainWindow"
     UI_DESCR = """
     <ui>
@@ -44,11 +46,9 @@ class MainWindow(Gtk.Window, actions.CAGandUIManager, enotify.Listener, dialogue
     </ui>
     """
     def __init__(self):
-        Gtk.Window.__init__(self, Gtk.WindowType.TOPLEVEL)
+        dialogue.MainWindow.__init__(self, Gtk.WindowType.TOPLEVEL)
         actions.CAGandUIManager.__init__(self)
         enotify.Listener.__init__(self)
-        dialogue.BusyIndicator.__init__(self)
-        dialogue.init(self)
         self.set_default_icon(icons.APP_ICON_PIXBUF)
         self.set_icon(icons.APP_ICON_PIXBUF)
         self.connect("delete_event", Gtk.main_quit)

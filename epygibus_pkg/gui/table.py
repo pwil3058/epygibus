@@ -38,7 +38,7 @@ AC_MODIFIED, AC_NOT_MODIFIED, AC_MODIFIED_MASK = actions.ActionCondns.new_flags_
 
 class EditableEntriesView(tlview.ListView, actions.CBGUserMixin):
     __g_type_name__ = "EditableEntriesView"
-    Model = tlview.ListView.Model
+    MODEL = tlview.ListView.MODEL
     def __init__(self, model=None, size_req=None):
         tlview.ListView.__init__(self, model)
         if size_req:
@@ -144,14 +144,17 @@ class EditableEntriesView(tlview.ListView, actions.CBGUserMixin):
 
 class EditedEntriesTable(Gtk.VBox):
     __g_type_name__ = "EditedEntriesTable"
-    View = EditableEntriesView
+    VIEW = EditableEntriesView
     BUTTONS = ["table_add_row", "table_insert_row", "table_delete_selection", "table_undo_changes", "table_apply_changes"]
-    def __init__(self, size_req=None):
+    def __init__(self, size_req=None, **kwargs):
         Gtk.VBox.__init__(self)
-        self.view = self.View()
+        self.view = self.VIEW(**kwargs)
         self.pack_start(gutils.wrap_in_scrolled_window(self.view), expand=True, fill=True, padding=0)
         self.pack_start(self.view.create_button_box(self.BUTTONS), expand=False, fill=True, padding=0)
         self.show_all()
+    @property
+    def seln(self):
+        return self.view.get_selection()
 
 def simple_text_specification(model, *hdrs_flds_xalign):
     specification = tlview.ViewSpec(
@@ -169,12 +172,11 @@ def simple_text_specification(model, *hdrs_flds_xalign):
 class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicatorUser, auto_update.AutoUpdater, enotify.Listener):
     __g_type_name__ = "TableView"
     PopUp = None
-    SET_EVENTS = 0
+    SET_EVENTS = enotify.E_CHANGE_WD
     REFRESH_EVENTS = 0
     AU_REQ_EVENTS = 0
-    def __init__(self, busy_indicator=None, size_req=None):
+    def __init__(self, size_req=None):
         tlview.ListView.__init__(self)
-        dialogue.BusyIndicatorUser.__init__(self, busy_indicator)
         actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup=self.PopUp)
         auto_update.AutoUpdater.__init__(self)
         enotify.Listener.__init__(self)
@@ -187,8 +189,6 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
             self.register_auto_update_cb(self.auto_update_cb)
         if size_req:
             self.set_size_request(size_req[0], size_req[1])
-        self.connect("button_press_event", self._handle_clear_selection_cb)
-        self.connect("key_press_event", self._handle_clear_selection_cb)
     def populate_action_groups(self):
         self.action_groups[actions.AC_DONT_CARE].add_actions(
             [
@@ -211,23 +211,13 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
         except KeyError:
             args["tbd_reset_only"] = [self]
         return self.AU_REQ_EVENTS
-    def _handle_clear_selection_cb(self, widget, event):
-        if event.type == Gdk.EventType.BUTTON_PRESS:
-            if event.button == 2:
-                self.seln.unselect_all()
-                return True
-        elif event.type == Gdk.EventType.KEY_PRESS:
-            if event.keyval == Gdk.keyval_from_name("Escape"):
-                self.seln.unselect_all()
-                return True
-        return False
     def _get_table_db(self):
         assert False, _("Must be defined in child")
     def _fetch_contents(self, tbd_reset_only=False, **kwargs):
         self._table_db = self._table_db.reset() if (tbd_reset_only and self in tbd_reset_only) else self._get_table_db()
         return self._table_db.iter_rows()
     def _set_contents(self, **kwargs):
-        model = self.Model()
+        model = self.MODEL()
         model.set_contents(self._fetch_contents(**kwargs))
         self.set_model(model)
         self.columns_autosize()
@@ -303,8 +293,8 @@ class TableView(tlview.ListView, actions.CAGandUIManager, dialogue.BusyIndicator
 class MapManagedTableView(TableView, gutils.MappedManager):
     __g_type_name__ = "MapManagedTableView"
     _NEEDS_RESET = 123
-    def __init__(self, busy_indicator=None, size_req=None):
-        TableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
+    def __init__(self, size_req=None):
+        TableView.__init__(self, size_req=size_req)
         gutils.MappedManager.__init__(self)
         self._needs_refresh = True
     def auto_update_cb(self, events_so_far, args):
@@ -338,12 +328,12 @@ class MapManagedTableView(TableView, gutils.MappedManager):
 
 class TableWidget(Gtk.VBox):
     __g_type_name__ = "TableWidget"
-    View = TableView
-    def __init__(self, scroll_bar=True, busy_indicator=None, size_req=None, **kwargs):
+    VIEW = TableView
+    def __init__(self, scroll_bar=True, size_req=None, **kwargs):
         Gtk.VBox.__init__(self)
         self.header = gutils.SplitBar()
         self.pack_start(self.header, expand=False, fill=True, padding=0)
-        self.view = self.View(busy_indicator=busy_indicator, size_req=size_req, **kwargs)
+        self.view = self.VIEW(size_req=size_req, **kwargs)
         if scroll_bar:
             self.pack_start(gutils.wrap_in_scrolled_window(self.view), expand=True, fill=True, padding=0)
         else:

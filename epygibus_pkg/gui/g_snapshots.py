@@ -384,8 +384,8 @@ def dv_specification():
 class DirectoryView(tlview.ListView, actions.CAGandUIManager):
     __g_type_name__ = "DirectoryView"
     PopUp = "/snapshot_directory_view_popup"
-    Model = DVModel
-    specification = dv_specification()
+    MODEL = DVModel
+    SPECIFICATION = dv_specification()
     UI_DESCR = '''
     <ui>
       <popup name="snapshot_directory_view_popup">
@@ -395,14 +395,12 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager):
     </ui>
     '''
     def __init__(self, snapshot_fs, offset_dir_path, size_req=None):
-        self._dv_model = self.Model(snapshot_fs, offset_dir_path)
+        self._dv_model = self.MODEL(snapshot_fs, offset_dir_path)
         self.show_hidden_toggle = Gtk.CheckButton(_("Show Hidden"))
         show_hidden_filter = self._dv_model.filter_new()
         show_hidden_filter.set_visible_func(self._show_hidden_visibility_func, self.show_hidden_toggle)
         self.show_hidden_toggle.connect("toggled", lambda _widget: show_hidden_filter.refilter())
         tlview.ListView.__init__(self, model=show_hidden_filter, size_req=size_req)
-        self.connect("button_press_event", tlview.clear_selection_cb)
-        self.connect("key_press_event", tlview.clear_selection_cb)
         actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup=self.PopUp)
     def _show_hidden_visibility_func(self, model, model_iter, toggle):
         return toggle.get_active() or not model[model_iter][0].is_hidden
@@ -435,7 +433,7 @@ class DirectoryView(tlview.ListView, actions.CAGandUIManager):
 
 class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMixin, dialogue.BusyIndicatorUser):
     __g_type_name__ = "SnapshotManagerWidget"
-    def __init__(self, snapshot_fs, busy_indicator=None, parent=None):
+    def __init__(self, snapshot_fs, parent=None):
         Gtk.VBox.__init__(self)
         self._parent = parent
         self._snapshot_fs = snapshot_fs
@@ -444,7 +442,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         self._dir_view = DirectoryView(self._snapshot_fs, self._current_offset_dir_path)
         actions.CAGandUIManager.__init__(self, self._dir_view.get_selection())
         actions.CBGUserMixin.__init__(self, self._dir_view.get_selection())
-        dialogue.BusyIndicatorUser.__init__(self, busy_indicator=busy_indicator)
+        up_button = self.button_groups.get_button("snapshot_dir_go_up")
         up_button = self.button_groups.get_button("snapshot_dir_go_up")
         self._current_dir_path_label = Gtk.Label()
         self._current_dir_path_label.set_xalign(0.0)
@@ -602,7 +600,7 @@ class SSNameListModel(Gtk.ListStore):
     def _get_ss_list_db(self, reset_only):
         return self._ss_list_db.reset() if reset_only else SSNameTableData(self._archive_name)
 
-def ssnl_specification(model):
+def ssnl_specification(view, model):
     return tlview.ViewSpec(
         properties={
             "enable-grid-lines" : False,
@@ -651,8 +649,8 @@ def ssnl_specification(model):
 class SSNameListView(tlview.View, actions.CAGandUIManager):
     __g_type_name__ = "SSNameListView"
     PopUp = None
-    Model = SSNameListModel
-    specification = ssnl_specification
+    MODEL = SSNameListModel
+    SPECIFICATION = ssnl_specification
     UI_DESCR = '''
     <ui>
       <popup name="snapshot_name_list_popup">
@@ -664,8 +662,6 @@ class SSNameListView(tlview.View, actions.CAGandUIManager):
         self._parent = parent
         model = SSNameListModel(archive_name)
         tlview.View.__init__(self, model=model, size_req=size_req)
-        self.connect("button_press_event", tlview.clear_selection_cb)
-        self.connect("key_press_event", tlview.clear_selection_cb)
         actions.CAGandUIManager.__init__(self, selection=self.get_selection(), popup="/snapshot_name_list_popup")
     @property
     def archive_name(self):

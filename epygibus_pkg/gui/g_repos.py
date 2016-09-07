@@ -85,10 +85,10 @@ class RepoTableData(table.TableData):
         for repo_spec in sorted(self._repo_spec_list):
             yield repo_spec
 
-class RepoListModel(table.MapManagedTableView.Model):
+class RepoListModel(table.MapManagedTableView.MODEL):
     __g_type_name__ = "RepoListModel"
-    Row = config.Repo
-    types = Row(name=GObject.TYPE_STRING, base_dir_path=GObject.TYPE_STRING, compressed=GObject.TYPE_BOOLEAN,)
+    ROW = config.Repo
+    TYPES = ROW(name=GObject.TYPE_STRING, base_dir_path=GObject.TYPE_STRING, compressed=GObject.TYPE_BOOLEAN,)
 
 def _repo_list_spec():
     specification = tlview.ViewSpec(
@@ -109,15 +109,15 @@ def _repo_list_spec():
 
 class RepoListView(table.MapManagedTableView):
     __g_type_name__ = "RepoListView"
-    Model = RepoListModel
+    MODEL = RepoListModel
     PopUp = None
     SET_EVENTS = 0
     REFRESH_EVENTS = NE_REPO_POPN_CHANGE | NE_REPO_SPEC_CHANGE
     AU_REQ_EVENTS = NE_REPO_SPEC_CHANGE
     UI_DESCR = ""
-    specification = _repo_list_spec()
-    def __init__(self, busy_indicator=None, size_req=None):
-        table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
+    SPECIFICATION = _repo_list_spec()
+    def __init__(self, size_req=None):
+        table.MapManagedTableView.__init__(self, size_req=size_req)
         self.set_contents()
     def get_selected_repo(self):
         store, store_iter = self.get_selection().get_selected()
@@ -167,9 +167,9 @@ class RepoStatsTableData(table.TableData):
 
 class RepoStatsListView(table.MapManagedTableView):
     __g_type_name__ = "RepoStatsListView"
-    class Model(tlview.NamedListStore):
-        Row = RSRow
-        types = Row(name=GObject.TYPE_STRING,
+    class MODEL(tlview.NamedListStore):
+        ROW = RSRow
+        TYPES = ROW(name=GObject.TYPE_STRING,
                     nitems=GObject.TYPE_STRING,
                     content_bytes=GObject.TYPE_STRING,
                     stored_bytes=GObject.TYPE_STRING,
@@ -194,7 +194,7 @@ class RepoStatsListView(table.MapManagedTableView):
       </popup>
     </ui>
     """
-    specification = table.simple_text_specification(Model,
+    SPECIFICATION = table.simple_text_specification(MODEL,
         (_("Name"), "name", 0.0),
         (_("#Items"), "nitems", 1.0),
         (_("Content"), "content_bytes", 1.0),
@@ -207,8 +207,8 @@ class RepoStatsListView(table.MapManagedTableView):
         (_("Content"), "unreferenced_content_bytes", 1.0),
         (_("Stored"), "unreferenced_stored_bytes", 1.0),
     )
-    def __init__(self, busy_indicator=None, size_req=None):
-        table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
+    def __init__(self, size_req=None):
+        table.MapManagedTableView.__init__(self, size_req=size_req)
         self.set_contents()
     def populate_action_groups(self):
         table.MapManagedTableView.populate_action_groups(self)

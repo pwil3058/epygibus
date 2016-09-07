@@ -29,6 +29,8 @@ class MaskedCondns(collections.namedtuple('MaskedCondns', ['condns', 'mask'])):
 
     def __or__(self, other):
         return MaskedCondns(self.condns | other.condns, self.mask | other.mask)
+    def __str__(self):
+        return "MaskedCondns(condns={0:x}, mask={1:x})".format(self.condns, self.mask)
 
 class ActionCondns:
     from .. import utils
@@ -181,6 +183,7 @@ class ConditionalButtonGroups:
 
 CLASS_INDEP_BGS = ConditionalButtonGroups()
 
+# TODO: change method names to avoid accidental conflicts with other mixins
 class CBGUserMixin:
     def __init__(self, selection=None):
         self.button_groups = ConditionalButtonGroups(selection)
@@ -272,7 +275,7 @@ class ConditionalActionGroups:
         """
         return self.get_action(action_name).connect('activate', callback, *user_data)
     def __str__(self):
-        string = 'ConditionalActionGroups({0})\n'.format(self.name)
+        string = 'ConditionalActionGroups({0}): condns={1:x}\n'.format(self.name, self.current_condns)
         for condns, group in self.groups.items():
             name = group.get_name()
             member_names = '['
@@ -281,6 +284,21 @@ class ConditionalActionGroups:
             member_names += ']'
             string += '\tGroup({0:x},{1}): {2}\n'.format(condns, name, member_names)
         return string
+    def create_action_button(self, action_name, use_underline=True):
+        from . import gutils
+        action = self.get_action(action_name)
+        return gutils.creat_button_from_action(action, use_underline=use_underline)
+    def create_action_button_box(self, action_name_list, use_underline=True,
+                                 horizontal=True,
+                                 expand=True, fill=True, padding=0):
+        if horizontal:
+            box = Gtk.HBox()
+        else:
+            box = Gtk.VBox()
+        for action_name in action_name_list:
+            button = self.create_action_button(action_name, use_underline)
+            box.pack_start(button, expand, fill, padding)
+        return box
 
 CLASS_INDEP_AGS = ConditionalActionGroups('class_indep')
 
@@ -296,6 +314,7 @@ class UIManager(Gtk.UIManager):
         if isinstance(widget, Gtk.MenuItem) and tooltip:
             widget.set_tooltip_text(tooltip)
 
+# TODO: change method names to avoid accidental conflicts with other mixins
 class CAGandUIManager:
     '''This is a "mix in" class and needs to be merged with a Gtk.Widget() descendant'''
     UI_DESCR = '''<ui></ui>'''

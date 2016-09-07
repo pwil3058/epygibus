@@ -88,10 +88,10 @@ class ArchiveTableData(table.TableData):
         for archive_spec in sorted(self._archive_spec_list):
             yield archive_spec
 
-class ArchiveListModel(table.MapManagedTableView.Model):
+class ArchiveListModel(table.MapManagedTableView.MODEL):
     __g_type_name__ = "ArchiveListModel"
-    Row = config.Archive
-    types = Row(
+    ROW = config.Archive
+    TYPES = ROW(
         name=GObject.TYPE_STRING,
         repo_name=GObject.TYPE_STRING,
         snapshot_dir_path=GObject.TYPE_STRING,
@@ -126,7 +126,7 @@ def _archive_list_spec():
 
 class ArchiveListView(table.MapManagedTableView):
     __g_type_name__ = "ArchiveListView"
-    Model = ArchiveListModel
+    MODEL = ArchiveListModel
     PopUp = "/archive_list_view_popup"
     SET_EVENTS = 0
     REFRESH_EVENTS = NE_ARCHIVE_POPN_CHANGE | NE_ARCHIVE_SPEC_CHANGE
@@ -140,9 +140,9 @@ class ArchiveListView(table.MapManagedTableView):
       </popup>
     </ui>
     """
-    specification = _archive_list_spec()
-    def __init__(self, busy_indicator=None, size_req=None):
-        table.MapManagedTableView.__init__(self, busy_indicator=busy_indicator, size_req=size_req)
+    SPECIFICATION = _archive_list_spec()
+    def __init__(self, size_req=None):
+        table.MapManagedTableView.__init__(self, size_req=size_req)
         self.set_contents()
     def get_selected_archive(self):
         store, store_iter = self.get_selection().get_selected()
@@ -173,13 +173,13 @@ class ArchiveListWidget(table.TableWidget):
 
 class IncludesModel(tlview.NamedListStore):
     __g_type_name__ = "IncludesModel"
-    Row = collections.namedtuple("Row", ["included_path"])
-    types = Row(included_path=GObject.TYPE_STRING)
+    ROW = collections.namedtuple("ROW", ["included_path"])
+    TYPES = ROW(included_path=GObject.TYPE_STRING)
 
 class IncludesView(tlview.View, actions.CBGUserMixin):
     __g_type_name__ = "IncludesView"
-    Model = IncludesModel
-    specification = tlview.ViewSpec(
+    MODEL = IncludesModel
+    SPECIFICATION = tlview.ViewSpec(
         properties={
             "enable-grid-lines" : True,
             "reorderable" : True,
@@ -199,7 +199,7 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
                             properties={"editable" : False},
                         ),
                         cell_data_function_spec=None,
-                        attributes={"text" : Model.col_index("included_path")}
+                        attributes={"text" : MODEL.col_index("included_path")}
                     ),
                 ],
             ),
@@ -232,7 +232,7 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
                 ),
                 ("table_insert_dir_path", Gtk.Button.new_with_label(_("Insert Directory")),
                  _("Insert a new directory path before the selected row(s)"),
-                 ["clicked", (self._insert_dir_path_bcb)]
+                 [("clicked", self._insert_dir_path_bcb)]
                 ),
             ])
     def get_included_paths(self):
@@ -240,19 +240,19 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
     def _add_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
         if file_path:
-            self.model.append(self.Model.Row(file_path))
+            self.model.append(self.MODEL.ROW(file_path))
     def _add_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
         if dir_path:
-            self.model.append(self.Model.Row(dir_path))
+            self.model.append(self.MODEL.ROW(dir_path))
     def _insert_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
         if file_path:
-            tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
+            tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(file_path))
     def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
-            tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
+            tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(dir_path))
     def _delete_selection_bcb(self, _button=None):
         tlview.delete_selection(self.get_selection())
 
@@ -267,8 +267,8 @@ class IncludesTable(actions.ClientAndButtonsWidget):
 # TODO: combine IncludesEditView and IncludesView into single class
 class IncludesEditView(table.EditableEntriesView):
     __g_type_name__ = "IncludesEditView"
-    Model = IncludesModel
-    specification = tlview.ViewSpec(
+    MODEL = IncludesModel
+    SPECIFICATION = tlview.ViewSpec(
         properties={
             "enable-grid-lines" : True,
             "reorderable" : True,
@@ -288,7 +288,7 @@ class IncludesEditView(table.EditableEntriesView):
                             properties={"editable" : False},
                         ),
                         cell_data_function_spec=None,
-                        attributes={"text" : Model.col_index("included_path")}
+                        attributes={"text" : MODEL.col_index("included_path")}
                     ),
                 ],
             ),
@@ -332,28 +332,28 @@ class IncludesEditView(table.EditableEntriesView):
     def _add_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
         if file_path:
-            self.model.append(self.Model.Row(file_path))
+            self.model.append(self.MODEL.ROW(file_path))
             self._set_modified(True)
     def _add_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
         if dir_path:
-            self.model.append(self.Model.Row(dir_path))
+            self.model.append(self.MODEL.ROW(dir_path))
             self._set_modified(True)
     def _insert_file_path_bcb(self, _button=None):
         file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
         if file_path:
-            tlview.insert_before_selection(self.get_selection(), self.Model.Row(file_path))
+            tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(file_path))
             self._set_modified(True)
     def _insert_dir_path_bcb(self, _button=None):
         dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
-            tlview.insert_before_selection(self.get_selection(), self.Model.Row(dir_path))
+            tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(dir_path))
             self._set_modified(True)
     def _delete_selection_bcb(self, _button=None):
         tlview.delete_selection(self.get_selection())
         self._set_modified(True)
     def _fetch_contents(self):
-        return [self.Model.Row(line) for line in config.read_includes_file_lines(self._archive_name)]
+        return [self.MODEL.ROW(line) for line in config.read_includes_file_lines(self._archive_name)]
     def apply_changes(self):
         config.write_includes_file_lines(self._archive_name, self.get_included_paths())
         self._set_modified(False)

@@ -43,3 +43,32 @@ if not os.path.exists(LOCALE_DIR) or not os.path.isdir(LOCALE_DIR):
 
 # Lets tell those details to gettext
 gettext.install(APP_NAME, localedir=LOCALE_DIR)
+
+class Result:
+    OK = 0
+    _NFLAGS = 2
+    WARNING, \
+    ERROR = [2 ** flag_num for flag_num in range(_NFLAGS)]
+    MASK = OK | WARNING | ERROR
+
+class Suggestion:
+    NFLAGS = 11
+    FORCE, \
+    REFRESH, \
+    RECOVER, \
+    RENAME, \
+    DISCARD, \
+    ABSORB, \
+    EDIT, \
+    MERGE, \
+    OVERWRITE, \
+    SKIP, \
+    SKIP_ALL = [2 ** flag_num for flag_num in range(Result._NFLAGS, NFLAGS + Result._NFLAGS)]
+    ALL = 2 ** (NFLAGS + Result._NFLAGS) - 1 - Result.MASK
+    # Some commonly used combinations
+    OVERWRITE_OR_RENAME = OVERWRITE | RENAME
+    FORCE_OR_REFRESH = FORCE | REFRESH
+    FORCE_OR_ABSORB = FORCE | ABSORB
+    FORCE_ABSORB_OR_REFRESH = FORCE | ABSORB | REFRESH
+    MERGE_OR_DISCARD = MERGE | DISCARD
+
