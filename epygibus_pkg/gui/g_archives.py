@@ -150,7 +150,6 @@ class ArchiveListView(table.MapManagedTableView):
     def _get_table_db(self):
         return ArchiveTableData()
     def populate_action_groups(self):
-        table.MapManagedTableView.populate_action_groups(self)
         self.action_groups[actions.AC_SELN_UNIQUE].add_actions(
             [
                 ("edit_selected_snapshot_inclusions", icons.STOCK_EDIT_INCLUDES, _("Edit Inclusions"), None,

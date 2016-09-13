@@ -211,7 +211,6 @@ class RepoStatsListView(table.MapManagedTableView):
         table.MapManagedTableView.__init__(self, size_req=size_req)
         self.set_contents()
     def populate_action_groups(self):
-        table.MapManagedTableView.populate_action_groups(self)
         self.action_groups[actions.AC_SELN_UNIQUE].add_actions(
             [
                 ("show_selected_repo_spec", icons.STOCK_REPO_SHOW, _("Show"), None,
