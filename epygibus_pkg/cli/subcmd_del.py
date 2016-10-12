@@ -27,9 +27,18 @@ PARSER = cmd.SUB_CMD_PARSER.add_parser(
     description=_("Delete the nominated archive's oldest (or specified) snapshot."),
 )
 
-cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the archive whose snapshot is to be deleted.")))
+cmd.add_cmd_argument(PARSER, cmd.ARCHIVE_NAME_ARG(_("the name of the arch(ive whose snapshot is to be deleted.")))
 
-cmd.add_cmd_argument(PARSER, cmd.BACK_ISSUE_ARG(-1))
+XPARSER = PARSER.add_mutually_exclusive_group(required=False)
+cmd.add_cmd_argument(XPARSER, cmd.BACK_ISSUE_ARG(-1))
+
+XPARSER.add_argument(
+    "--all_but_newest",
+    help=_("delete all but the N newest snapshots."),
+    dest="newest_count",
+    metavar=_("N"),
+    type=int,
+)
 
 PARSER.add_argument(
     "--remove_last_ok",
@@ -38,11 +47,18 @@ PARSER.add_argument(
 )
 
 def run_cmd(args):
-    try:
-        snapshot.delete_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back], clear_fell= args.remove_last_ok)
-    except excpns.Error as edata:
-        sys.stderr.write(str(edata) + "\n")
-        sys.exit(-1)
+    if args.newest_count is not None:
+        try:
+            snapshot.delete_all_snapshots_but_newest(args.archive_name, newest_count=args.newest_count, clear_fell= args.remove_last_ok)
+        except excpns.Error as edata:
+            sys.stderr.write(str(edata) + "\n")
+            sys.exit(-1)
+    else:
+        try:
+            snapshot.delete_snapshot(args.archive_name, seln_fn=lambda l: l[-1-args.back], clear_fell= args.remove_last_ok)
+        except excpns.Error as edata:
+            sys.stderr.write(str(edata) + "\n")
+            sys.exit(-1)
     return 0
 
 PARSER.set_defaults(run_cmd=run_cmd)

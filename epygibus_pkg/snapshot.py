@@ -946,6 +946,19 @@ def delete_snapshot(archive_name, seln_fn=lambda l: l[-1], clear_fell=False):
         raise excpns.LastSnapshot(archive_name, ss_root(snapshot_file_name))
     delete_named_snapshot(archive_name, ss_root(snapshot_file_name))
 
+def delete_all_snapshots_but_newest(archive_name, newest_count, clear_fell=False):
+    from . import config
+    archive = config.read_archive_spec(archive_name)
+    if not clear_fell and newest_count == 0:
+        raise excpns.LastSnapshot(archive_name, ss_root(snapshot_file_name))
+    snapshot_file_names = _get_snapshot_file_list(archive.snapshot_dir_path)
+    if not snapshot_file_names:
+        raise excpns.EmptyArchive(archive_name)
+    if len(snapshot_file_names) <= newest_count:
+        return
+    for snapshot_file_name in snapshot_file_names[:-newest_count]:
+        delete_named_snapshot(archive_name, ss_root(snapshot_file_name))
+
 def iter_snapshot_list(archive_name, reverse=False):
     from . import config
     archive = config.read_archive_spec(archive_name)
