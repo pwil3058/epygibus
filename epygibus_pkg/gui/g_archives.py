@@ -25,7 +25,7 @@ from .. import config
 from .. import utils
 from .. import excpns
 from .. import snapshot
-from .. import enotify
+from ..bab import enotify
 
 from . import g_repos
 from . import actions

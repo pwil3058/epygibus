@@ -1,0 +1,3 @@
+[submodule "epygibus_pkg/bab"]
+	path = epygibus_pkg/bab
+	url = git@github.com:pwil3058/pysm_bab.git

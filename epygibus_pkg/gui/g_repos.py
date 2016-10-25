@@ -24,7 +24,7 @@ from .. import config
 from .. import repo
 from .. import utils
 from .. import excpns
-from .. import enotify
+from ..bab import enotify
 
 from . import actions
 from . import auto_update

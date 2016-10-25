@@ -22,8 +22,8 @@ from contextlib import contextmanager
 from gi.repository import Gtk
 from gi.repository import Gdk
 
-from .. import enotify
-from ..decorators import singleton
+from ..bab import enotify
+from ..bab.decorators import singleton
 
 from . import yield_to_pending_events
 
@@ -336,7 +336,7 @@ class EnterFilePathDialog(_EnterPathDialog):
 CANCEL_OK_BUTTONS = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
 NO_YES_BUTTONS = (Gtk.STOCK_NO, Gtk.ResponseType.NO, Gtk.STOCK_YES, Gtk.ResponseType.YES)
 
-from .. import Suggestion
+from ..bab import Suggestion
 Response = Suggestion
 
 SUGGESTION_LABEL_MAP = {
@@ -349,6 +349,7 @@ SUGGESTION_LABEL_MAP = {
     Suggestion.EDIT : _("Edit"),
     Suggestion.MERGE : _("Merge"),
     Suggestion.OVERWRITE : _("Overwrite"),
+    Suggestion.CACHE : _("Cache"),
     Suggestion.SKIP : _("Skip"),
     Suggestion.SKIP_ALL : _("Skip All"),
 }

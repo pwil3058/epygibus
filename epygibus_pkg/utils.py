@@ -63,15 +63,6 @@ def get_link_tgt_abs_path(link_file_path):
 def is_broken_link(link_tgt_path, link_file_path):
     return not os.path.exists(calc_link_tgt_abs_path(link_tgt_path, link_file_path))
 
-def create_flag_generator():
-    """
-    Create a new flag generator
-    """
-    next_flag_num = 0
-    while True:
-        yield 2 ** next_flag_num
-        next_flag_num += 1
-
 class DummyProgressThingy:
     def set_expected_total(self, total):
         pass
