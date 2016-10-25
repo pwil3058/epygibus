@@ -27,15 +27,16 @@ from .. import excpns
 from .. import snapshot
 from ..bab import enotify
 
-from . import g_repos
-from . import actions
-from . import auto_update
-from . import table
+from ..gtx import actions
+from ..gtx import auto_update
+from ..gtx import table
 from . import icons
-from . import tlview
-from . import dialogue
-from . import gutils
-from . import text_edit
+from ..gtx import tlview
+from ..gtx import dialogue
+from ..gtx import gutils
+from ..gtx import text_edit
+
+from . import g_repos
 
 AC_ARCHIVES_AVAILABLE = actions.ActionCondns.new_flag()
 NE_NEW_ARCHIVE, NE_DELETE_ARCHIVE, NE_ARCHIVE_POPN_CHANGE = enotify.new_event_flags_and_mask(2)
@@ -604,7 +605,8 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
     RSECTION = "snapshots"
     RONAME = "last_archive_viewed"
     def __init__(self):
-        from . import recollect
+        from ..gtx import recollect
+        recollect.define(self.RSECTION, self.RONAME, recollect.Defn(str, ""))
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
         self.add_notification_cb(NE_ARCHIVE_POPN_CHANGE, self._enotify_cb)
@@ -623,7 +625,7 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
                 self.set_active(0)
         self.connect("changed", self._save_last_archive_cb)
     def _save_last_archive_cb(self, combo_box):
-        from . import recollect
+        from .gtx import recollect
         archive_name = combo_box.get_active_text()
         if archive_name:
             recollect.set(self.RSECTION, self.RONAME, archive_name)

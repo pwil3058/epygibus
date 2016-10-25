@@ -26,13 +26,13 @@ from .. import utils
 from .. import excpns
 from ..bab import enotify
 
-from . import actions
-from . import auto_update
-from . import table
+from ..gtx import actions
+from ..gtx import auto_update
+from ..gtx import table
 from . import icons
-from . import tlview
-from . import dialogue
-from . import gutils
+from ..gtx import tlview
+from ..gtx import dialogue
+from ..gtx import gutils
 
 AC_REPOS_AVAILABLE = actions.ActionCondns.new_flag()
 NE_NEW_REPO, NE_DELETE_REPO, NE_REPO_POPN_CHANGE = enotify.new_event_flags_and_mask(2)
@@ -206,6 +206,7 @@ class RepoStatsListView(table.MapManagedTableView):
         (_("#Unreferenced"), "unreferenced_items", 1.0),
         (_("Content"), "unreferenced_content_bytes", 1.0),
         (_("Stored"), "unreferenced_stored_bytes", 1.0),
+        selection_mode=Gtk.SelectionMode.SINGLE
     )
     def __init__(self, size_req=None):
         table.MapManagedTableView.__init__(self, size_req=size_req)

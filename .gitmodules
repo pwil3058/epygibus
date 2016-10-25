@@ -1,3 +1,6 @@
 [submodule "epygibus_pkg/bab"]
 	path = epygibus_pkg/bab
 	url = git@github.com:pwil3058/pysm_bab.git
+[submodule "epygibus_pkg/gtx"]
+	path = epygibus_pkg/gtx
+	url = git@github.com:pwil3058/pysm_gtx.git

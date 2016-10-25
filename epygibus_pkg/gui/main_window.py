@@ -20,14 +20,17 @@ from gi.repository import Gtk
 from ..bab import enotify
 from ..bab.decorators import singleton
 
-from . import actions
-from . import auto_update
+from ..gtx import actions
+from ..gtx import auto_update
+from . import icons
+from ..gtx import dialogue
+from ..gtx import recollect
+
 from . import g_repos
 from . import g_archives
 from . import g_snapshots
-from . import icons
-from . import dialogue
-from . import recollect
+
+recollect.define("main_window", "last_geometry", recollect.Defn(str, ""))
 
 @singleton
 class MainWindow(dialogue.MainWindow, actions.CAGandUIManager, enotify.Listener):

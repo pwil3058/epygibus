@@ -25,15 +25,15 @@ from .. import snapshot
 from .. import excpns
 from .. import utils
 
-from . import actions
-from . import dialogue
-from . import tlview
+from ..gtx import actions
+from ..gtx import dialogue
+from ..gtx import tlview
 from . import icons
-from . import gutils
-from . import table
-from . import auto_update
+from ..gtx import gutils
+from ..gtx import table
+from ..gtx import auto_update
+
 from . import g_archives
-from . import recollect
 
 AC_ABOVE_BASE_OFFSET = actions.ActionCondns.new_flag()
 
