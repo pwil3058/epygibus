@@ -13,13 +13,28 @@
 ### along with this program; if not, write to the Free Software
 ### Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
+"""Python package providing support for epygibus program"""
+
+__all__ = []
+__author__ = "Peter Williams <pwil3058@gmail.com>"
+__version__ = "0.0"
+
 import os
 import sys
 import gettext
 
+HOME = os.path.expanduser("~")
 APP_NAME = "epygibus"
+CONFIG_DIR_PATH = os.path.join(HOME, ".config", APP_NAME + os.extsep + "d")
+LOCAl_CONFIG_DIR_NAME = None # We don't have the concept of local dirs
+VERSION = __version__
 
-VERSION = "0.0.0"
+if not os.path.exists(CONFIG_DIR_PATH):
+    os.makedirs(CONFIG_DIR_PATH, 0o775)
+
+ISSUES_URL = "<https://github.com/pwil3058/epygibus/issues>"
+ISSUES_EMAIL = __author__
+ISSUES_VERSION = __version__
 
 # find the locale directory
 # first look in the source directory (so that we can run uninstalled)

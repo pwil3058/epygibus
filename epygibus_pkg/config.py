@@ -17,18 +17,18 @@ import os
 import sys
 import collections
 
-from . import APP_NAME
+from . import APP_NAME, CONFIG_DIR_PATH
 from . import excpns
 
 APP_NAME_D = APP_NAME + ".d"
 
-CONFIG_DIR_PATH = os.path.expanduser(os.path.join("~", ".config", APP_NAME_D))
 _REPOS_DIR_PATH = os.path.join(CONFIG_DIR_PATH, "repos")
 _ARCHIVES_DIR_PATH = os.path.join(CONFIG_DIR_PATH, "archives")
 
-if not os.path.exists(CONFIG_DIR_PATH):
-    os.makedirs(CONFIG_DIR_PATH)
+if not os.path.exists(_REPOS_DIR_PATH):
     os.mkdir(_REPOS_DIR_PATH)
+
+if not os.path.exists(_ARCHIVES_DIR_PATH):
     os.mkdir(_ARCHIVES_DIR_PATH)
 
 _repo_file_path = lambda repo_name: os.path.join(_REPOS_DIR_PATH, repo_name)
