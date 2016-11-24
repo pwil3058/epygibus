@@ -547,10 +547,10 @@ class SSNameTableData(table.TableData):
         h.update(str(ss_name_list).encode())
         return ss_name_list
     def _finalize(self, pdt):
-        self._ss_name_list = pdt
-    def iter_rows(self):
-        for ss_name in self._ss_name_list:
-            yield ss_name
+        self._rows = pdt
+    #def iter_rows(self):
+        #for ss_name in self._rows:
+            #yield ss_name
 
 class SSNameListModel(Gtk.ListStore):
     __g_type_name__ = "SSNameModel"

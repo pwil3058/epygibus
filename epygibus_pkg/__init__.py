@@ -26,6 +26,7 @@ import gettext
 HOME = os.path.expanduser("~")
 APP_NAME = "epygibus"
 CONFIG_DIR_PATH = os.path.join(HOME, ".config", APP_NAME + os.extsep + "d")
+PGND_CONFIG_DIR_PATH = None
 LOCAl_CONFIG_DIR_NAME = None # We don't have the concept of local dirs
 VERSION = __version__
 

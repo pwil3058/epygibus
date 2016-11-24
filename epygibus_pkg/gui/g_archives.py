@@ -34,6 +34,7 @@ from . import icons
 from ..gtx import tlview
 from ..gtx import dialogue
 from ..gtx import gutils
+from ..gtx import recollect
 from ..gtx import text_edit
 
 from . import g_repos
@@ -84,10 +85,10 @@ class ArchiveTableData(table.TableData):
         h.update(str(archive_spec_list).encode())
         return archive_spec_list
     def _finalize(self, pdt):
-        self._archive_spec_list = pdt
-    def iter_rows(self):
-        for archive_spec in sorted(self._archive_spec_list):
-            yield archive_spec
+        self._rows = pdt
+    #def iter_rows(self):
+        #for archive_spec in sorted(self._rows):
+            #yield archive_spec
 
 class ArchiveListModel(table.MapManagedTableView.MODEL):
     __g_type_name__ = "ArchiveListModel"
@@ -604,9 +605,8 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
     __g_type_name__ = "ArchiveComboBox"
     RSECTION = "snapshots"
     RONAME = "last_archive_viewed"
+    recollect.define(RSECTION, RONAME, recollect.Defn(str, ""))
     def __init__(self):
-        from ..gtx import recollect
-        recollect.define(self.RSECTION, self.RONAME, recollect.Defn(str, ""))
         gutils.UpdatableComboBoxText.__init__(self)
         enotify.Listener.__init__(self)
         self.add_notification_cb(NE_ARCHIVE_POPN_CHANGE, self._enotify_cb)
@@ -625,7 +625,6 @@ class ArchiveComboBox(gutils.UpdatableComboBoxText, enotify.Listener):
                 self.set_active(0)
         self.connect("changed", self._save_last_archive_cb)
     def _save_last_archive_cb(self, combo_box):
-        from .gtx import recollect
         archive_name = combo_box.get_active_text()
         if archive_name:
             recollect.set(self.RSECTION, self.RONAME, archive_name)

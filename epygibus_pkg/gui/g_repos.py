@@ -80,10 +80,10 @@ class RepoTableData(table.TableData):
         h.update(str(repo_spec_list).encode())
         return repo_spec_list
     def _finalize(self, pdt):
-        self._repo_spec_list = pdt
-    def iter_rows(self):
-        for repo_spec in sorted(self._repo_spec_list):
-            yield repo_spec
+        self._rows = pdt
+    #def iter_rows(self):
+        #for repo_spec in sorted(self._repo_spec_list):
+            #yield repo_spec
 
 class RepoListModel(table.MapManagedTableView.MODEL):
     __g_type_name__ = "RepoListModel"
@@ -150,9 +150,8 @@ class RepoStatsTableData(table.TableData):
         h.update(str(repo_stats_list).encode())
         return repo_stats_list
     def _finalize(self, pdt):
-        self._repo_stats_list = pdt
-    def iter_rows(self):
-        for repo_name, repo_stats in sorted(self._repo_stats_list):
+
+        def mk_row(repo_name, repo_stats):
             nitems = NUM_FT.format(repo_stats.total_items)
             content_bytes = utils.format_bytes(repo_stats.total_content_bytes)
             stored_bytes = utils.format_bytes(repo_stats.total_stored_bytes)
@@ -163,7 +162,8 @@ class RepoStatsTableData(table.TableData):
             unreferenced_items = NUM_FT.format(repo_stats.unreferenced_items)
             unreferenced_content_bytes = utils.format_bytes(repo_stats.unreferenced_content_bytes)
             unreferenced_stored_bytes = utils.format_bytes(repo_stats.unreferenced_stored_bytes)
-            yield RSRow(repo_name, nitems, content_bytes, stored_bytes, references, referenced_items, referenced_content_bytes, referenced_stored_bytes, unreferenced_items, unreferenced_content_bytes, unreferenced_stored_bytes)
+            return RSRow(repo_name, nitems, content_bytes, stored_bytes, references, referenced_items, referenced_content_bytes, referenced_stored_bytes, unreferenced_items, unreferenced_content_bytes, unreferenced_stored_bytes)
+        self._rows = (mk_row(repo_name, repo_stats) for repo_name, repo_stats in sorted(pdt))
 
 class RepoStatsListView(table.MapManagedTableView):
     __g_type_name__ = "RepoStatsListView"
