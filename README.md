@@ -93,21 +93,21 @@ and the number of files is due to the high degree of redundancy in my files due 
 
 ## User Interface
 
-At this point in time, the only available user interface is via the
-command line (but a GUI is in the forward planning) and it provides
-sub commands to:
+The primary user interface is via the command line and it provides sub commands to:
 
-1. create repositories
+1. create repositories,
 2. create snapshot archives (which are essentially a specification file
-for a snapshot series)
-3. create a snapshot for an archive
+for a snapshot series),
+3. create a snapshot for an archive,
 4. extract files or directories from the latest (or a specified)
 snapshot within a specified archive and copy them to the current
-working directory (or a specified directory)
+working directory (or a specified directory),
 4. restore specified files or directories (or the whole snapshot) from
-the latest (or a specified) snapshot within a specified archive.
-5. delete the oldest (or a specified) snapshot form a specified archive
-6. prune unreferenced content from a specified content repository.
+the latest (or a specified) snapshot within a specified archive,
+5. delete the oldest (or a specified) snapshot form a specified archive,
+6. prune unreferenced content from a specified content repository,
+7. run a GUI which provides access to the above functionality and some additional
+mechanisms for handling issues such as the configuration files being lost.
 
 There are also sub command for looking at various statistics.
 
@@ -310,3 +310,15 @@ Because of the danger of accidental overwriting of existing files or
 directories `extract` will fail if it detects such a case but the
 `--overwrite` option can be used to override this behaviour and overwrite
 existing files and directories where necessary.
+
+## Exigencies
+
+Because a user's __epygibus__ configuration files are kept in a subdirectory of their home directory it is possible that
+they will also be lost during any incident that damages a file system triggering a need to restore it from the back ups.
+Therefore, sufficient information about the location of its content repository is coded into each snapshot file to enable
+that snapshot to be restored without the need for the configuration files.  The GUI provides a mechanism
+__Snapshot Ecigencies->Open Snapshot File__ which opens a popup dialogue to specify the path to a snapshot file and then
+opens a dialogue allowing the extraction/restorstion of files in the snapshot represented by that file.
+
+An additional benefit of this redundancy is that changing the content repository for a snapshot archive will not invalidate
+existing snapshot files as they each know which content repository contains their content.
