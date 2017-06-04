@@ -49,7 +49,8 @@ class MainWindow(dialogue.MainWindow, actions.CAGandUIManager, enotify.Listener)
     </ui>
     """
     def __init__(self):
-        dialogue.MainWindow.__init__(self, Gtk.WindowType.TOPLEVEL)
+        dialogue.MainWindow.__init__(self) #, Gtk.WindowType.TOPLEVEL)
+        self.parse_geometry(recollect.get("main_window", "last_geometry"))
         actions.CAGandUIManager.__init__(self)
         enotify.Listener.__init__(self)
         self.set_default_icon(icons.APP_ICON_PIXBUF)
@@ -68,7 +69,6 @@ class MainWindow(dialogue.MainWindow, actions.CAGandUIManager, enotify.Listener)
         vbox.pack_start(stack, expand=True, fill=True, padding=0)
         self.add(vbox)
         self.show_all()
-        self.parse_geometry(recollect.get("main_window", "last_geometry"))
         self.connect("configure-event", self._configure_event_cb)
     def populate_action_groups(self):
         pass

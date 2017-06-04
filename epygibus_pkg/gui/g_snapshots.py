@@ -450,7 +450,7 @@ class SnapshotManagerWidget(Gtk.VBox, actions.CAGandUIManager, actions.CBGUserMi
         hbox.pack_start(up_button, expand=False, fill=False, padding=0)
         hbox.pack_start(self._current_dir_path_label, expand=True, fill=True, padding=0)
         self.pack_start(hbox, expand=False, fill=True, padding=0)
-        self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view), expand=True, fill=True, padding=0)
+        self.pack_start(gutils.wrap_in_scrolled_window(self._dir_view, with_frame=True), expand=True, fill=True, padding=0)
         bbox = self.button_groups.create_button_box(["snapshot_dir_show_hidden", "snapshot_extract_current_dir", "snapshot_restore_current_dir"])
         self.pack_start(bbox, expand=False, fill=True, padding=0)
         self._dir_view.connect("row_activated", self._double_click_cb)
@@ -579,17 +579,21 @@ class SSNameListModel(Gtk.ListStore):
         # in descending order of time
         self._ss_list_db = self._get_ss_list_db(reset_only=reset_only)
         model_iter = self.get_iter_first()
-        for row in self._ss_list_db.iter_rows():
-            model_row_name = self[model_iter][0]
-            if model_row_name == row[0]:
-                self.set(model_iter, [1], row[1:])
-                model_iter = self.iter_next(model_iter)
-            elif model_row_name < row[0]:
-                self.insert_before(model_iter, row)
-            else:
+        if model_iter:
+            for row in self._ss_list_db.iter_rows():
+                model_row_name = self[model_iter][0]
+                if model_row_name == row[0]:
+                    self.set(model_iter, [1], row[1:])
+                    model_iter = self.iter_next(model_iter)
+                elif model_row_name < row[0]:
+                    self.insert_before(model_iter, row)
+                else:
+                    self.remove(model_iter)
+            while model_iter and self.iter_is_valid(model_iter):
                 self.remove(model_iter)
-        while model_iter and self.iter_is_valid(model_iter):
-            self.remove(model_iter)
+        else:
+            for row in self._ss_list_db.iter_rows():
+                self.append(row)
     def set_archive_name(self, archive_name=None):
         self._archive_name = archive_name
         self._set_contents()
@@ -837,7 +841,7 @@ class TakeSnapshotDialog(Gtk.Dialog):
 
 # class independent actions
 def exig_open_snapshot_file_acb(_action=None):
-    snapshot_file_path = dialogue.ask_file_path(_("Snapshot File Path:"))
+    snapshot_file_path = dialogue.main_window.ask_file_path(_("Snapshot File Path:"))
     if snapshot_file_path:
         try:
             snapshot_fs = snapshot.get_snapshot_fs_fm_file(snapshot_file_path)

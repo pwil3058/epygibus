@@ -177,7 +177,7 @@ class IncludesModel(tlview.NamedListStore):
     ROW = collections.namedtuple("ROW", ["included_path"])
     TYPES = ROW(included_path=GObject.TYPE_STRING)
 
-class IncludesView(tlview.View, actions.CBGUserMixin):
+class IncludesView(tlview.View, actions.CBGUserMixin, dialogue.PathSelectorMixin):
     __g_type_name__ = "IncludesView"
     MODEL = IncludesModel
     SPECIFICATION = tlview.ViewSpec(
@@ -239,19 +239,19 @@ class IncludesView(tlview.View, actions.CBGUserMixin):
     def get_included_paths(self):
         return [row.included_path for row in self.model.named()]
     def _add_file_path_bcb(self, _button=None):
-        file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
+        file_path = self.select_file(_("Select File to Add"), absolute=True)
         if file_path:
             self.model.append(self.MODEL.ROW(file_path))
     def _add_dir_path_bcb(self, _button=None):
-        dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
+        dir_path = self.select_directory(_("Select Directory to Add"), absolute=True)
         if dir_path:
             self.model.append(self.MODEL.ROW(dir_path))
     def _insert_file_path_bcb(self, _button=None):
-        file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
+        file_path = self.select_file(_("Select File to Insert"), absolute=True)
         if file_path:
             tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(file_path))
     def _insert_dir_path_bcb(self, _button=None):
-        dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
+        dir_path = self.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(dir_path))
     def _delete_selection_bcb(self, _button=None):
@@ -266,7 +266,7 @@ class IncludesTable(actions.ClientAndButtonsWidget):
         return self.client.get_included_paths()
 
 # TODO: combine IncludesEditView and IncludesView into single class
-class IncludesEditView(table.EditableEntriesView):
+class IncludesEditView(table.EditableEntriesView, dialogue.PathSelectorMixin):
     __g_type_name__ = "IncludesEditView"
     MODEL = IncludesModel
     SPECIFICATION = tlview.ViewSpec(
@@ -331,22 +331,22 @@ class IncludesEditView(table.EditableEntriesView):
     def get_included_paths(self):
         return [row.included_path for row in self.model.named()]
     def _add_file_path_bcb(self, _button=None):
-        file_path = dialogue.select_file(_("Select File to Add"), absolute=True)
+        file_path = self.select_file(_("Select File to Add"), absolute=True)
         if file_path:
             self.model.append(self.MODEL.ROW(file_path))
             self._set_modified(True)
     def _add_dir_path_bcb(self, _button=None):
-        dir_path = dialogue.select_directory(_("Select Directory to Add"), absolute=True)
+        dir_path = self.select_directory(_("Select Directory to Add"), absolute=True)
         if dir_path:
             self.model.append(self.MODEL.ROW(dir_path))
             self._set_modified(True)
     def _insert_file_path_bcb(self, _button=None):
-        file_path = dialogue.select_file(_("Select File to Insert"), absolute=True)
+        file_path = self.select_file(_("Select File to Insert"), absolute=True)
         if file_path:
             tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(file_path))
             self._set_modified(True)
     def _insert_dir_path_bcb(self, _button=None):
-        dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
+        dir_path = self.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             tlview.insert_before_selection(self.get_selection(), self.MODEL.ROW(dir_path))
             self._set_modified(True)
@@ -375,7 +375,7 @@ class IncludesEditDialog(Gtk.Dialog):
         self.get_content_area().pack_start(self.new_archive_widget, expand=True, fill=True, padding=0)
         self.show_all()
 
-class ExcludesBuffer(text_edit.ModifyUndoSaveBuffer):
+class ExcludesBuffer(text_edit.ModifyUndoSaveBuffer, dialogue.PathSelectorMixin):
     __g_type_name__ = "ExcludesBuffer"
     def __init__(self):
         text_edit.ModifyUndoSaveBuffer.__init__(self)
@@ -392,12 +392,12 @@ class ExcludesBuffer(text_edit.ModifyUndoSaveBuffer):
                 ),
             ])
     def _insert_dir_path_bcb(self, _button=None):
-        dir_path = dialogue.select_directory(_("Select Directory to Insert"), absolute=True)
+        dir_path = self.select_directory(_("Select Directory to Insert"), absolute=True)
         if dir_path:
             self.insert_at_cursor(dir_path + "\n")
             self.set_modified(True)
     def _insert_file_path_bcb(self, _button=None):
-        file_path = dialogue.select_file(_("Select Directory to Insert"), absolute=True)
+        file_path = self.select_file(_("Select Directory to Insert"), absolute=True)
         if file_path:
             self.insert_at_cursor(file_path + "\n")
             self.set_modified(True)
